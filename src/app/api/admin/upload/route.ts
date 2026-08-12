@@ -13,6 +13,15 @@ export async function POST(req: NextRequest) {
   const unauthorized = await requireAdmin();
   if (unauthorized) return unauthorized;
 
+  // Rechazar antes de bufferizar el body: formData() carga todo en memoria.
+  const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
+  if (contentLength > MAX_SIZE + 1024 * 1024) {
+    return NextResponse.json(
+      { error: "La imagen es muy pesada (máximo 10 MB)" },
+      { status: 413 }
+    );
+  }
+
   let form: FormData;
   try {
     form = await req.formData();

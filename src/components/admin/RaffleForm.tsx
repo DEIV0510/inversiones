@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { useModalA11y } from "@/components/useModalA11y";
 import RaffleCard from "@/components/landing/RaffleCard";
 import { RAFFLE_STATUSES, STATUS_META, type RaffleStatus } from "@/lib/raffle-status";
 import type { RaffleView } from "@/lib/types";
@@ -30,7 +31,7 @@ type Props = {
 };
 
 const inputCls =
-  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/50 focus:border-brand focus:outline-none";
+  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 const labelCls = "mb-1.5 block text-sm font-semibold text-fg";
 const helpCls = "mt-1 text-xs text-fg-soft";
 
@@ -66,6 +67,7 @@ export default function RaffleForm({ mode, whatsappNumber, initial }: Props) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const previewRef = useModalA11y(showPreview, () => setShowPreview(false));
 
   async function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -357,7 +359,7 @@ export default function RaffleForm({ mode, whatsappNumber, initial }: Props) {
             step={1}
             value={progressPct}
             onChange={(e) => setProgressPct(parseInt(e.target.value, 10))}
-            className="h-2.5 w-full cursor-pointer appearance-none rounded-full bg-well accent-brand"
+            className="range-brand"
           />
           <p className={helpCls}>
             En la página solo se muestra este porcentaje, nunca cantidades de
@@ -457,7 +459,7 @@ export default function RaffleForm({ mode, whatsappNumber, initial }: Props) {
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-brand"
+          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
         >
           {error}
         </p>
@@ -508,7 +510,9 @@ export default function RaffleForm({ mode, whatsappNumber, initial }: Props) {
           onClick={() => setShowPreview(false)}
         >
           <div
-            className="w-full max-w-sm"
+            ref={previewRef}
+            tabIndex={-1}
+            className="w-full max-w-sm outline-none"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between">

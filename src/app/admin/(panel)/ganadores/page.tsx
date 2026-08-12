@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import WinnersManager from "@/components/admin/WinnersManager";
 
@@ -6,6 +7,7 @@ export const metadata: Metadata = { title: "Ganadores" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminWinnersPage() {
+  await requirePanelAuth();
   const winners = await prisma.winner.findMany({
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });

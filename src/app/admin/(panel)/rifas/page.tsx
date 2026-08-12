@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
+import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import RaffleAdminCard from "@/components/admin/RaffleAdminCard";
 import { IconPlus } from "@/components/icons";
@@ -8,6 +9,7 @@ export const metadata: Metadata = { title: "Rifas" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminRafflesPage() {
+  await requirePanelAuth();
   const raffles = await prisma.raffle.findMany({
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });

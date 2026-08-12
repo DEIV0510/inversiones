@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getSettings } from "@/lib/settings";
 import RaffleForm from "@/components/admin/RaffleForm";
@@ -12,6 +13,7 @@ export default async function EditarRifaPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requirePanelAuth();
   const { id } = await params;
   const [raffle, settings] = await Promise.all([
     prisma.raffle.findUnique({ where: { id } }),

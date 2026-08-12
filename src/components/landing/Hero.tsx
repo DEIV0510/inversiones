@@ -1,6 +1,6 @@
 import type { RaffleView } from "@/lib/types";
 import { formatCop } from "@/lib/format";
-import { waGeneral } from "@/lib/whatsapp";
+import { waConsult, waGeneral } from "@/lib/whatsapp";
 import { statusMeta } from "@/lib/raffle-status";
 import ProgressBar from "./ProgressBar";
 import ParticipateButton from "./ParticipateButton";
@@ -141,7 +141,19 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       size="big"
                       className="w-full sm:w-auto"
                     />
+                  ) : featured.status === "coming_soon" ? (
+                    <a
+                      href={waConsult(whatsappNumber, featured.title)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+                    >
+                      <IconWhatsApp width={20} height={20} />
+                      Consultar sorteo
+                    </a>
                   ) : (
+                    // Agotado o finalizado: CTA honesto, sin invitar a
+                    // participar en un sorteo que ya no admite boletas.
                     <a
                       href={waGeneral(whatsappNumber)}
                       target="_blank"
@@ -149,7 +161,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
                     >
                       <IconWhatsApp width={20} height={20} />
-                      Quiero participar
+                      Hablar por WhatsApp
                     </a>
                   )}
                   <a

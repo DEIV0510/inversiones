@@ -154,7 +154,7 @@ export default function RaffleAdminCard({ raffle }: { raffle: AdminRaffleItem })
       </div>
 
       {error ? (
-        <p role="alert" className="mt-2.5 text-xs font-semibold text-brand">
+        <p role="alert" className="mt-2.5 text-xs font-semibold text-error">
           {error}
         </p>
       ) : null}

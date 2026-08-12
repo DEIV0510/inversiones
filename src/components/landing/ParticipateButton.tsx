@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { formatCop } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
+import { useModalA11y } from "@/components/useModalA11y";
 import { IconWhatsApp, IconX } from "@/components/icons";
 
 type Props = {
@@ -15,11 +16,13 @@ type Props = {
 };
 
 const inputCls =
-  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-faint focus:border-brand focus:outline-none";
+  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 
 /**
  * CTA "Quiero participar": abre un modal con los datos del sorteo y campos
  * de nombre y WhatsApp, y continúa la conversión directamente en WhatsApp.
+ * El botón final es un enlace real (no window.open) para funcionar también
+ * dentro de los navegadores embebidos de Instagram/Facebook/TikTok.
  */
 export default function ParticipateButton({
   raffleTitle,
@@ -32,16 +35,23 @@ export default function ParticipateButton({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [error, setError] = useState("");
+  const panelRef = useModalA11y(open, () => setOpen(false));
 
-  function continueToWhatsApp() {
+  function buildMessage(): string {
+    const cleanName = name.trim();
+    const intro = cleanName
+      ? `Hola, soy ${cleanName}. Quiero participar en el sorteo ${raffleTitle} de Inversiones D y S.`
+      : `Hola, quiero participar en el sorteo ${raffleTitle} de Inversiones D y S.`;
+    const tel = phone.replace(/\D/g, "");
+    return tel ? `${intro} Mi WhatsApp: ${tel}.` : intro;
+  }
+
+  function onContinue(e: React.MouseEvent<HTMLAnchorElement>) {
     if (name.trim().length < 2) {
+      e.preventDefault();
       setError("Escribe tu nombre para continuar");
       return;
     }
-    const intro = `Hola, soy ${name.trim()}. Quiero participar en el sorteo ${raffleTitle} de Inversiones D y S.`;
-    const tel = phone.replace(/\D/g, "");
-    const message = tel ? `${intro} Mi WhatsApp: ${tel}.` : intro;
-    window.open(waLink(whatsappNumber, message), "_blank", "noopener,noreferrer");
     setOpen(false);
     setName("");
     setPhone("");
@@ -70,7 +80,9 @@ export default function ParticipateButton({
           onClick={() => setOpen(false)}
         >
           <div
-            className="neon-card modal-in w-full max-w-md rounded-t-3xl bg-card p-6 sm:rounded-3xl"
+            ref={panelRef}
+            tabIndex={-1}
+            className="neon-card modal-in w-full max-w-md rounded-t-3xl bg-card p-6 outline-none sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between gap-4">
@@ -94,7 +106,7 @@ export default function ParticipateButton({
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Cerrar"
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-well text-fg-soft transition-colors hover:text-fg"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-well text-fg-soft transition-colors hover:text-fg"
               >
                 <IconX width={18} height={18} />
               </button>
@@ -140,19 +152,21 @@ export default function ParticipateButton({
               </div>
 
               {error ? (
-                <p role="alert" className="text-sm font-semibold text-brand">
+                <p role="alert" className="text-sm font-semibold text-error">
                   {error}
                 </p>
               ) : null}
 
-              <button
-                type="button"
-                onClick={continueToWhatsApp}
+              <a
+                href={waLink(whatsappNumber, buildMessage())}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={onContinue}
                 className="glow-wa inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-wa px-5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-wa-dark active:scale-[0.98]"
               >
                 <IconWhatsApp width={19} height={19} />
                 Continuar por WhatsApp
-              </button>
+              </a>
               <p className="text-center text-xs leading-relaxed text-fg-faint">
                 Te atenderemos personalmente para completar tu participación.
               </p>

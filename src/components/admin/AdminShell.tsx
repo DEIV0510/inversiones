@@ -81,7 +81,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-10 items-center rounded-lg px-3 text-xs font-bold uppercase tracking-wide text-fg-soft transition-colors hover:bg-well hover:text-fg"
+              className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-bold uppercase tracking-wide text-fg-soft transition-colors hover:bg-well hover:text-fg"
             >
               Ver sitio
             </a>
@@ -90,7 +90,7 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
               onClick={logout}
               disabled={loggingOut}
               aria-label="Cerrar sesión"
-              className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-well hover:text-fg disabled:opacity-50"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-well hover:text-fg disabled:opacity-50"
             >
               <IconLogOut width={18} height={18} />
             </button>

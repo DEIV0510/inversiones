@@ -25,30 +25,34 @@ async function main() {
   if (raffleCount === 0) {
     await prisma.raffle.createMany({
       data: [
+        // Las rifas de ejemplo se crean OCULTAS (isPublished: false) y con
+        // avance 0 para no publicar sorteos ni porcentajes inventados: el
+        // administrador las edita con datos reales y las activa desde el
+        // panel.
         {
           title: "Gran Sorteo Motocicleta 0 KM",
           prize: "Motocicleta 0 KM",
           description:
-            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones).",
+            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones) y actívalo cuando esté listo.",
           imageUrl: "/img/premio-moto.svg",
           priceCop: 10000,
           drawDateText: "Fecha por anunciar",
-          progressPct: 35,
+          progressPct: 0,
           status: "active",
-          isPublished: true,
+          isPublished: false,
           displayOrder: 1,
         },
         {
           title: "Sorteo Dinero en Efectivo",
           prize: "Dinero en efectivo",
           description:
-            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones).",
+            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones) y actívalo cuando esté listo.",
           imageUrl: "/img/premio-dinero.svg",
           priceCop: 5000,
           drawDateText: "Fecha por anunciar",
-          progressPct: 60,
+          progressPct: 0,
           status: "active",
-          isPublished: true,
+          isPublished: false,
           displayOrder: 2,
         },
         {

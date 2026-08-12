@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requirePanelAuth } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import ConfigForm from "@/components/admin/ConfigForm";
 
@@ -6,6 +7,7 @@ export const metadata: Metadata = { title: "Ajustes" };
 export const dynamic = "force-dynamic";
 
 export default async function AdminConfigPage() {
+  await requirePanelAuth();
   const settings = await getSettings();
   return (
     <div className="flex flex-col gap-5">

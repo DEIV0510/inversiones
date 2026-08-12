@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { statusMeta } from "@/lib/raffle-status";
 import { IconPlus, IconSliders, IconTicket } from "@/components/icons";
@@ -13,6 +14,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-CO", {
 });
 
 export default async function AdminDashboard() {
+  await requirePanelAuth();
   const raffles = await prisma.raffle.findMany({
     orderBy: { updatedAt: "desc" },
   });

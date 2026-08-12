@@ -9,10 +9,13 @@
   --color-line: #272338;
   --color-line-strong: #3d3757;
 
-  /* Texto */
+  /* Texto (fg-faint cumple AA 4.5:1 sobre bg y well) */
   --color-fg: #f6f5fa;
   --color-fg-soft: #a7a3bb;
-  --color-fg-faint: #726d8a;
+  --color-fg-faint: #918cab;
+
+  /* Errores sobre fondos oscuros (≈7:1 sobre card) */
+  --color-error: #ff8a92;
 
   /* Marca: rojo como neón de acento */
   --color-brand: #e8202f;
@@ -92,6 +95,45 @@ body {
 .progress-fill {
   transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
   box-shadow: 0 0 14px -2px rgb(232 32 47 / 0.75);
+}
+
+/* ---- Slider de porcentaje (área táctil ≥44px, pulgar de 28px) ---- */
+input[type="range"].range-brand {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 44px;
+  width: 100%;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"].range-brand::-webkit-slider-runnable-track {
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--color-well);
+}
+input[type="range"].range-brand::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 28px;
+  margin-top: -9px;
+  border-radius: 9999px;
+  background: var(--color-brand);
+  border: 3px solid #ffffff;
+  box-shadow: var(--shadow-glow-sm);
+}
+input[type="range"].range-brand::-moz-range-track {
+  height: 10px;
+  border-radius: 9999px;
+  background: var(--color-well);
+}
+input[type="range"].range-brand::-moz-range-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: var(--color-brand);
+  border: 3px solid #ffffff;
+  box-shadow: var(--shadow-glow-sm);
 }
 
 /* ---- Modales ---- */

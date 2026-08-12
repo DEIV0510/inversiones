@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { waLink } from "@/lib/whatsapp";
+import { useModalA11y } from "@/components/useModalA11y";
 import { IconTicket, IconWhatsApp, IconX } from "@/components/icons";
 
 type Props = {
@@ -20,6 +21,7 @@ export default function MisBoletasButton({
   className = "",
 }: Props) {
   const [open, setOpen] = useState(false);
+  const panelRef = useModalA11y(open, () => setOpen(false));
 
   return (
     <>
@@ -52,7 +54,9 @@ export default function MisBoletasButton({
           onClick={() => setOpen(false)}
         >
           <div
-            className="neon-card modal-in w-full max-w-md rounded-t-3xl bg-card p-6 text-center sm:rounded-3xl"
+            ref={panelRef}
+            tabIndex={-1}
+            className="neon-card modal-in w-full max-w-md rounded-t-3xl bg-card p-6 text-center outline-none sm:rounded-3xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex justify-end">

@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { useModalA11y } from "@/components/useModalA11y";
 import { IconImage, IconPencil, IconPlus, IconTrash, IconTrophy, IconX } from "@/components/icons";
 
 export type AdminWinner = {
@@ -19,7 +20,7 @@ export type AdminWinner = {
 type Props = { winners: AdminWinner[] };
 
 const inputCls =
-  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/50 focus:border-brand focus:outline-none";
+  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 const labelCls = "mb-1.5 block text-sm font-semibold text-fg";
 
 const EMPTY_FORM = {
@@ -43,6 +44,8 @@ export default function WinnersManager({ winners }: Props) {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [listError, setListError] = useState("");
+  const panelRef = useModalA11y(formOpen, () => setFormOpen(false));
 
   function openCreate() {
     setEditingId(null);
@@ -130,13 +133,21 @@ export default function WinnersManager({ winners }: Props) {
 
   async function togglePublished(winner: AdminWinner) {
     setBusyId(winner.id);
+    setListError("");
     try {
-      await fetch(`/api/admin/winners/${winner.id}`, {
+      const res = await fetch(`/api/admin/winners/${winner.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isPublished: !winner.isPublished }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setListError(data.error || "No fue posible actualizar el ganador");
+        return;
+      }
       router.refresh();
+    } catch {
+      setListError("Error de conexión. Intenta de nuevo.");
     } finally {
       setBusyId(null);
     }
@@ -145,9 +156,19 @@ export default function WinnersManager({ winners }: Props) {
   async function remove(winner: AdminWinner) {
     if (!window.confirm(`¿Eliminar al ganador "${winner.name}"?`)) return;
     setBusyId(winner.id);
+    setListError("");
     try {
-      await fetch(`/api/admin/winners/${winner.id}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/winners/${winner.id}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setListError(data.error || "No fue posible eliminar el ganador");
+        return;
+      }
       router.refresh();
+    } catch {
+      setListError("Error de conexión. Intenta de nuevo.");
     } finally {
       setBusyId(null);
     }
@@ -163,6 +184,15 @@ export default function WinnersManager({ winners }: Props) {
         <IconPlus width={18} height={18} />
         Agregar ganador
       </button>
+
+      {listError ? (
+        <p
+          role="alert"
+          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
+        >
+          {listError}
+        </p>
+      ) : null}
 
       {winners.length === 0 && !formOpen ? (
         <p className="rounded-2xl border border-line bg-card p-6 text-sm text-fg-soft">
@@ -262,8 +292,14 @@ export default function WinnersManager({ winners }: Props) {
           role="dialog"
           aria-modal="true"
           aria-label={editingId ? "Editar ganador" : "Agregar ganador"}
+          onClick={() => setFormOpen(false)}
         >
-          <div className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-card p-5 sm:rounded-3xl">
+          <div
+            ref={panelRef}
+            tabIndex={-1}
+            className="max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl bg-card p-5 outline-none sm:rounded-3xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between">
               <h2 className="font-display text-lg font-extrabold uppercase text-fg">
                 {editingId ? "Editar ganador" : "Agregar ganador"}
@@ -313,7 +349,7 @@ export default function WinnersManager({ winners }: Props) {
                     <button
                       type="button"
                       onClick={() => setForm((f) => ({ ...f, photoUrl: null }))}
-                      className="text-left text-xs font-semibold text-fg-soft underline-offset-2 hover:underline"
+                      className="inline-flex min-h-11 items-center text-left text-xs font-semibold text-fg-soft underline-offset-2 hover:underline"
                     >
                       Quitar foto
                     </button>
@@ -410,7 +446,7 @@ export default function WinnersManager({ winners }: Props) {
               {error ? (
                 <p
                   role="alert"
-                  className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-brand"
+                  className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
                 >
                   {error}
                 </p>

@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 const COOKIE_NAME = "dys_admin";
 const SESSION_DAYS = 7;
@@ -50,4 +51,13 @@ export async function isAuthenticated(): Promise<boolean> {
 export async function requireAdmin(): Promise<Response | null> {
   if (await isAuthenticated()) return null;
   return Response.json({ error: "No autorizado" }, { status: 401 });
+}
+
+/**
+ * Guard para las páginas del panel. Los layouts de Next no se re-ejecutan en
+ * navegaciones suaves, por lo que CADA página del panel debe verificar la
+ * sesión por sí misma antes de consultar datos.
+ */
+export async function requirePanelAuth(): Promise<void> {
+  if (!(await isAuthenticated())) redirect("/admin/login");
 }

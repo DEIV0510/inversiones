@@ -5,13 +5,31 @@ import { loginSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
-// Limitador simple en memoria: 8 intentos por IP cada 10 minutos.
+// Limitador simple en memoria: por IP y global (la cabecera x-forwarded-for
+// es falsificable, así que el límite global es la barrera real con una sola
+// cuenta de administrador).
 const attempts = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10 * 60 * 1000;
 const MAX_ATTEMPTS = 8;
+const MAX_GLOBAL_ATTEMPTS = 40;
+let globalWindow = { count: 0, resetAt: 0 };
+
+function pruneExpired(now: number) {
+  for (const [key, entry] of attempts) {
+    if (now > entry.resetAt) attempts.delete(key);
+  }
+}
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
+  pruneExpired(now);
+
+  if (now > globalWindow.resetAt) {
+    globalWindow = { count: 0, resetAt: now + WINDOW_MS };
+  }
+  globalWindow.count += 1;
+  if (globalWindow.count > MAX_GLOBAL_ATTEMPTS) return true;
+
   const entry = attempts.get(ip);
   if (!entry || now > entry.resetAt) {
     attempts.set(ip, { count: 1, resetAt: now + WINDOW_MS });
@@ -42,8 +60,11 @@ function getPasswordHash(): string {
 }
 
 export async function POST(req: NextRequest) {
-  const ip =
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  // Último salto de x-forwarded-for: es el único valor que agrega el proxy
+  // propio y no puede falsificarlo el cliente (el primero sí).
+  const forwarded = req.headers.get("x-forwarded-for") || "";
+  const hops = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
+  const ip = hops[hops.length - 1] || "local";
 
   if (isRateLimited(ip)) {
     return NextResponse.json(

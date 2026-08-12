@@ -55,16 +55,18 @@ export default async function HomePage() {
     publicRaffles.find((r) => r.status === "active") ?? publicRaffles[0] ?? null;
   const faqItems = getFaqItems(settings);
 
+  // La dirección del dato estructurado se deriva de la ubicación editable
+  // desde el panel ("Ciudad, Departamento, País").
+  const locationParts = settings.location.split(",").map((p) => p.trim());
   const organizationJsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: settings.company_name,
-    description:
-      "Sorteos de dinero en efectivo y motocicletas en Sincelejo, Sucre, Colombia.",
+    description: `Sorteos de dinero en efectivo y motocicletas en ${settings.location}.`,
     address: {
       "@type": "PostalAddress",
-      addressLocality: "Sincelejo",
-      addressRegion: "Sucre",
+      addressLocality: locationParts[0] || settings.location,
+      addressRegion: locationParts[1] || "",
       addressCountry: "CO",
     },
     contactPoint: {

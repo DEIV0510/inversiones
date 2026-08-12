@@ -116,7 +116,7 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
             <span
               className={`inline-flex min-h-12 items-center justify-center rounded-xl px-5 text-sm font-bold uppercase tracking-wide ${
                 isSoldOut
-                  ? "bg-brand-deep/40 text-brand"
+                  ? "bg-brand-deep/40 text-error"
                   : "bg-well text-fg-faint"
               }`}
             >

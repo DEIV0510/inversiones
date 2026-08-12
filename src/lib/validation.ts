@@ -40,14 +40,45 @@ export const winnerSchema = z.object({
 
 export const winnerPatchSchema = winnerSchema.partial();
 
+// Solo se aceptan URLs http(s): defensa adicional contra esquemas peligrosos.
+const socialUrl = z.union([
+  z.literal(""),
+  z
+    .string()
+    .trim()
+    .url("La URL no es válida")
+    .max(300)
+    .refine((v) => /^https?:\/\//i.test(v), "La URL debe empezar por https://"),
+]);
+
 export const settingsSchema = z.object({
-  company_name: z.string().trim().min(2).max(120).optional(),
-  whatsapp_number: z.string().trim().min(7).max(20).optional(),
-  whatsapp_display: z.string().trim().min(7).max(30).optional(),
-  location: z.string().trim().min(2).max(160).optional(),
-  facebook_url: z.union([z.literal(""), z.string().trim().url().max(300)]).optional(),
-  instagram_url: z.union([z.literal(""), z.string().trim().url().max(300)]).optional(),
-  tiktok_url: z.union([z.literal(""), z.string().trim().url().max(300)]).optional(),
+  company_name: z
+    .string()
+    .trim()
+    .min(2, "El nombre de la empresa no puede quedar vacío")
+    .max(120)
+    .optional(),
+  whatsapp_number: z
+    .string()
+    .trim()
+    .min(7, "Ingresa el número de WhatsApp")
+    .max(20)
+    .optional(),
+  whatsapp_display: z
+    .string()
+    .trim()
+    .min(7, "El WhatsApp visible no puede quedar vacío")
+    .max(30)
+    .optional(),
+  location: z
+    .string()
+    .trim()
+    .min(2, "La ubicación no puede quedar vacía")
+    .max(160)
+    .optional(),
+  facebook_url: socialUrl.optional(),
+  instagram_url: socialUrl.optional(),
+  tiktok_url: socialUrl.optional(),
 });
 
 export const loginSchema = z.object({

@@ -45,7 +45,7 @@ export default function LoginForm() {
       />
       <div className="neon-card relative w-full max-w-sm rounded-3xl bg-card p-7 sm:p-9">
         <div className="flex items-center gap-3">
-          <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-brand font-display text-base font-black text-white">
+          <span className="glow-red-sm flex h-11 w-11 items-center justify-center rounded-xl bg-brand font-display text-base font-black text-white">
             DS
           </span>
           <div>
@@ -92,14 +92,14 @@ export default function LoginForm() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="min-h-12 w-full rounded-xl border border-line bg-card px-4 pr-12 text-base text-fg focus:border-brand focus:outline-none"
+                className="min-h-12 w-full rounded-xl border border-line bg-well px-4 pr-12 text-base text-fg focus:border-brand focus:outline-none"
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-fg-soft hover:bg-well"
+                className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-fg-soft hover:bg-card"
               >
                 {showPassword ? (
                   <IconEyeOff width={19} height={19} />
@@ -113,7 +113,7 @@ export default function LoginForm() {
           {error ? (
             <p
               role="alert"
-              className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-brand"
+              className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
             >
               {error}
             </p>
@@ -122,7 +122,7 @@ export default function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="mt-1 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+            className="glow-red-sm mt-1 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Ingresando…" : "Ingresar"}
           </button>

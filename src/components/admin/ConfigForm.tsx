@@ -5,7 +5,7 @@ import { useState } from "react";
 import type { SiteSettings } from "@/lib/settings";
 
 const inputCls =
-  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/50 focus:border-brand focus:outline-none";
+  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 const labelCls = "mb-1.5 block text-sm font-semibold text-fg";
 const helpCls = "mt-1 text-xs text-fg-soft";
 
@@ -53,6 +53,8 @@ export default function ConfigForm({ settings }: { settings: SiteSettings }) {
           <input
             id="c-name"
             type="text"
+            required
+            minLength={2}
             value={form.company_name}
             onChange={(e) => set("company_name", e.target.value)}
             className={inputCls}
@@ -67,6 +69,8 @@ export default function ConfigForm({ settings }: { settings: SiteSettings }) {
             id="c-wa"
             type="tel"
             inputMode="numeric"
+            required
+            minLength={10}
             value={form.whatsapp_number}
             onChange={(e) => set("whatsapp_number", e.target.value)}
             className={inputCls}
@@ -84,6 +88,8 @@ export default function ConfigForm({ settings }: { settings: SiteSettings }) {
           <input
             id="c-wad"
             type="text"
+            required
+            minLength={7}
             value={form.whatsapp_display}
             onChange={(e) => set("whatsapp_display", e.target.value)}
             className={inputCls}
@@ -98,11 +104,17 @@ export default function ConfigForm({ settings }: { settings: SiteSettings }) {
           <input
             id="c-loc"
             type="text"
+            required
+            minLength={2}
             value={form.location}
             onChange={(e) => set("location", e.target.value)}
             className={inputCls}
             maxLength={160}
           />
+          <p className={helpCls}>
+            Formato “Ciudad, Departamento, País”. Este campo no puede quedar
+            vacío.
+          </p>
         </div>
       </div>
 
@@ -160,7 +172,7 @@ export default function ConfigForm({ settings }: { settings: SiteSettings }) {
           className={`rounded-xl px-4 py-3 text-sm font-medium ${
             message.ok
               ? "border border-wa/40 bg-wa/10 text-wa-dark"
-              : "border border-brand/30 bg-brand/5 text-brand-dark"
+              : "border border-brand/30 bg-brand/5 text-error"
           }`}
         >
           {message.text}
