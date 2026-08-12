@@ -1,69 +1,130 @@
-import Image from "next/image";
+import Header from "@/components/landing/Header";
+import Hero from "@/components/landing/Hero";
+import RafflesSection from "@/components/landing/RafflesSection";
+import PrizesSection from "@/components/landing/PrizesSection";
+import AboutSection from "@/components/landing/AboutSection";
+import HowItWorks from "@/components/landing/HowItWorks";
+import TrustSection from "@/components/landing/TrustSection";
+import WinnersSection from "@/components/landing/WinnersSection";
+import FaqSection from "@/components/landing/FaqSection";
+import LegalSection from "@/components/landing/LegalSection";
+import FinalCta from "@/components/landing/FinalCta";
+import Footer from "@/components/landing/Footer";
+import WhatsAppFloat from "@/components/landing/WhatsAppFloat";
+import BottomBar from "@/components/landing/BottomBar";
+import { getPublicRaffles, getPublishedWinners } from "@/lib/raffles";
+import { getSettings } from "@/lib/settings";
+import { getFaqItems } from "@/lib/faq";
+import type { RaffleView, WinnerView } from "@/lib/types";
 
-export default function Home() {
+// La landing se cachea y se revalida al publicar cambios desde el panel
+// (revalidatePath) o, como respaldo, cada 5 minutos.
+export const revalidate = 300;
+
+export default async function HomePage() {
+  const [raffles, winners, settings] = await Promise.all([
+    getPublicRaffles(),
+    getPublishedWinners(),
+    getSettings(),
+  ]);
+
+  // Proyección pública: nunca exponer totalNumbers ni campos internos.
+  const publicRaffles: RaffleView[] = raffles.map((r) => ({
+    id: r.id,
+    title: r.title,
+    description: r.description,
+    prize: r.prize,
+    imageUrl: r.imageUrl,
+    priceCop: r.priceCop,
+    drawDateText: r.drawDateText,
+    progressPct: r.progressPct,
+    status: r.status,
+  }));
+
+  const publicWinners: WinnerView[] = winners.map((w) => ({
+    id: w.id,
+    name: w.name,
+    prize: w.prize,
+    raffleTitle: w.raffleTitle,
+    photoUrl: w.photoUrl,
+    drawnAtText: w.drawnAtText,
+    isDemo: w.isDemo,
+  }));
+
+  const featured =
+    publicRaffles.find((r) => r.status === "active") ?? publicRaffles[0] ?? null;
+  const faqItems = getFaqItems(settings);
+
+  const organizationJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: settings.company_name,
+    description:
+      "Sorteos de dinero en efectivo y motocicletas en Sincelejo, Sucre, Colombia.",
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: "Sincelejo",
+      addressRegion: "Sucre",
+      addressCountry: "CO",
+    },
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer service",
+      telephone: `+${settings.whatsapp_number}`,
+      url: `https://wa.me/${settings.whatsapp_number}`,
+    },
+  };
+
+  const faqJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.question,
+      acceptedAnswer: { "@type": "Answer", text: item.answer },
+    })),
+  };
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <>
+      <Header
+        whatsappNumber={settings.whatsapp_number}
+        companyName={settings.company_name}
+      />
+      <main>
+        <Hero
+          whatsappNumber={settings.whatsapp_number}
+          location={settings.location}
+          featured={featured}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+        <RafflesSection
+          raffles={publicRaffles}
+          whatsappNumber={settings.whatsapp_number}
+        />
+        <PrizesSection />
+        <AboutSection
+          whatsappNumber={settings.whatsapp_number}
+          whatsappDisplay={settings.whatsapp_display}
+          location={settings.location}
+        />
+        <HowItWorks />
+        <TrustSection whatsappNumber={settings.whatsapp_number} />
+        <WinnersSection winners={publicWinners} />
+        <FaqSection items={faqItems} />
+        <LegalSection />
+        <FinalCta whatsappNumber={settings.whatsapp_number} />
       </main>
-    </div>
+      <Footer settings={settings} />
+      <WhatsAppFloat whatsappNumber={settings.whatsapp_number} />
+      <BottomBar whatsappNumber={settings.whatsapp_number} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+      />
+    </>
   );
 }

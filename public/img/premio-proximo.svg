@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Imagen de referencia: próximo sorteo por anunciar">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#dc1f2e" stop-opacity="0.5"/>
+      <stop offset="55%" stop-color="#dc1f2e" stop-opacity="0.1"/>
+      <stop offset="100%" stop-color="#dc1f2e" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="#ffffff" opacity="0.08"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="600" fill="#101014"/>
+  <rect width="800" height="600" fill="url(#dots)"/>
+  <rect width="800" height="600" fill="url(#glow)"/>
+  <g stroke="#ffffff" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.95">
+    <rect x="285" y="235" width="230" height="60" rx="10"/>
+    <path d="M310 295 v150 a12 12 0 0 0 12 12 h156 a12 12 0 0 0 12-12 v-150"/>
+    <path d="M400 235 v222"/>
+    <path d="M400 235 c0-52 -34-72 -58-72 a30 30 0 0 0 0 60"/>
+    <path d="M400 235 c0-52 34-72 58-72 a30 30 0 0 1 0 60"/>
+  </g>
+  <text x="400" y="530" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="46" font-weight="900" fill="#ffffff" letter-spacing="6">PRÓXIMAMENTE</text>
+  <rect x="330" y="552" width="140" height="6" rx="3" fill="#dc1f2e"/>
+</svg>

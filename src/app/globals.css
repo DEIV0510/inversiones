@@ -1,26 +1,135 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  /* Fondo oscuro con profundidad (plataforma premium de sorteos) */
+  --color-bg: #07060f;
+  --color-bg2: #0b0918;
+  --color-card: #12101d;
+  --color-well: #1a1729;
+  --color-line: #272338;
+  --color-line-strong: #3d3757;
+
+  /* Texto */
+  --color-fg: #f6f5fa;
+  --color-fg-soft: #a7a3bb;
+  --color-fg-faint: #726d8a;
+
+  /* Marca: rojo como neón de acento */
+  --color-brand: #e8202f;
+  --color-brand-dark: #c01523;
+  --color-brand-deep: #8a0f1b;
+
+  /* WhatsApp */
+  --color-wa: #25d366;
+  --color-wa-dark: #1da851;
+
+  --font-display: var(--font-archivo), "Archivo", system-ui, sans-serif;
+  --font-body: var(--font-inter), "Inter", system-ui, sans-serif;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px -12px rgb(0 0 0 / 0.6);
+  --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.5), 0 18px 44px -12px rgb(0 0 0 / 0.7);
+  --shadow-glow: 0 0 34px -8px rgb(232 32 47 / 0.6);
+  --shadow-glow-sm: 0 0 18px -6px rgb(232 32 47 / 0.55);
+  --shadow-glow-wa: 0 0 22px -6px rgb(37 211 102 / 0.55);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  scroll-behavior: smooth;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-bg text-fg font-body antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: var(--color-brand);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+/* ---- Glow de marca ---- */
+.glow-red {
+  box-shadow: var(--shadow-glow);
+}
+.glow-red-sm {
+  box-shadow: var(--shadow-glow-sm);
+}
+.glow-wa {
+  box-shadow: var(--shadow-glow-wa);
+}
+
+/* Borde neón para cards destacadas */
+.neon-card {
+  border: 1px solid rgb(232 32 47 / 0.45);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.04),
+    0 0 0 1px rgb(232 32 47 / 0.08),
+    0 0 34px -10px rgb(232 32 47 / 0.5);
+}
+
+/* ---- Scroll reveal ----
+   El estado oculto solo aplica cuando hay JavaScript (html.js), para que
+   sin JS o ante cualquier fallo el contenido siempre sea visible. */
+.js .reveal {
+  opacity: 0;
+  transform: translateY(22px);
+  transition: opacity 0.6s ease, transform 0.6s ease;
+}
+.js .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+.reveal-delay-1 { transition-delay: 0.08s; }
+.reveal-delay-2 { transition-delay: 0.16s; }
+.reveal-delay-3 { transition-delay: 0.24s; }
+
+/* ---- Barra de progreso ---- */
+.progress-fill {
+  transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 0 14px -2px rgb(232 32 47 / 0.75);
+}
+
+/* ---- Modales ---- */
+@keyframes modal-in {
+  from { opacity: 0; transform: translateY(18px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+.modal-in {
+  animation: modal-in 0.25s ease-out both;
+}
+
+/* ---- WhatsApp flotante: pulso muy sutil ---- */
+@keyframes wa-pulse {
+  0%, 100% { box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.5), 0 0 0 0 rgb(37 211 102 / 0.4); }
+  50% { box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.5), 0 0 0 12px rgb(37 211 102 / 0); }
+}
+.wa-pulse {
+  animation: wa-pulse 2.6s ease-in-out infinite;
+}
+
+/* ---- Patrón de puntos para profundidad ---- */
+.dot-grid {
+  background-image: radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ---- Accesibilidad: sin movimiento ---- */
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .js .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .wa-pulse { animation: none; }
+  .modal-in { animation: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

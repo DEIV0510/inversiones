@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Imagen de referencia: sorteo de motocicleta">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="42%" r="65%">
+      <stop offset="0%" stop-color="#dc1f2e" stop-opacity="0.55"/>
+      <stop offset="55%" stop-color="#dc1f2e" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#dc1f2e" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="dots" width="26" height="26" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="#ffffff" opacity="0.08"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="600" fill="#101014"/>
+  <rect width="800" height="600" fill="url(#dots)"/>
+  <rect width="800" height="600" fill="url(#glow)"/>
+  <g stroke="#ffffff" stroke-width="11" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.95">
+    <circle cx="240" cy="340" r="56"/>
+    <circle cx="560" cy="340" r="56"/>
+    <circle cx="240" cy="340" r="14"/>
+    <circle cx="560" cy="340" r="14"/>
+    <path d="M240 340 L320 340 L360 265 L470 265 L520 340 L560 340"/>
+    <path d="M470 265 L505 225 L545 235"/>
+    <path d="M505 225 L478 210"/>
+    <path d="M360 265 L305 250 L262 262"/>
+    <path d="M320 340 L378 300 L455 300 L520 340"/>
+  </g>
+  <rect x="292" y="238" width="92" height="24" rx="12" fill="#ffffff" opacity="0.95"/>
+  <rect x="392" y="246" width="72" height="20" rx="10" fill="#dc1f2e"/>
+  <text x="400" y="452" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="64" font-weight="900" fill="#ffffff" letter-spacing="4">MOTO 0 KM</text>
+  <rect x="330" y="478" width="140" height="6" rx="3" fill="#dc1f2e"/>
+  <text x="400" y="540" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="22" font-weight="700" fill="#ffffff" opacity="0.55" letter-spacing="6">INVERSIONES D Y S</text>
+</svg>
