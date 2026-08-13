@@ -45,9 +45,14 @@ export default function LoginForm() {
       />
       <div className="neon-card relative w-full max-w-sm rounded-3xl bg-card p-7 sm:p-9">
         <div className="flex items-center gap-3">
-          <span className="glow-red-sm flex h-11 w-11 items-center justify-center rounded-xl bg-brand font-display text-base font-black text-white">
-            DS
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/img/logo-mark.webp"
+            alt="Logo de Inversiones D y S"
+            width={48}
+            height={48}
+            className="h-12 w-12 rounded-full object-cover ring-1 ring-line"
+          />
           <div>
             <p className="font-display text-base font-extrabold uppercase leading-tight text-fg">
               Inversiones <span className="text-brand">D y S</span>

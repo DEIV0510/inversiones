@@ -69,9 +69,14 @@ export default function AdminShell({ children }: { children: React.ReactNode }) 
       <header className="fixed inset-x-0 top-0 z-40 border-b border-line bg-bg2/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-6">
           <Link href="/admin" className="flex items-center gap-2.5">
-            <span className="glow-red-sm flex h-8 w-8 items-center justify-center rounded-lg bg-brand font-display text-xs font-black text-white">
-              DS
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/img/logo-mark.webp"
+              alt=""
+              width={32}
+              height={32}
+              className="h-8 w-8 rounded-full object-cover ring-1 ring-line"
+            />
             <span className="font-display text-sm font-extrabold uppercase tracking-wide text-fg">
               Admin <span className="text-brand">Panel</span>
             </span>

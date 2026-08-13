@@ -54,9 +54,14 @@ export default function Header({ whatsappNumber, companyName }: Props) {
           aria-label={`${companyName} — inicio`}
           onClick={() => setOpen(false)}
         >
-          <span className="glow-red-sm flex h-9 w-9 items-center justify-center rounded-lg bg-brand font-display text-sm font-black text-white">
-            DS
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/img/logo-mark.webp"
+            alt=""
+            width={40}
+            height={40}
+            className="h-10 w-10 rounded-full object-cover ring-1 ring-line"
+          />
           <span className="text-sm font-extrabold uppercase tracking-wide text-fg sm:text-base">
             Inversiones <span className="text-brand">D y S</span>
           </span>

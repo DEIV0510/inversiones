@@ -39,9 +39,14 @@ export default function Footer({ settings }: Props) {
       <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr] lg:px-8">
         <div>
           <p className="flex items-center gap-2.5 font-display">
-            <span className="glow-red-sm flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-sm font-black text-white">
-              DS
-            </span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/img/logo-mark.webp"
+              alt=""
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-full object-cover ring-1 ring-line"
+            />
             <span className="text-base font-extrabold uppercase tracking-wide text-fg">
               Inversiones <span className="text-brand">D y S</span>
             </span>

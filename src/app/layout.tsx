@@ -41,6 +41,7 @@ export const metadata: Metadata = {
     title: "Inversiones D y S | Sorteos de Dinero y Motocicletas",
     description:
       "Conoce nuestros sorteos, descubre los próximos premios y participa directamente por WhatsApp.",
+    images: [{ url: "/img/og.png", width: 1200, height: 630 }],
   },
   robots: { index: true, follow: true },
 };
