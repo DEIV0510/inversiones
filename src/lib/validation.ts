@@ -1,12 +1,18 @@
 import { z } from "zod";
 import { RAFFLE_STATUSES } from "./raffle-status";
 
+const BLOB_URL_RE = /^https:\/\/[a-z0-9.-]+\.public\.blob\.vercel-storage\.com\//i;
+
 const imagePath = z
   .string()
   .trim()
-  .max(300)
+  .max(500)
   .refine(
-    (v) => v === "" || v.startsWith("/uploads/") || v.startsWith("/img/"),
+    (v) =>
+      v === "" ||
+      v.startsWith("/uploads/") ||
+      v.startsWith("/img/") ||
+      BLOB_URL_RE.test(v),
     "Ruta de imagen no válida"
   );
 

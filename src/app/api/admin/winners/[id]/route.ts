@@ -1,29 +1,13 @@
-import { unlink } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { deleteImage } from "@/lib/media";
 import { winnerPatchSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-async function tryDeleteUpload(photoUrl: string | null) {
-  if (!photoUrl || !photoUrl.startsWith("/uploads/")) return;
-  const filePath = path.join(
-    process.cwd(),
-    "public",
-    "uploads",
-    path.basename(photoUrl)
-  );
-  try {
-    await unlink(filePath);
-  } catch {
-    // No crítico.
-  }
-}
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const unauthorized = await requireAdmin();
@@ -58,7 +42,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     existing.photoUrl &&
     existing.photoUrl !== parsed.data.photoUrl
   ) {
-    await tryDeleteUpload(existing.photoUrl);
+    await deleteImage(existing.photoUrl);
   }
 
   revalidatePath("/");
@@ -76,7 +60,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   }
 
   await prisma.winner.delete({ where: { id } });
-  await tryDeleteUpload(existing.photoUrl);
+  await deleteImage(existing.photoUrl);
 
   revalidatePath("/");
   return NextResponse.json({ ok: true });

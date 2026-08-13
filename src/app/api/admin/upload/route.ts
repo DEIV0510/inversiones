@@ -1,9 +1,7 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
-import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
 import { requireAdmin } from "@/lib/auth";
+import { saveImage } from "@/lib/media";
 
 export const runtime = "nodejs";
 
@@ -57,10 +55,13 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const fileName = `up-${Date.now()}-${randomBytes(4).toString("hex")}.webp`;
-  const dir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, fileName), optimized);
-
-  return NextResponse.json({ url: `/uploads/${fileName}` }, { status: 201 });
+  try {
+    const url = await saveImage(optimized);
+    return NextResponse.json({ url }, { status: 201 });
+  } catch {
+    return NextResponse.json(
+      { error: "No fue posible guardar la imagen. Intenta de nuevo." },
+      { status: 500 }
+    );
+  }
 }

@@ -23,9 +23,10 @@ premium tipo app y panel administrativo gestionable 100% desde el celular.
 
 ## Stack
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma + SQLite ·
-sharp (optimización de imágenes a WebP) · jose + bcryptjs (sesión JWT en
-cookie httpOnly).
+Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma +
+**Postgres (Neon vía Vercel)** · **Vercel Blob** (imágenes; con respaldo en
+disco local para desarrollo) · sharp (optimización a WebP) · jose + bcryptjs
+(sesión JWT en cookie httpOnly).
 
 ## Puesta en marcha
 
@@ -40,11 +41,13 @@ npm run dev              # http://localhost:5236
 
 | Variable | Descripción |
 | --- | --- |
-| `DATABASE_URL` | `file:./dev.db` (SQLite local) |
+| `POSTGRES_PRISMA_URL` | URL pooled de Neon (la inyecta la integración de Vercel) |
+| `POSTGRES_URL_NON_POOLING` | URL directa de Neon (migraciones) |
 | `AUTH_SECRET` | Secreto aleatorio de 64+ caracteres para firmar la sesión |
 | `ADMIN_EMAIL` | Correo del administrador |
 | `ADMIN_PASSWORD_HASH` | Hash bcrypt **en base64** — genera con `npm run hash-password -- "TuContraseña"` |
 | `NEXT_PUBLIC_SITE_URL` | URL pública del sitio (SEO/Open Graph) |
+| `BLOB_READ_WRITE_TOKEN` | Token de Vercel Blob (solo producción; en local las imágenes van a `public/uploads`) |
 
 > El hash se guarda en base64 porque bcrypt contiene `$` y el cargador de
 > variables de entorno de Next lo corrompería. El comando `hash-password`
@@ -73,12 +76,20 @@ se publica → la landing se actualiza (revalidación on-demand + respaldo cada
   sharp (nunca se sirve el archivo original).
 - `/admin` y `/api` excluidos de robots.
 
-## Despliegue
+## Despliegue (Vercel)
 
-Pensado para un VPS/Node con disco persistente (SQLite + carpeta
-`public/uploads`). Para plataformas serverless (Vercel) se debe migrar la
-base a Postgres/Turso y las imágenes a un storage (S3/Blob) — la
-arquitectura ya separa datos, storage y presentación para ese cambio.
+Desplegado en Vercel con:
+
+- **Neon Postgres** (`inversiones-db`, integración marketplace) conectado al
+  proyecto `inversiones` — inyecta `POSTGRES_PRISMA_URL` y compañía.
+- **Vercel Blob** (`dys-media`, acceso público) para las imágenes subidas
+  desde el panel — inyecta `BLOB_READ_WRITE_TOKEN`.
+- Variables `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` y
+  `NEXT_PUBLIC_SITE_URL` configuradas en el proyecto.
+
+Cada push a `main` despliega automáticamente. Para inicializar una base
+nueva: `vercel env pull`, copiar las URLs de Postgres al `.env` local y
+ejecutar `npm run setup` una sola vez.
 
 ## Evolución (fases siguientes)
 

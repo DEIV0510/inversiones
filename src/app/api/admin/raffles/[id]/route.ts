@@ -1,25 +1,13 @@
-import { unlink } from "node:fs/promises";
-import path from "node:path";
 import { revalidatePath } from "next/cache";
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { deleteImage } from "@/lib/media";
 import { rafflePatchSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-async function tryDeleteUpload(imageUrl: string | null) {
-  if (!imageUrl || !imageUrl.startsWith("/uploads/")) return;
-  const fileName = path.basename(imageUrl);
-  const filePath = path.join(process.cwd(), "public", "uploads", fileName);
-  try {
-    await unlink(filePath);
-  } catch {
-    // La imagen puede no existir; no es un error crítico.
-  }
-}
 
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const unauthorized = await requireAdmin();
@@ -55,7 +43,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     existing.imageUrl &&
     existing.imageUrl !== parsed.data.imageUrl
   ) {
-    await tryDeleteUpload(existing.imageUrl);
+    await deleteImage(existing.imageUrl);
   }
 
   revalidatePath("/");
@@ -73,7 +61,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   }
 
   await prisma.raffle.delete({ where: { id } });
-  await tryDeleteUpload(existing.imageUrl);
+  await deleteImage(existing.imageUrl);
 
   revalidatePath("/");
   return NextResponse.json({ ok: true });
