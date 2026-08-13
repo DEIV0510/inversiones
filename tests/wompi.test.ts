@@ -34,6 +34,39 @@ describe("integridad del checkout", () => {
   });
 });
 
+describe("la transacción debe corresponder a la orden", () => {
+  const base = {
+    id: "tx-1",
+    status: "APPROVED" as const,
+    reference: "DYS-ABC12345",
+    currency: "COP",
+  };
+
+  it("acepta monto exacto en COP", async () => {
+    const { transactionMatchesOrder } = await import("@/lib/wompi");
+    expect(
+      transactionMatchesOrder({ ...base, amount_in_cents: 2000000 }, { total: 20000 })
+    ).toBe(true);
+  });
+
+  it("rechaza monto distinto (pago de $1.000 por una orden de $20.000)", async () => {
+    const { transactionMatchesOrder } = await import("@/lib/wompi");
+    expect(
+      transactionMatchesOrder({ ...base, amount_in_cents: 100000 }, { total: 20000 })
+    ).toBe(false);
+  });
+
+  it("rechaza otra moneda", async () => {
+    const { transactionMatchesOrder } = await import("@/lib/wompi");
+    expect(
+      transactionMatchesOrder(
+        { ...base, currency: "USD", amount_in_cents: 2000000 },
+        { total: 20000 }
+      )
+    ).toBe(false);
+  });
+});
+
 describe("verificación de eventos del webhook", () => {
   function buildEvent(secret: string) {
     const tx = { id: "tx-1", status: "APPROVED", amount_in_cents: 2000000 };

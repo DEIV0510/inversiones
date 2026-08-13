@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
  * Integración con Wompi (pasarela colombiana: Nequi, PSE, tarjetas,
@@ -105,10 +105,27 @@ export function verifyEventSignature(event: WompiEvent): boolean {
     }
     concatenated += String(event.timestamp) + secret;
     const digest = createHash("sha256").update(concatenated).digest("hex");
-    return digest === event.signature.checksum;
+    // Comparación en tiempo constante (no filtra información por latencia).
+    const a = Buffer.from(digest, "utf8");
+    const b = Buffer.from(String(event.signature.checksum), "utf8");
+    return a.length === b.length && timingSafeEqual(a, b);
   } catch {
     return false;
   }
+}
+
+/**
+ * Verifica que la transacción corresponda REALMENTE a la orden: moneda COP,
+ * estado aprobado y monto exacto. Sin esto, cualquiera podría crear en la
+ * pasarela una transacción de $1.000 con la referencia de una orden de
+ * $200.000 y dispararía la confirmación.
+ */
+export function transactionMatchesOrder(
+  tx: WompiTransaction,
+  order: { total: number }
+): boolean {
+  if (tx.currency !== "COP") return false;
+  return Math.round(tx.amount_in_cents / 100) === order.total;
 }
 
 /** Consulta una transacción directamente en Wompi (verificación de respaldo). */

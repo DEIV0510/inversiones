@@ -7,6 +7,7 @@
  */
 import { PrismaClient } from "@prisma/client";
 import {
+  cancelOrder,
   createOrder,
   confirmOrderPayment,
   expireOverdueOrders,
@@ -188,6 +189,52 @@ async function main() {
     check("encuentra los 3 únicos libres", scarce.length === 3 && scarce.every((n) => n >= 17), `(${scarce})`);
     await prisma.raffleNumber.deleteMany({ where: { raffleId: mini.id } });
     await prisma.raffle.delete({ where: { id: mini.id } });
+
+    // 8. REGRESIÓN: confirmación CONCURRENTE de la misma orden (webhook
+    //    reintentado + confirmación manual simultánea). Antes del bloqueo de
+    //    fila, la segunda transacción rechazaba la orden y borraba sus
+    //    números ya vendidos.
+    console.log("\n8. Confirmación concurrente de la misma orden");
+    const oRace = await createOrder({
+      raffleSlug: raffle.slug,
+      name: "Doble Confirmación",
+      phone: "3007770007",
+      numbers: [3001, 3002],
+    });
+    const pctBefore = (await prisma.raffle.findUnique({ where: { id: raffle.id } }))!.paidCount;
+    const both = await Promise.all([
+      confirmOrderPayment({ orderId: oRace.order.id, provider: "wompi", providerTxId: "tx-race-1" }),
+      confirmOrderPayment({ orderId: oRace.order.id, provider: "manual" }),
+    ]);
+    const raceOrder = await prisma.order.findUnique({ where: { id: oRace.order.id } });
+    check("ambas llamadas responden ok", both.every((r) => r.ok));
+    check("la orden queda PAGADA (no rechazada)", raceOrder?.status === "PAID", `(=${raceOrder?.status})`);
+    const raceNumbers = await prisma.raffleNumber.findMany({
+      where: { orderId: oRace.order.id },
+    });
+    check(
+      "los números siguen vendidos (no se borraron)",
+      raceNumbers.length === 2 && raceNumbers.every((n) => n.status === "PAID"),
+      `(${raceNumbers.length} filas)`
+    );
+    const pctAfter = (await prisma.raffle.findUnique({ where: { id: raffle.id } }))!.paidCount;
+    check("paidCount incrementa UNA sola vez", pctAfter === pctBefore + 2, `(${pctBefore}→${pctAfter})`);
+
+    // 9. REGRESIÓN: cancelación concurrente no descuenta dos veces.
+    console.log("\n9. Cancelación concurrente de una orden pagada");
+    const beforeCancel = (await prisma.raffle.findUnique({ where: { id: raffle.id } }))!.paidCount;
+    await Promise.all([
+      cancelOrder(oRace.order.id).catch(() => null),
+      cancelOrder(oRace.order.id).catch(() => null),
+    ]);
+    const afterCancel = (await prisma.raffle.findUnique({ where: { id: raffle.id } }))!.paidCount;
+    const cancelled = await prisma.order.findUnique({ where: { id: oRace.order.id } });
+    check("la orden queda CANCELADA", cancelled?.status === "CANCELLED");
+    check(
+      "paidCount descuenta UNA sola vez",
+      afterCancel === beforeCancel - 2,
+      `(${beforeCancel}→${afterCancel})`
+    );
   } finally {
     // Limpieza
     await prisma.payment.deleteMany({ where: { order: { raffleId: raffle.id } } });
@@ -195,7 +242,7 @@ async function main() {
     await prisma.order.deleteMany({ where: { raffleId: raffle.id } });
     await prisma.raffle.delete({ where: { id: raffle.id } });
     await prisma.participant.deleteMany({
-      where: { phone: { in: ["573001110001","573002220000","573002220001","573002220002","573002220003","573002220004","573002220005","573003330003","573004440004","573005550005","573006660006"] } },
+      where: { phone: { in: ["573001110001","573002220000","573002220001","573002220002","573002220003","573002220004","573002220005","573003330003","573004440004","573005550005","573006660006","573007770007"] } },
     });
   }
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
 import {
   IconCheck,
@@ -41,13 +41,20 @@ function Countdown({ until, onExpired }: { until: string; onExpired: () => void 
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(until).getTime() - Date.now())
   );
+  // El aviso de expiración se dispara UNA sola vez: si el reloj del
+  // dispositivo va adelantado respecto al servidor, la página no entra en
+  // un bucle de recargas.
+  const firedRef = useRef(false);
   useEffect(() => {
     const id = setInterval(() => {
       const ms = Math.max(0, new Date(until).getTime() - Date.now());
       setRemaining(ms);
       if (ms === 0) {
         clearInterval(id);
-        onExpired();
+        if (!firedRef.current) {
+          firedRef.current = true;
+          onExpired();
+        }
       }
     }, 1000);
     return () => clearInterval(id);

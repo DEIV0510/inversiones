@@ -48,6 +48,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
+  const [notice, setNotice] = useState("");
   const panelRef = useModalA11y(checkoutOpen, () => setCheckoutOpen(false));
   const abortRef = useRef<AbortController | null>(null);
 
@@ -146,17 +147,24 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 409 && Array.isArray(data.conflicting) && data.conflicting.length > 0) {
+          const perdidos: string[] = [];
           setSelected((prev) => {
             const next = new Map(prev);
-            for (const n of data.conflicting) next.delete(n);
+            for (const n of data.conflicting) {
+              const label = next.get(n);
+              if (label) perdidos.push(label);
+              next.delete(n);
+            }
             return next;
           });
           setCheckoutOpen(false);
           setSearchResult(null);
           loadSuggestions();
           setFormError("");
-          alert(
-            "Algunos números fueron tomados por otra persona y se quitaron de tu selección. Elige otros para continuar."
+          setNotice(
+            perdidos.length > 0
+              ? `Otra persona tomó ${perdidos.length === 1 ? "el número" : "los números"} ${perdidos.join(", ")} antes que tú. Los quitamos de tu selección: elige otros y continúa.`
+              : "Algunos números fueron tomados por otra persona. Revisa tu selección y continúa."
           );
           return;
         }
@@ -180,6 +188,23 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
 
   return (
     <section id="elegir" className="mt-6">
+      {notice ? (
+        <div
+          role="alert"
+          className="mb-4 flex items-start justify-between gap-3 rounded-2xl border border-brand/50 bg-brand/10 px-4 py-3"
+        >
+          <p className="text-sm leading-relaxed text-fg">{notice}</p>
+          <button
+            type="button"
+            onClick={() => setNotice("")}
+            aria-label="Cerrar aviso"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-fg-soft hover:text-fg"
+          >
+            <IconX width={16} height={16} />
+          </button>
+        </div>
+      ) : null}
+
       {/* Tabs */}
       <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-card p-2">
         {(

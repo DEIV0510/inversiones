@@ -40,11 +40,15 @@ export function isRowAlive(
 export async function claimNumbers(
   tx: Tx,
   raffleId: string,
-  numbers: number[],
+  numbersInput: number[],
   orderId: string,
   reservedUntil: Date
 ): Promise<void> {
   const now = new Date();
+  // Orden determinista (ascendente): dos transacciones que compitan por
+  // números solapados los toman en la misma secuencia, evitando deadlocks
+  // en el índice único.
+  const numbers = [...numbersInput].sort((a, b) => a - b);
 
   // 1. Liberación perezosa: elimina reservas EXPIRADAS que estorben.
   await tx.raffleNumber.deleteMany({

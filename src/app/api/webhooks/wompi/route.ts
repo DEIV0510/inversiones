@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { confirmOrderPayment } from "@/lib/engine/orders";
-import { verifyEventSignature } from "@/lib/wompi";
+import { logAudit } from "@/lib/audit";
+import { transactionMatchesOrder, verifyEventSignature } from "@/lib/wompi";
 
 export const runtime = "nodejs";
 
@@ -38,6 +39,39 @@ export async function POST(req: NextRequest) {
   }
 
   if (tx.status === "APPROVED") {
+    // El monto y la moneda deben coincidir EXACTAMENTE con la orden.
+    if (!transactionMatchesOrder(tx, order)) {
+      await logAudit({
+        actorEmail: "sistema",
+        actorRole: "SYSTEM",
+        action: "payment.amount_mismatch",
+        entity: "Order",
+        entityId: order.id,
+        detail: {
+          esperado: order.total,
+          recibido: Math.round(tx.amount_in_cents / 100),
+          moneda: tx.currency,
+          providerTxId: tx.id,
+          requiereGestionManual: true,
+        },
+      });
+      await prisma.payment.upsert({
+        where: { providerTxId: tx.id },
+        update: { status: "ERROR" },
+        create: {
+          orderId: order.id,
+          provider: "wompi",
+          providerTxId: tx.id,
+          reference: tx.reference,
+          amount: Math.round(tx.amount_in_cents / 100),
+          currency: tx.currency,
+          status: "ERROR",
+          rawJson: JSON.stringify(tx),
+        },
+      });
+      return NextResponse.json({ ok: true, ignored: "monto no coincide" });
+    }
+
     const result = await confirmOrderPayment({
       orderId: order.id,
       provider: "wompi",

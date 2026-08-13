@@ -6,6 +6,7 @@ import {
   findTransactionByReference,
   isWompiConfigured,
   paymentReference,
+  transactionMatchesOrder,
 } from "@/lib/wompi";
 
 export const runtime = "nodejs";
@@ -37,7 +38,7 @@ export async function POST(
   }
 
   const tx = await findTransactionByReference(paymentReference(code));
-  if (tx?.status === "APPROVED") {
+  if (tx?.status === "APPROVED" && transactionMatchesOrder(tx, order)) {
     const result = await confirmOrderPayment({
       orderId: order.id,
       provider: "wompi",

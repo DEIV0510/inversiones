@@ -18,6 +18,7 @@ import {
   findTransactionByReference,
   isWompiConfigured,
   paymentReference,
+  transactionMatchesOrder,
 } from "@/lib/wompi";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,7 @@ export default async function PedidoPage({
   // a la pasarela, nunca parámetros del navegador.
   if (order.status === "PENDING" && isWompiConfigured()) {
     const tx = await findTransactionByReference(paymentReference(code));
-    if (tx?.status === "APPROVED") {
+    if (tx?.status === "APPROVED" && transactionMatchesOrder(tx, order)) {
       await confirmOrderPayment({
         orderId: order.id,
         provider: "wompi",

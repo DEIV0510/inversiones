@@ -178,6 +178,13 @@ export async function confirmOrderPayment(params: {
   raw?: unknown;
 }): Promise<ConfirmResult> {
   return prisma.$transaction(async (tx) => {
+    // Bloqueo de fila por orden: serializa confirmaciones concurrentes de la
+    // MISMA orden (webhook reintentado por la pasarela + confirmación manual).
+    // Sin esto, la segunda transacción vería la orden como PENDING, no
+    // encontraría reservas que convertir y rechazaría una orden ya pagada
+    // borrando sus números vendidos.
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${params.orderId} FOR UPDATE`;
+
     const order = await tx.order.findUnique({
       where: { id: params.orderId },
       include: { raffle: true },
@@ -376,6 +383,11 @@ export async function expireOverdueOrders(): Promise<number> {
 /** Cancela una orden (admin). Libera números; si estaba pagada, ajusta el contador. */
 export async function cancelOrder(orderId: string): Promise<Order> {
   return prisma.$transaction(async (tx) => {
+    // Mismo bloqueo por orden que en la confirmación: evita que dos
+    // cancelaciones simultáneas descuenten paidCount dos veces, o que una
+    // cancelación y una confirmación se pisen.
+    await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+
     const order = await tx.order.findUnique({ where: { id: orderId } });
     if (!order) throw new OrderError("Orden no encontrada", 404);
     if (order.status === "CANCELLED") return order;
