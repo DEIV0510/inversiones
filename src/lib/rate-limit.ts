@@ -1,8 +1,13 @@
 /**
  * Limitador de intentos en memoria (por instancia serverless). Suficiente
- * como fricción anti-abuso en endpoints públicos; el límite GLOBAL protege
- * incluso si la cabecera de IP es falsificada. Para límites distribuidos
+ * como fricción anti-abuso en endpoints públicos. Para límites distribuidos
  * duros, ver docs/SEGURIDAD.md (Upstash/Redis).
+ *
+ * Diseño importante: el cupo GLOBAL nunca rechaza a un solicitante nuevo.
+ * Si lo hiciera, cualquiera podría dejar fuera del panel (o de la compra) a
+ * todo el mundo agotando el cupo. El cupo global solo endurece a quien YA
+ * viene insistiendo desde su propia IP; contra ataques distribuidos la
+ * defensa real es el costo de bcrypt más el retardo de `globalPressure`.
  */
 
 type Bucket = { count: number; resetAt: number };
@@ -13,8 +18,19 @@ const globals = new Map<string, Bucket>();
 export function clientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for") || "";
   const hops = forwarded.split(",").map((s) => s.trim()).filter(Boolean);
-  // Último salto: agregado por el proxy propio, no falsificable por el cliente.
+  // Último salto: lo agrega el proxy propio, no es falsificable por el cliente.
   return hops[hops.length - 1] || "local";
+}
+
+function bumpGlobal(scope: string, windowMs: number): number {
+  const now = Date.now();
+  let g = globals.get(scope);
+  if (!g || now > g.resetAt) {
+    g = { count: 0, resetAt: now + windowMs };
+    globals.set(scope, g);
+  }
+  g.count += 1;
+  return g.count;
 }
 
 export function isRateLimited(
@@ -23,16 +39,6 @@ export function isRateLimited(
   opts: { max: number; windowMs: number; globalMax?: number }
 ): boolean {
   const now = Date.now();
-
-  if (opts.globalMax) {
-    let g = globals.get(scope);
-    if (!g || now > g.resetAt) {
-      g = { count: 0, resetAt: now + opts.windowMs };
-      globals.set(scope, g);
-    }
-    g.count += 1;
-    if (g.count > opts.globalMax) return true;
-  }
 
   let store = stores.get(scope);
   if (!store) {
@@ -45,10 +51,34 @@ export function isRateLimited(
   }
 
   const bucket = store.get(key);
+  let count: number;
   if (!bucket || now > bucket.resetAt) {
     store.set(key, { count: 1, resetAt: now + opts.windowMs });
-    return false;
+    count = 1;
+  } else {
+    bucket.count += 1;
+    count = bucket.count;
   }
-  bucket.count += 1;
-  return bucket.count > opts.max;
+
+  // Límite propio de la IP: la barrera principal.
+  if (count > opts.max) return true;
+
+  // Presión global: solo afecta a quien ya lleva varios intentos propios.
+  if (opts.globalMax) {
+    const globalCount = bumpGlobal(scope, opts.windowMs);
+    const insistente = Math.max(3, Math.ceil(opts.max / 2));
+    if (globalCount > opts.globalMax && count > insistente) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Indica si el scope está bajo presión inusual. Los endpoints sensibles la
+ * usan para aumentar el retardo (fricción) sin negar el servicio a nadie.
+ */
+export function isUnderPressure(scope: string, globalMax: number): boolean {
+  const g = globals.get(scope);
+  if (!g || Date.now() > g.resetAt) return false;
+  return g.count > globalMax;
 }

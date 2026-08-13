@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSession } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientIp, isRateLimited, isUnderPressure } from "@/lib/rate-limit";
 import { loginSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  await delay(350); // fricción constante contra fuerza bruta
+  // Fricción constante contra fuerza bruta; se endurece si hay una oleada
+  // de intentos, pero JAMÁS se niega el acceso a un administrador legítimo.
+  await delay(isUnderPressure("admin.login", 40) ? 2000 : 350);
 
   const user = await prisma.adminUser.findUnique({
     where: { email: parsed.data.email },

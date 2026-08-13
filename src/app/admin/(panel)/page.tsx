@@ -34,9 +34,9 @@ export default async function AdminDashboard() {
     paidOrders,
     revenueAgg,
     reservedAlive,
-    soldNumbers,
+    soldAgg,
     recentOrders,
-    dailyPaid,
+    dailyRows,
   ] = await Promise.all([
     prisma.raffle.count({ where: { status: "ACTIVE" } }),
     prisma.raffle.count({ where: { status: "FINISHED" } }),
@@ -46,7 +46,11 @@ export default async function AdminDashboard() {
     prisma.raffleNumber.count({
       where: { status: "RESERVED", reservedUntil: { gt: now } },
     }),
-    prisma.raffleNumber.count({ where: { status: "PAID" } }),
+    // Números vendidos: se lee del contador denormalizado de cada rifa
+    // (mantenido atómicamente al confirmar/cancelar pagos) en vez de contar
+    // la tabla de números, que con rifas de 1.000.000 sería un recorrido
+    // enorme en cada carga del panel.
+    prisma.raffle.aggregate({ _sum: { paidCount: true } }),
     prisma.order.findMany({
       orderBy: { createdAt: "desc" },
       take: 8,
@@ -55,21 +59,30 @@ export default async function AdminDashboard() {
         raffle: { select: { title: true } },
       },
     }),
-    prisma.order.findMany({
-      where: { status: "PAID", paidAt: { gte: since14 } },
-      select: { paidAt: true, total: true },
-    }),
+    // Ingresos por día agregados en SQL: devuelve como máximo 14 filas.
+    prisma.$queryRaw<{ dia: Date; total: bigint }[]>`
+      SELECT date_trunc('day', "paidAt") AS dia, SUM("total")::bigint AS total
+      FROM "Order"
+      WHERE "status" = 'PAID' AND "paidAt" >= ${since14}
+      GROUP BY 1
+      ORDER BY 1
+    `,
   ]);
 
+  const soldNumbers = soldAgg._sum.paidCount ?? 0;
+
   // Ingresos por día (últimos 14 días) para la gráfica.
+  const byDay = new Map<string, number>();
+  for (const row of dailyRows) {
+    byDay.set(new Date(row.dia).toISOString().slice(0, 10), Number(row.total));
+  }
   const days: { label: string; total: number }[] = [];
   for (let i = 13; i >= 0; i--) {
     const d = new Date(now.getTime() - i * 86_400_000);
-    const key = d.toISOString().slice(0, 10);
-    const total = dailyPaid
-      .filter((o) => o.paidAt && o.paidAt.toISOString().slice(0, 10) === key)
-      .reduce((s, o) => s + o.total, 0);
-    days.push({ label: `${d.getDate()}`, total });
+    days.push({
+      label: `${d.getDate()}`,
+      total: byDay.get(d.toISOString().slice(0, 10)) ?? 0,
+    });
   }
   const maxDay = Math.max(1, ...days.map((d) => d.total));
 

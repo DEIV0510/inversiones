@@ -8,7 +8,11 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 function csvCell(value: unknown): string {
-  const s = String(value ?? "");
+  let s = String(value ?? "");
+  // Neutraliza inyección de fórmulas: Excel/LibreOffice evalúan las celdas
+  // que empiezan por = + - @ (o tab/CR) aunque vayan entrecomilladas, y el
+  // nombre lo escribe el público al comprar.
+  if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
   return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -53,10 +57,10 @@ export async function GET(req: NextRequest) {
 
   const rows = orders.map((o) =>
     [
-      o.code,
+      csvCell(o.code),
       csvCell(o.raffle.title),
       csvCell(o.participant.name),
-      o.participant.phone,
+      csvCell(o.participant.phone),
       csvCell(o.participant.email ?? ""),
       csvCell(formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits).join(" ")),
       o.quantity,

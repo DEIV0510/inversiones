@@ -18,20 +18,26 @@ export default async function AdminRafflesPage() {
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });
 
-  // Conteos reales por rifa (solo visibles para el admin).
-  const grouped = await prisma.raffleNumber.groupBy({
-    by: ["raffleId", "status"],
-    _count: { _all: true },
-    where: {
-      OR: [
-        { status: { in: ["PAID", "BLOCKED"] } },
-        { status: "RESERVED", reservedUntil: { gt: now } },
-      ],
-    },
-  });
-  const countsFor = (raffleId: string, status: string) =>
-    grouped.find((g) => g.raffleId === raffleId && g.status === status)?._count
-      ._all ?? 0;
+  // Conteos reales por rifa (solo visibles para el admin). Los vendidos
+  // salen del contador denormalizado de la rifa; sobre la tabla de números
+  // solo se consultan reservas vivas y bloqueos, que son pocos y usan el
+  // índice (raffleId, status) sin OR.
+  const [reservedGroups, blockedGroups] = await Promise.all([
+    prisma.raffleNumber.groupBy({
+      by: ["raffleId"],
+      _count: { _all: true },
+      where: { status: "RESERVED", reservedUntil: { gt: now } },
+    }),
+    prisma.raffleNumber.groupBy({
+      by: ["raffleId"],
+      _count: { _all: true },
+      where: { status: "BLOCKED" },
+    }),
+  ]);
+  const reservedFor = (raffleId: string) =>
+    reservedGroups.find((g) => g.raffleId === raffleId)?._count._all ?? 0;
+  const blockedFor = (raffleId: string) =>
+    blockedGroups.find((g) => g.raffleId === raffleId)?._count._all ?? 0;
 
   const canManage = can(session.role, "raffles.manage");
 
@@ -68,9 +74,9 @@ export default async function AdminRafflesPage() {
           progressMode: r.progressMode,
           pricePerNumber: r.pricePerNumber,
           totalNumbers: r.totalNumbers,
-          paid: countsFor(r.id, "PAID"),
-          reserved: countsFor(r.id, "RESERVED"),
-          blocked: countsFor(r.id, "BLOCKED"),
+          paid: r.paidCount,
+          reserved: reservedFor(r.id),
+          blocked: blockedFor(r.id),
           displayOrder: r.displayOrder,
         }))}
       />

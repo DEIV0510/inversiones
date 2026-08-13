@@ -26,23 +26,20 @@ export default async function AdminReportsPage() {
     incomeAgg,
     ordersByStatus,
     participantCount,
-    soldTotal,
+    soldAgg,
     raffles,
-    soldByRaffle,
     reservedByRaffle,
     incomeByRaffle,
   ] = await Promise.all([
     prisma.order.aggregate({ where: { status: "PAID" }, _sum: { total: true } }),
     prisma.order.groupBy({ by: ["status"], _count: { _all: true } }),
     prisma.participant.count(),
-    prisma.raffleNumber.count({ where: { status: "PAID" } }),
+    // Vendidos: contador denormalizado de las rifas (O(1)) en vez de contar
+    // la tabla de números, que con rifas de 1.000.000 sería un recorrido
+    // enorme en cada carga.
+    prisma.raffle.aggregate({ _sum: { paidCount: true } }),
     prisma.raffle.findMany({
       orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
-    }),
-    prisma.raffleNumber.groupBy({
-      by: ["raffleId"],
-      _count: { _all: true },
-      where: { status: "PAID" },
     }),
     prisma.raffleNumber.groupBy({
       by: ["raffleId"],
@@ -60,8 +57,9 @@ export default async function AdminReportsPage() {
   const ordersTotal = ordersByStatus.reduce((s, g) => s + g._count._all, 0);
   const ordersOf = (status: string) =>
     ordersByStatus.find((g) => g.status === status)?._count._all ?? 0;
+  const soldTotal = soldAgg._sum.paidCount ?? 0;
   const soldOf = (raffleId: string) =>
-    soldByRaffle.find((g) => g.raffleId === raffleId)?._count._all ?? 0;
+    raffles.find((r) => r.id === raffleId)?.paidCount ?? 0;
   const reservedOf = (raffleId: string) =>
     reservedByRaffle.find((g) => g.raffleId === raffleId)?._count._all ?? 0;
   const incomeOf = (raffleId: string) =>

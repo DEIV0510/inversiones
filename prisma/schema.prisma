@@ -137,6 +137,7 @@ model Order {
   @@index([raffleId, status])
   @@index([participantId])
   @@index([status, reservedUntil])
+  @@index([status, paidAt])
   @@index([createdAt])
 }
 

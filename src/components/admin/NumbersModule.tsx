@@ -148,6 +148,10 @@ export default function NumbersModule({
         const data = await res.json().catch(() => ({}));
         if (cancelled) return;
         if (!res.ok) {
+          // Vaciar la lista: si falla, no se pueden seguir mostrando los
+          // números de la rifa anterior bajo el mensaje de error.
+          setItems([]);
+          setTotal(0);
           setError(data.error || "No fue posible cargar los números");
           return;
         }
@@ -156,7 +160,11 @@ export default function NumbersModule({
         setTotal(data.total ?? 0);
         setPerPage(data.perPage ?? 50);
       } catch {
-        if (!cancelled) setError("Error de conexión");
+        if (!cancelled) {
+          setItems([]);
+          setTotal(0);
+          setError("Error de conexión");
+        }
       } finally {
         if (!cancelled) setLoadingList(false);
       }
