@@ -1,4 +1,4 @@
-import type { RaffleView } from "@/lib/types";
+import type { PublicRaffle } from "@/lib/public";
 import { waGeneral } from "@/lib/whatsapp";
 import RaffleCard from "./RaffleCard";
 import Reveal from "./Reveal";
@@ -6,7 +6,7 @@ import SectionHeading from "./SectionHeading";
 import { IconTicket, IconWhatsApp } from "@/components/icons";
 
 type Props = {
-  raffles: RaffleView[];
+  raffles: PublicRaffle[];
   whatsappNumber: string;
 };
 

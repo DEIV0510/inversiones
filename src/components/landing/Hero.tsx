@@ -1,11 +1,12 @@
-import type { RaffleView } from "@/lib/types";
+import Link from "next/link";
+import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { waConsult, waGeneral } from "@/lib/whatsapp";
-import { statusMeta } from "@/lib/raffle-status";
+import { statusMetaV2 } from "@/lib/raffle-status";
 import ProgressBar from "./ProgressBar";
-import ParticipateButton from "./ParticipateButton";
 import Reveal from "./Reveal";
 import {
+  IconArrowRight,
   IconCalendar,
   IconGift,
   IconMapPin,
@@ -16,12 +17,12 @@ import {
 type Props = {
   whatsappNumber: string;
   location: string;
-  featured: RaffleView | null;
+  featured: PublicRaffle | null;
 };
 
 /**
  * Apertura tipo app: la página comienza mostrando directamente el sorteo
- * destacado, como una plataforma de rifas moderna.
+ * destacado con su CTA hacia la selección de números.
  */
 export default function Hero({ whatsappNumber, location, featured }: Props) {
   return (
@@ -36,7 +37,11 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
         {featured ? (
           <div className="grid gap-5 lg:grid-cols-2 lg:items-center lg:gap-12">
             <Reveal>
-              <div className="neon-card relative overflow-hidden rounded-3xl bg-card">
+              <Link
+                href={`/sorteo/${featured.slug}`}
+                className="neon-card relative block overflow-hidden rounded-3xl bg-card"
+                aria-label={`Ver el sorteo ${featured.title}`}
+              >
                 {featured.imageUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
@@ -46,16 +51,16 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                     decoding="async"
                   />
                 ) : (
-                  <div className="flex aspect-[4/3] w-full items-center justify-center text-fg-faint">
+                  <span className="flex aspect-[4/3] w-full items-center justify-center text-fg-faint">
                     <IconGift width={72} height={72} strokeWidth={1.25} />
-                  </div>
+                  </span>
                 )}
                 <span
-                  className={`absolute left-4 top-4 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em] ${statusMeta(featured.status).badgeClass}`}
+                  className={`absolute left-4 top-4 rounded-full px-3.5 py-1.5 text-xs font-bold uppercase tracking-[0.14em] ${statusMetaV2(featured.status).badgeClass}`}
                 >
-                  {statusMeta(featured.status).label}
+                  {statusMetaV2(featured.status).label}
                 </span>
-              </div>
+              </Link>
             </Reveal>
 
             <div>
@@ -92,12 +97,10 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
                     <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
                       <IconTicket width={16} height={16} className="text-brand" />
-                      Precio
+                      Precio por número
                     </span>
                     <span className="text-right font-display text-sm font-extrabold tabular-nums text-fg">
-                      {featured.priceCop != null
-                        ? formatCop(featured.priceCop)
-                        : "Por anunciar"}
+                      {formatCop(featured.pricePerNumber)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -115,15 +118,15 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
               <Reveal delay={3}>
                 <ProgressBar pct={featured.progressPct} className="mt-4" />
                 <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
-                  {featured.status === "active" ? (
-                    <ParticipateButton
-                      raffleTitle={featured.title}
-                      priceCop={featured.priceCop}
-                      whatsappNumber={whatsappNumber}
-                      size="big"
-                      className="w-full sm:w-auto"
-                    />
-                  ) : featured.status === "coming_soon" ? (
+                  {featured.status === "ACTIVE" ? (
+                    <Link
+                      href={`/sorteo/${featured.slug}`}
+                      className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+                    >
+                      Quiero participar
+                      <IconArrowRight width={19} height={19} />
+                    </Link>
+                  ) : featured.status === "COMING_SOON" ? (
                     <a
                       href={waConsult(whatsappNumber, featured.title)}
                       target="_blank"
@@ -134,8 +137,6 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       Consultar sorteo
                     </a>
                   ) : (
-                    // Agotado o finalizado: CTA honesto, sin invitar a
-                    // participar en un sorteo que ya no admite boletas.
                     <a
                       href={waGeneral(whatsappNumber)}
                       target="_blank"

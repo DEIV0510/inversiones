@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth";
 import AdminShell from "@/components/admin/AdminShell";
 
 export const metadata: Metadata = {
@@ -11,9 +9,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function PanelLayout({
+export default function PanelLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  if (!(await isAuthenticated())) redirect("/admin/login");
+  // La autenticación se verifica en CADA página (requirePanelAuth):
+  // los layouts no se re-ejecutan en navegaciones suaves.
   return <AdminShell>{children}</AdminShell>;
 }

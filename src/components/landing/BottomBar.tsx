@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import MisBoletasButton from "./MisBoletasButton";
 import { waGeneral } from "@/lib/whatsapp";
 import { IconHome, IconTicket, IconWhatsApp } from "@/components/icons";
 
@@ -35,7 +34,13 @@ export default function BottomBar({ whatsappNumber }: Props) {
           <IconTicket width={21} height={21} />
           Sorteos
         </Link>
-        <MisBoletasButton whatsappNumber={whatsappNumber} variant="bar" />
+        <Link
+          href="/boletas"
+          className="flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold text-fg-soft transition-colors hover:text-fg"
+        >
+          <IconTicket width={21} height={21} />
+          Mis boletas
+        </Link>
         <a
           href={waGeneral(whatsappNumber)}
           target="_blank"

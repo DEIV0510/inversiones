@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import sharp from "sharp";
-import { requireAdmin } from "@/lib/auth";
+import { requireAdminApi } from "@/lib/auth";
 import { saveImage } from "@/lib/media";
 
 export const runtime = "nodejs";
@@ -8,8 +8,8 @@ export const runtime = "nodejs";
 const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export async function POST(req: NextRequest) {
-  const unauthorized = await requireAdmin();
-  if (unauthorized) return unauthorized;
+  const auth = await requireAdminApi("raffles.manage");
+  if (auth instanceof Response) return auth;
 
   // Rechazar antes de bufferizar el body: formData() carga todo en memoria.
   const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
 
   let optimized: Buffer;
   try {
-    // sharp valida que el archivo sea una imagen real y la optimiza para web.
     optimized = await sharp(buffer)
       .rotate()
       .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true })

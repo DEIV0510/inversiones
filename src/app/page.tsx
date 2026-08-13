@@ -11,14 +11,13 @@ import FinalCta from "@/components/landing/FinalCta";
 import Footer from "@/components/landing/Footer";
 import WhatsAppFloat from "@/components/landing/WhatsAppFloat";
 import BottomBar from "@/components/landing/BottomBar";
-import { getPublicRaffles, getPublishedWinners } from "@/lib/raffles";
+import { getPublicRaffles, getPublishedWinners } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { getFaqItems } from "@/lib/faq";
-import type { RaffleView, WinnerView } from "@/lib/types";
 
-// La landing se cachea y se revalida al publicar cambios desde el panel
-// (revalidatePath) o, como respaldo, cada 5 minutos.
-export const revalidate = 300;
+// La portada consulta el estado real de las rifas (porcentaje automático):
+// se sirve dinámica para reflejar ventas al instante.
+export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
   const [raffles, winners, settings] = await Promise.all([
@@ -27,41 +26,16 @@ export default async function HomePage() {
     getSettings(),
   ]);
 
-  // Proyección pública: nunca exponer totalNumbers ni campos internos.
-  const publicRaffles: RaffleView[] = raffles.map((r) => ({
-    id: r.id,
-    title: r.title,
-    description: r.description,
-    prize: r.prize,
-    imageUrl: r.imageUrl,
-    priceCop: r.priceCop,
-    drawDateText: r.drawDateText,
-    progressPct: r.progressPct,
-    status: r.status,
-  }));
-
-  const publicWinners: WinnerView[] = winners.map((w) => ({
-    id: w.id,
-    name: w.name,
-    prize: w.prize,
-    raffleTitle: w.raffleTitle,
-    photoUrl: w.photoUrl,
-    drawnAtText: w.drawnAtText,
-    isDemo: w.isDemo,
-  }));
-
   const featured =
-    publicRaffles.find((r) => r.status === "active") ?? publicRaffles[0] ?? null;
+    raffles.find((r) => r.status === "ACTIVE") ?? raffles[0] ?? null;
   const faqItems = getFaqItems(settings);
 
-  // La dirección del dato estructurado se deriva de la ubicación editable
-  // desde el panel ("Ciudad, Departamento, País").
   const locationParts = settings.location.split(",").map((p) => p.trim());
   const organizationJsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: settings.company_name,
-    description: `Sorteos de dinero en efectivo y motocicletas en ${settings.location}.`,
+    description: `Plataforma de sorteos de dinero en efectivo y motocicletas en ${settings.location}.`,
     address: {
       "@type": "PostalAddress",
       addressLocality: locationParts[0] || settings.location,
@@ -99,7 +73,7 @@ export default async function HomePage() {
           featured={featured}
         />
         <RafflesSection
-          raffles={publicRaffles}
+          raffles={raffles}
           whatsappNumber={settings.whatsapp_number}
         />
         <PrizesSection />
@@ -109,7 +83,7 @@ export default async function HomePage() {
           location={settings.location}
         />
         <HowItWorks />
-        <WinnersSection winners={publicWinners} />
+        <WinnersSection winners={winners} />
         <FaqSection items={faqItems} />
         <LegalSection />
         <FinalCta whatsappNumber={settings.whatsapp_number} />

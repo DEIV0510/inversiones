@@ -1,10 +1,10 @@
-import type { WinnerView } from "@/lib/types";
+import type { Winner } from "@prisma/client";
 import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
 import { IconTrophy } from "@/components/icons";
 
 type Props = {
-  winners: WinnerView[];
+  winners: Winner[];
 };
 
 export default function WinnersSection({ winners }: Props) {
@@ -29,7 +29,7 @@ export default function WinnersSection({ winners }: Props) {
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
                       src={winner.photoUrl}
-                      alt={`Ganador: ${winner.name}`}
+                      alt={`Ganador: ${winner.participantName}`}
                       loading="lazy"
                       decoding="async"
                       className="aspect-[4/3] w-full object-cover"
@@ -41,11 +41,14 @@ export default function WinnersSection({ winners }: Props) {
                   )}
                   <div className="flex flex-1 flex-col gap-1.5 p-5">
                     <h3 className="font-display text-lg font-extrabold text-fg">
-                      {winner.name}
+                      {winner.participantName}
                     </h3>
                     <p className="text-sm font-semibold text-brand">{winner.prize}</p>
-                    {winner.raffleTitle ? (
-                      <p className="text-sm text-fg-soft">{winner.raffleTitle}</p>
+                    <p className="text-sm text-fg-soft">{winner.raffleTitle}</p>
+                    {winner.numberFormatted ? (
+                      <p className="font-display text-sm font-bold tracking-[0.2em] text-fg">
+                        Nº {winner.numberFormatted}
+                      </p>
                     ) : null}
                     {winner.drawnAtText ? (
                       <p className="mt-auto pt-2 text-xs font-semibold uppercase tracking-wide text-fg-faint">

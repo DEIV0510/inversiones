@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { isAuthenticated } from "@/lib/auth";
+import { getVerifiedSession } from "@/lib/auth";
 import LoginForm from "@/components/admin/LoginForm";
 
 export const metadata: Metadata = {
@@ -9,6 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage() {
-  if (await isAuthenticated()) redirect("/admin");
+  if (await getVerifiedSession()) redirect("/admin");
   return <LoginForm />;
 }

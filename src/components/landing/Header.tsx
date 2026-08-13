@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import MisBoletasButton from "./MisBoletasButton";
 import { waGeneral } from "@/lib/whatsapp";
+import { IconTicket } from "@/components/icons";
 import { IconMenu, IconWhatsApp, IconX } from "@/components/icons";
 
 const NAV_LINKS = [
@@ -83,7 +83,13 @@ export default function Header({ whatsappNumber, companyName }: Props) {
         </nav>
 
         <div className="flex items-center gap-2">
-          <MisBoletasButton whatsappNumber={whatsappNumber} />
+          <Link
+            href="/boletas"
+            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-well px-4 text-sm font-bold text-fg transition-colors hover:border-brand"
+          >
+            <IconTicket width={17} height={17} className="text-brand" />
+            Mis boletas
+          </Link>
           <a
             href={waGeneral(whatsappNumber)}
             target="_blank"

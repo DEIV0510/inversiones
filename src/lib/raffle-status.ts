@@ -1,29 +1,33 @@
-// Metadatos de estado de rifa, seguros para componentes cliente
-// (sin dependencias de Prisma ni de código de servidor).
+// Metadatos de estado de rifa (v2), seguros para componentes cliente.
 
-export const RAFFLE_STATUSES = [
-  "active",
-  "coming_soon",
-  "finished",
-  "sold_out",
+export const RAFFLE_STATUSES_V2 = [
+  "DRAFT",
+  "COMING_SOON",
+  "ACTIVE",
+  "SOLD_OUT",
+  "FINISHED",
+  "CANCELLED",
 ] as const;
 
-export type RaffleStatus = (typeof RAFFLE_STATUSES)[number];
+export type RaffleStatusV2 = (typeof RAFFLE_STATUSES_V2)[number];
 
-export const STATUS_META: Record<RaffleStatus, { label: string; badgeClass: string }> = {
-  active: { label: "Activa", badgeClass: "bg-brand text-white glow-red-sm" },
-  coming_soon: {
+export const STATUS_META_V2: Record<
+  RaffleStatusV2,
+  { label: string; badgeClass: string }
+> = {
+  DRAFT: { label: "Borrador", badgeClass: "bg-well text-fg-faint" },
+  COMING_SOON: {
     label: "Próximamente",
     badgeClass: "border border-line-strong bg-well text-fg",
   },
-  finished: { label: "Finalizada", badgeClass: "bg-well text-fg-soft" },
-  sold_out: { label: "Agotada", badgeClass: "bg-brand-deep text-white" },
+  ACTIVE: { label: "Activa", badgeClass: "bg-brand text-white glow-red-sm" },
+  SOLD_OUT: { label: "Agotada", badgeClass: "bg-brand-deep text-white" },
+  FINISHED: { label: "Finalizada", badgeClass: "bg-well text-fg-soft" },
+  CANCELLED: { label: "Cancelada", badgeClass: "bg-well text-fg-faint" },
 };
 
-export function isRaffleStatus(value: string): value is RaffleStatus {
-  return (RAFFLE_STATUSES as readonly string[]).includes(value);
-}
-
-export function statusMeta(status: string) {
-  return isRaffleStatus(status) ? STATUS_META[status] : STATUS_META.active;
+export function statusMetaV2(status: string) {
+  return (
+    STATUS_META_V2[status as RaffleStatusV2] ?? STATUS_META_V2.DRAFT
+  );
 }

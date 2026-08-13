@@ -5,41 +5,43 @@ export type FaqItem = { question: string; answer: string };
 export function getFaqItems(settings: SiteSettings): FaqItem[] {
   return [
     {
-      question: "¿Cómo puedo participar?",
-      answer: `Elige el sorteo que te interesa y escríbenos por WhatsApp con el botón "Quiero participar". Te daremos personalmente las instrucciones para completar tu participación.`,
-    },
-    {
-      question: "¿Qué sorteos están disponibles?",
+      question: "¿Cómo participo?",
       answer:
-        "En la sección de sorteos activos encuentras los sorteos vigentes con su premio, precio, fecha y porcentaje de avance.",
+        "Elige el sorteo, selecciona tus números (o deja que el sistema los elija al azar), completa tus datos y realiza el pago. Recibirás un comprobante con tu código de participación.",
     },
     {
-      question: "¿Qué premios puedo ganar?",
+      question: "¿Cómo selecciono mis números?",
       answer:
-        "Actualmente realizamos sorteos de dinero en efectivo y motocicletas. Más adelante incorporaremos nuevos premios.",
+        "En la página del sorteo puedes buscar tu número de la suerte y verificar si está disponible, elegir entre los números sugeridos, o pedir números al azar. Tú decides.",
     },
     {
-      question: "¿Cómo conozco los resultados?",
+      question: "¿Cómo funciona la reserva?",
       answer:
-        "Los resultados se anuncian por nuestros canales oficiales y se publican en la sección de ganadores de esta página.",
+        "Al continuar, tus números quedan reservados durante unos minutos mientras completas el pago. Si el tiempo se agota, los números vuelven a estar disponibles para otras personas.",
     },
     {
-      question: "¿Cómo me contacto?",
-      answer: `Por WhatsApp al ${settings.whatsapp_display}. Puedes usar el botón flotante o cualquier botón "Quiero participar" de esta página.`,
-    },
-    {
-      question: "¿Dónde están ubicados?",
-      answer: `Estamos en ${settings.location}. Toda la atención se realiza directamente por WhatsApp.`,
-    },
-    {
-      question: "¿Qué ocurre después de participar?",
+      question: "¿Cómo realizo el pago?",
       answer:
-        "Recibirás por WhatsApp la confirmación de tu participación y las indicaciones del sorteo. Luego solo debes estar atento a la fecha y al anuncio de resultados.",
+        "Puedes pagar en línea (cuando la pasarela está habilitada) o coordinar el pago directamente por WhatsApp. Tu participación queda confirmada cuando verificamos el pago.",
+    },
+    {
+      question: "¿Dónde consulto mis números?",
+      answer: `En la sección "Mis boletas", con tu WhatsApp y el código de participación que aparece en tu comprobante. También puedes escribirnos al ${settings.whatsapp_display}.`,
+    },
+    {
+      question: "¿Cuándo se realiza el sorteo?",
+      answer:
+        "Cada sorteo muestra su fecha en la página. Cualquier cambio se anuncia por nuestros canales oficiales.",
+    },
+    {
+      question: "¿Cómo se publica el ganador?",
+      answer:
+        "El resultado se anuncia por nuestros canales oficiales y el ganador queda publicado en la sección de ganadores de esta página.",
     },
     {
       question: "¿Dónde puedo consultar las condiciones?",
       answer:
-        "En los enlaces de términos y condiciones de esta página. Además, por WhatsApp te compartimos las condiciones del sorteo que te interese antes de participar.",
+        "Cada sorteo tiene sus condiciones en su propia página, y las condiciones generales están en el enlace de términos de esta página.",
     },
   ];
 }
