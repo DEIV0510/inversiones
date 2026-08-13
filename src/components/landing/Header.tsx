@@ -62,20 +62,20 @@ export default function Header({ whatsappNumber, companyName }: Props) {
             height={40}
             className="h-10 w-10 rounded-full object-cover ring-1 ring-line"
           />
-          <span className="text-sm font-extrabold uppercase tracking-wide text-fg sm:text-base">
+          <span className="whitespace-nowrap text-sm font-extrabold uppercase tracking-wide text-fg sm:text-base">
             Inversiones <span className="text-brand">D y S</span>
           </span>
         </Link>
 
         <nav
-          className="hidden items-center gap-6 xl:flex"
+          className="hidden min-w-0 items-center gap-5 xl:flex"
           aria-label="Navegación principal"
         >
           {NAV_LINKS.slice(0, 6).map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="text-sm font-semibold text-fg-soft transition-colors hover:text-fg"
+              className="whitespace-nowrap text-sm font-semibold text-fg-soft transition-colors hover:text-fg"
             >
               {link.label}
             </Link>
@@ -85,7 +85,7 @@ export default function Header({ whatsappNumber, companyName }: Props) {
         <div className="flex items-center gap-2">
           <Link
             href="/boletas"
-            className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-well px-4 text-sm font-bold text-fg transition-colors hover:border-brand"
+            className="inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-well px-4 text-sm font-bold text-fg transition-colors hover:border-brand"
           >
             <IconTicket width={17} height={17} className="text-brand" />
             Mis boletas
@@ -94,7 +94,7 @@ export default function Header({ whatsappNumber, companyName }: Props) {
             href={waGeneral(whatsappNumber)}
             target="_blank"
             rel="noopener noreferrer"
-            className="glow-red-sm hidden min-h-11 items-center gap-2 rounded-full bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark lg:inline-flex"
+            className="glow-red-sm hidden min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark lg:inline-flex"
           >
             <IconWhatsApp width={16} height={16} />
             Participar
