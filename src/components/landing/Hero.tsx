@@ -32,9 +32,9 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
         aria-hidden="true"
       />
 
-      <div className="relative mx-auto w-full max-w-6xl px-4 pb-14 pt-24 sm:px-6 lg:px-8 lg:pb-20 lg:pt-32">
+      <div className="relative mx-auto w-full max-w-6xl px-4 pb-10 pt-20 sm:px-6 lg:px-8 lg:pb-14 lg:pt-28">
         {featured ? (
-          <div className="grid gap-8 lg:grid-cols-2 lg:items-center lg:gap-12">
+          <div className="grid gap-5 lg:grid-cols-2 lg:items-center lg:gap-12">
             <Reveal>
               <div className="neon-card relative overflow-hidden rounded-3xl bg-card">
                 {featured.imageUrl ? (
@@ -60,79 +60,61 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
 
             <div>
               <Reveal>
-                <p className="inline-flex items-center gap-2 rounded-full border border-line bg-well/60 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-fg-soft">
-                  <IconMapPin width={13} height={13} className="text-brand" />
+                <p className="inline-flex items-center gap-2 rounded-full border border-line bg-well/60 px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-fg-soft">
+                  <IconMapPin width={12} height={12} className="text-brand" />
                   {location} · Sorteo destacado
                 </p>
               </Reveal>
               <Reveal delay={1}>
-                <h1 className="mt-4 font-display text-3xl font-black uppercase leading-[1.06] tracking-tight text-fg sm:text-4xl lg:text-5xl">
+                <h1 className="mt-3 font-display text-3xl font-black uppercase leading-[1.06] tracking-tight text-fg sm:text-4xl lg:text-5xl">
                   {featured.title}
                 </h1>
-                <span
-                  className="glow-red-sm mt-4 block h-1.5 w-24 rounded-full bg-brand"
-                  aria-hidden="true"
-                />
               </Reveal>
               {featured.description ? (
                 <Reveal delay={2}>
-                  <p className="mt-4 max-w-xl text-base leading-relaxed text-fg-soft sm:text-lg">
+                  <p className="mt-2.5 max-w-xl text-sm leading-relaxed text-fg-soft sm:text-base">
                     {featured.description}
                   </p>
                 </Reveal>
               ) : null}
 
               <Reveal delay={2}>
-                <div className="mt-6 grid gap-2.5">
-                  <div className="flex items-center gap-3.5 rounded-2xl border border-line bg-card p-4">
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-well text-brand">
-                      <IconGift width={21} height={21} />
+                <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                      <IconGift width={16} height={16} className="text-brand" />
+                      Premio
                     </span>
-                    <div>
-                      <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-                        Premio
-                      </p>
-                      <p className="font-display text-base font-extrabold text-fg">
-                        {featured.prize}
-                      </p>
-                    </div>
+                    <span className="text-right font-display text-sm font-extrabold text-fg">
+                      {featured.prize}
+                    </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2.5">
-                    <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-well text-brand">
-                        <IconTicket width={21} height={21} />
-                      </span>
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-                          Precio
-                        </p>
-                        <p className="font-display text-base font-extrabold tabular-nums text-fg">
-                          {featured.priceCop != null
-                            ? formatCop(featured.priceCop)
-                            : "Por anunciar"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3 rounded-2xl border border-line bg-card p-4">
-                      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-well text-brand">
-                        <IconCalendar width={21} height={21} />
-                      </span>
-                      <div>
-                        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-                          Fecha
-                        </p>
-                        <p className="font-display text-base font-extrabold text-fg">
-                          {featured.drawDateText?.trim() || "Por anunciar"}
-                        </p>
-                      </div>
-                    </div>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                      <IconTicket width={16} height={16} className="text-brand" />
+                      Precio
+                    </span>
+                    <span className="text-right font-display text-sm font-extrabold tabular-nums text-fg">
+                      {featured.priceCop != null
+                        ? formatCop(featured.priceCop)
+                        : "Por anunciar"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 px-4 py-3">
+                    <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                      <IconCalendar width={16} height={16} className="text-brand" />
+                      Fecha
+                    </span>
+                    <span className="text-right font-display text-sm font-extrabold text-fg">
+                      {featured.drawDateText?.trim() || "Por anunciar"}
+                    </span>
                   </div>
                 </div>
               </Reveal>
 
               <Reveal delay={3}>
-                <ProgressBar pct={featured.progressPct} className="mt-6" />
-                <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                <ProgressBar pct={featured.progressPct} className="mt-4" />
+                <div className="mt-4 flex flex-col gap-2.5 sm:flex-row">
                   {featured.status === "active" ? (
                     <ParticipateButton
                       raffleTitle={featured.title}
@@ -166,7 +148,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                   )}
                   <a
                     href="/#sorteos"
-                    className="inline-flex min-h-14 items-center justify-center rounded-xl border border-line-strong px-8 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:border-brand hover:text-brand"
+                    className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line-strong px-8 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:border-brand hover:text-brand sm:min-h-14"
                   >
                     Ver todos los sorteos
                   </a>
@@ -177,15 +159,15 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
         ) : (
           <div className="mx-auto max-w-2xl text-center">
             <Reveal>
-              <p className="inline-flex items-center gap-2 rounded-full border border-line bg-well/60 px-4 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-fg-soft">
-                <IconMapPin width={13} height={13} className="text-brand" />
+              <p className="inline-flex items-center gap-2 rounded-full border border-line bg-well/60 px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-fg-soft">
+                <IconMapPin width={12} height={12} className="text-brand" />
                 {location}
               </p>
-              <h1 className="mt-5 font-display text-4xl font-black uppercase leading-[1.05] text-fg sm:text-5xl">
+              <h1 className="mt-4 font-display text-3xl font-black uppercase leading-[1.05] text-fg sm:text-5xl">
                 Sorteos de dinero y{" "}
                 <span className="text-brand">motocicletas</span>
               </h1>
-              <p className="mt-4 text-base leading-relaxed text-fg-soft sm:text-lg">
+              <p className="mt-3 text-sm leading-relaxed text-fg-soft sm:text-lg">
                 Muy pronto abriremos un nuevo sorteo. Escríbenos por WhatsApp y
                 te avisamos de primero.
               </p>
@@ -193,7 +175,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                 href={waGeneral(whatsappNumber)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="glow-red mt-7 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark"
+                className="glow-red mt-6 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark"
               >
                 <IconWhatsApp width={20} height={20} />
                 Hablar por WhatsApp

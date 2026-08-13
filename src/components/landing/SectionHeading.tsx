@@ -14,14 +14,14 @@ export default function SectionHeading({
   const alignClass = align === "center" ? "mx-auto text-center" : "text-left";
   return (
     <div className={`max-w-2xl ${alignClass}`}>
-      <p className="text-xs font-bold uppercase tracking-[0.22em] text-brand">
+      <p className="text-[11px] font-bold uppercase tracking-[0.22em] text-brand">
         {kicker}
       </p>
-      <h2 className="mt-3 font-display text-3xl font-extrabold uppercase leading-tight text-fg sm:text-4xl">
+      <h2 className="mt-1.5 font-display text-2xl font-extrabold uppercase leading-tight text-fg sm:text-3xl">
         {title}
       </h2>
       {intro ? (
-        <p className="mt-4 text-base leading-relaxed text-fg-soft sm:text-lg">
+        <p className="mt-2.5 text-sm leading-relaxed text-fg-soft sm:text-base">
           {intro}
         </p>
       ) : null}

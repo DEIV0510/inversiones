@@ -9,18 +9,14 @@ type Props = {
 
 export default function WinnersSection({ winners }: Props) {
   return (
-    <section id="ganadores" className="bg-bg2 py-16 lg:py-24">
+    <section id="ganadores" className="bg-bg2 py-10 lg:py-16">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
-          <SectionHeading
-            kicker="Ganadores"
-            title="Nuestros ganadores"
-            intro="Cada vez que se realice un sorteo, publicaremos aquí a la persona ganadora, su premio y la fecha."
-          />
+          <SectionHeading kicker="Ganadores" title="Nuestros ganadores" />
         </Reveal>
 
         {winners.length > 0 ? (
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {winners.map((winner, i) => (
               <Reveal key={winner.id} delay={(Math.min(i, 2) as 0 | 1 | 2)}>
                 <article className="relative flex h-full flex-col overflow-hidden rounded-2xl border border-line bg-card">
@@ -62,17 +58,17 @@ export default function WinnersSection({ winners }: Props) {
             ))}
           </div>
         ) : (
-          <Reveal className="mt-10">
-            <div className="mx-auto flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-line bg-card px-6 py-12 text-center">
-              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand/15 text-brand">
-                <IconTrophy width={28} height={28} />
+          <Reveal className="mt-6">
+            <div className="mx-auto flex max-w-lg flex-col items-center gap-2.5 rounded-2xl border border-line bg-card px-6 py-7 text-center">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand/15 text-brand">
+                <IconTrophy width={22} height={22} />
               </span>
-              <h3 className="font-display text-xl font-extrabold uppercase text-fg">
+              <h3 className="font-display text-base font-extrabold uppercase text-fg">
                 Los ganadores aparecerán aquí
               </h3>
-              <p className="text-sm leading-relaxed text-fg-soft">
-                Cuando se realice cada sorteo, publicaremos en esta sección a la
-                persona ganadora con su premio y la fecha del sorteo.
+              <p className="text-xs leading-relaxed text-fg-soft sm:text-sm">
+                Cuando se realice cada sorteo, publicaremos aquí a la persona
+                ganadora con su premio y la fecha.
               </p>
             </div>
           </Reveal>

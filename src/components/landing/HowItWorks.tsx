@@ -1,68 +1,54 @@
 import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
-import {
-  IconCalendar,
-  IconCheck,
-  IconTicket,
-  IconWhatsApp,
-} from "@/components/icons";
 
 const STEPS = [
   {
     number: "01",
-    icon: IconTicket,
     title: "Elige tu sorteo",
-    text: "Conoce los sorteos disponibles, sus premios y su porcentaje de avance.",
+    text: "Conoce los sorteos disponibles y su avance.",
   },
   {
     number: "02",
-    icon: IconWhatsApp,
     title: "Contáctanos",
-    text: "Escríbenos por WhatsApp con el botón del sorteo que te interesa.",
+    text: "Escríbenos por WhatsApp con el botón del sorteo.",
   },
   {
     number: "03",
-    icon: IconCheck,
     title: "Realiza tu participación",
-    text: "Sigue las instrucciones que te daremos directamente por WhatsApp.",
+    text: "Sigue las instrucciones que te damos por WhatsApp.",
   },
   {
     number: "04",
-    icon: IconCalendar,
     title: "Espera el sorteo",
-    text: "Mantente atento a la fecha del sorteo y al anuncio de resultados.",
+    text: "Atento a la fecha y al anuncio de resultados.",
   },
 ];
 
 export default function HowItWorks() {
   return (
-    <section id="como-participar" className="bg-bg2 py-16 lg:py-24">
+    <section id="como-participar" className="py-10 lg:py-16">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           <SectionHeading
             kicker="Cómo participar"
             title="Participar es muy fácil"
-            intro="En cuatro pasos simples puedes estar participando por grandes premios."
           />
         </Reveal>
-        <ol className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <ol className="mx-auto mt-5 grid max-w-3xl gap-2.5 lg:max-w-none lg:grid-cols-4 lg:gap-4">
           {STEPS.map((step, i) => (
             <Reveal key={step.number} delay={(Math.min(i, 3) as 0 | 1 | 2 | 3)}>
-              <li className="relative flex h-full flex-col gap-4 rounded-2xl border border-line bg-card p-6">
+              <li className="flex h-full items-center gap-3.5 rounded-2xl border border-line bg-card p-3.5 lg:flex-col lg:items-start lg:p-5">
                 <span
-                  className="font-display text-4xl font-black tabular-nums text-brand/25"
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-well font-display text-base font-black tabular-nums text-brand"
                   aria-hidden="true"
                 >
                   {step.number}
                 </span>
-                <span className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center rounded-xl bg-well text-brand">
-                  <step.icon width={20} height={20} />
-                </span>
                 <div>
-                  <h3 className="font-display text-base font-extrabold uppercase text-fg">
+                  <h3 className="font-display text-sm font-extrabold uppercase text-fg">
                     {step.title}
                   </h3>
-                  <p className="mt-1.5 text-sm leading-relaxed text-fg-soft">
+                  <p className="mt-0.5 text-xs leading-relaxed text-fg-soft">
                     {step.text}
                   </p>
                 </div>

@@ -12,18 +12,18 @@ type Props = {
 
 export default function RafflesSection({ raffles, whatsappNumber }: Props) {
   return (
-    <section id="sorteos" className="relative py-16 lg:py-24">
+    <section id="sorteos" className="relative py-10 lg:py-16">
       <div className="mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           <SectionHeading
             kicker="Sorteos"
             title="Sorteos disponibles"
-            intro="Cada sorteo muestra su premio, precio de participación, fecha y porcentaje de avance. Elige el tuyo y participa por WhatsApp."
+            intro="Elige el tuyo y participa por WhatsApp."
           />
         </Reveal>
 
         {raffles.length > 0 ? (
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {raffles.map((raffle, i) => (
               <Reveal key={raffle.id} delay={(Math.min(i, 2) as 0 | 1 | 2)}>
                 <RaffleCard raffle={raffle} whatsappNumber={whatsappNumber} />
@@ -31,8 +31,8 @@ export default function RafflesSection({ raffles, whatsappNumber }: Props) {
             ))}
           </div>
         ) : (
-          <Reveal className="mt-10">
-            <div className="mx-auto flex max-w-lg flex-col items-center gap-4 rounded-2xl border border-line bg-card px-6 py-12 text-center">
+          <Reveal className="mt-6">
+            <div className="mx-auto flex max-w-lg flex-col items-center gap-3 rounded-2xl border border-line bg-card px-6 py-8 text-center">
               <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand/15 text-brand">
                 <IconTicket width={28} height={28} />
               </span>

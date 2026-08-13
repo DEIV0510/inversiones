@@ -4,7 +4,6 @@ import RafflesSection from "@/components/landing/RafflesSection";
 import PrizesSection from "@/components/landing/PrizesSection";
 import AboutSection from "@/components/landing/AboutSection";
 import HowItWorks from "@/components/landing/HowItWorks";
-import TrustSection from "@/components/landing/TrustSection";
 import WinnersSection from "@/components/landing/WinnersSection";
 import FaqSection from "@/components/landing/FaqSection";
 import LegalSection from "@/components/landing/LegalSection";
@@ -110,7 +109,6 @@ export default async function HomePage() {
           location={settings.location}
         />
         <HowItWorks />
-        <TrustSection whatsappNumber={settings.whatsapp_number} />
         <WinnersSection winners={publicWinners} />
         <FaqSection items={faqItems} />
         <LegalSection />

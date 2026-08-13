@@ -14,7 +14,7 @@ export default function FaqSection({ items }: Props) {
   const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="py-16 lg:py-24">
+    <section id="faq" className="py-10 lg:py-16">
       <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8">
         <Reveal>
           <SectionHeading
@@ -22,7 +22,7 @@ export default function FaqSection({ items }: Props) {
             title="Resolvemos tus dudas"
           />
         </Reveal>
-        <div className="mt-10 flex flex-col gap-3">
+        <div className="mt-6 flex flex-col gap-2">
           {items.map((item, i) => {
             const isOpen = openIndex === i;
             return (
@@ -38,9 +38,9 @@ export default function FaqSection({ items }: Props) {
                     aria-expanded={isOpen}
                     aria-controls={`faq-panel-${i}`}
                     id={`faq-trigger-${i}`}
-                    className="flex min-h-14 w-full items-center justify-between gap-4 px-5 py-4 text-left"
+                    className="flex min-h-12 w-full items-center justify-between gap-4 px-4 py-3 text-left"
                   >
-                    <span className="font-display text-base font-bold text-fg">
+                    <span className="font-display text-sm font-bold text-fg sm:text-base">
                       {item.question}
                     </span>
                     <IconChevronDown
@@ -60,7 +60,7 @@ export default function FaqSection({ items }: Props) {
                     }`}
                   >
                     <div className="overflow-hidden">
-                      <p className="px-5 pb-5 text-sm leading-relaxed text-fg-soft">
+                      <p className="px-4 pb-4 text-sm leading-relaxed text-fg-soft">
                         {item.answer}
                       </p>
                     </div>

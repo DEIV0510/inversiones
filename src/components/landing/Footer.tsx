@@ -36,7 +36,7 @@ export default function Footer({ settings }: Props) {
 
   return (
     <footer className="border-t border-line bg-bg2 pb-20 text-fg-soft lg:pb-0">
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr] lg:px-8">
+      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[1.2fr_1fr_1fr] lg:px-8">
         <div>
           <p className="flex items-center gap-2.5 font-display">
             <span className="glow-red-sm flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-sm font-black text-white">
