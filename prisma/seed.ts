@@ -1,4 +1,10 @@
-import { PrismaClient } from "@prisma/client";
+import { readFileSync, existsSync } from "node:fs";
+import { PrismaClient, type RaffleStatus } from "@prisma/client";
+
+/**
+ * Seed v2. Idempotente. Si existe _backup/prod-snapshot.json (datos de la
+ * versión 1), los migra al nuevo modelo para no perder nada.
+ */
 
 const prisma = new PrismaClient();
 
@@ -12,8 +18,66 @@ const DEFAULT_SETTINGS: Record<string, string> = {
   tiktok_url: "",
 };
 
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "sorteo"
+  );
+}
+
+type OldRaffle = {
+  title: string;
+  description: string;
+  prize: string;
+  imageUrl: string | null;
+  priceCop: number | null;
+  drawDateText: string | null;
+  progressPct: number;
+  status: string;
+  isPublished: boolean;
+  displayOrder: number;
+  totalNumbers: number | null;
+};
+
+function mapOldStatus(old: OldRaffle): RaffleStatus {
+  if (!old.isPublished) return "DRAFT";
+  switch (old.status) {
+    case "active":
+      return "ACTIVE";
+    case "coming_soon":
+      return "COMING_SOON";
+    case "finished":
+      return "FINISHED";
+    case "sold_out":
+      return "SOLD_OUT";
+    default:
+      return "DRAFT";
+  }
+}
+
 async function main() {
-  for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
+  // 1. Settings (del snapshot v1 si existe; no pisa valores ya presentes).
+  let snapshotSettings: Record<string, string> = {};
+  let snapshotRaffles: OldRaffle[] = [];
+  const snapshotPath = "_backup/prod-snapshot.json";
+  if (existsSync(snapshotPath)) {
+    const snap = JSON.parse(readFileSync(snapshotPath, "utf8"));
+    snapshotSettings = Object.fromEntries(
+      (snap.settings ?? []).map((s: { key: string; value: string }) => [
+        s.key,
+        s.value,
+      ])
+    );
+    snapshotRaffles = snap.raffles ?? [];
+  }
+
+  for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS)) {
+    const value = snapshotSettings[key] ?? fallback;
     await prisma.setting.upsert({
       where: { key },
       update: {},
@@ -21,59 +85,60 @@ async function main() {
     });
   }
 
-  const raffleCount = await prisma.raffle.count();
-  if (raffleCount === 0) {
-    await prisma.raffle.createMany({
-      data: [
-        // Las rifas de ejemplo se crean OCULTAS (isPublished: false) y con
-        // avance 0 para no publicar sorteos ni porcentajes inventados: el
-        // administrador las edita con datos reales y las activa desde el
-        // panel.
-        {
-          title: "Gran Sorteo Motocicleta 0 KM",
-          prize: "Motocicleta 0 KM",
-          description:
-            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones) y actívalo cuando esté listo.",
-          imageUrl: "/img/premio-moto.svg",
-          priceCop: 10000,
-          drawDateText: "Fecha por anunciar",
-          progressPct: 0,
-          status: "active",
-          isPublished: false,
-          displayOrder: 1,
-        },
-        {
-          title: "Sorteo Dinero en Efectivo",
-          prize: "Dinero en efectivo",
-          description:
-            "Contenido de ejemplo: edita este sorteo desde el panel administrativo con la información real (premio, precio, fecha y condiciones) y actívalo cuando esté listo.",
-          imageUrl: "/img/premio-dinero.svg",
-          priceCop: 5000,
-          drawDateText: "Fecha por anunciar",
-          progressPct: 0,
-          status: "active",
-          isPublished: false,
-          displayOrder: 2,
-        },
-        {
-          title: "Próximo Gran Sorteo",
-          prize: "Premio por anunciar",
-          description:
-            "Muy pronto anunciaremos un nuevo premio. Mantente atento a nuestras redes y a esta página.",
-          imageUrl: "/img/premio-proximo.svg",
-          priceCop: null,
-          drawDateText: "Próximamente",
-          progressPct: 0,
-          status: "coming_soon",
-          isPublished: true,
-          displayOrder: 3,
-        },
-      ],
+  // 2. Super admin desde variables de entorno.
+  const email = (process.env.ADMIN_EMAIL ?? "").trim().toLowerCase();
+  const rawHash = (process.env.ADMIN_PASSWORD_HASH ?? "").trim();
+  if (email && rawHash) {
+    const passwordHash = rawHash.startsWith("$2")
+      ? rawHash
+      : Buffer.from(rawHash, "base64").toString("utf8");
+    await prisma.adminUser.upsert({
+      where: { email },
+      update: {},
+      create: {
+        email,
+        name: "Administrador",
+        passwordHash,
+        role: "SUPER_ADMIN",
+      },
     });
-    console.log("Rifas de ejemplo creadas.");
+    console.log(`Super admin: ${email}`);
+  } else {
+    console.warn("ADMIN_EMAIL / ADMIN_PASSWORD_HASH no configurados: sin super admin");
   }
 
-  console.log("Seed completado.");
+  // 3. Rifas: migración del snapshot v1 (progreso pasa a modo MANUAL para
+  //    conservar el porcentaje que ya se mostraba; con ventas reales el
+  //    admin puede cambiar a AUTO).
+  const raffleCount = await prisma.raffle.count();
+  if (raffleCount === 0 && snapshotRaffles.length > 0) {
+    for (const old of snapshotRaffles) {
+      const totalNumbers = old.totalNumbers ?? 10000;
+      const slug = slugify(old.title);
+      await prisma.raffle.upsert({
+        where: { slug },
+        update: {},
+        create: {
+          slug,
+          title: old.title,
+          description: old.description ?? "",
+          prize: old.prize,
+          imageUrl: old.imageUrl,
+          pricePerNumber: old.priceCop ?? 10000,
+          totalNumbers,
+          digits: Math.max(1, String(totalNumbers - 1).length),
+          drawDateText: old.drawDateText,
+          status: mapOldStatus(old),
+          progressMode: "MANUAL",
+          manualProgressPct: old.progressPct ?? 0,
+          displayOrder: old.displayOrder ?? 0,
+        },
+      });
+      console.log(`Rifa migrada: ${old.title} → /${slug}`);
+    }
+  }
+
+  console.log("Seed v2 completado.");
 }
 
 main()

@@ -5,44 +5,226 @@ generator client {
 datasource db {
   provider  = "postgresql"
   // URL con pooler (PgBouncer) para runtime; directa para migraciones.
-  // Las inyecta la integración Neon de Vercel.
   url       = env("POSTGRES_PRISMA_URL")
   directUrl = env("POSTGRES_URL_NON_POOLING")
 }
 
-// Rifas / sorteos. La cantidad total de números (totalNumbers) es un dato
-// INTERNO preparado para la fase de numeración automática: nunca se muestra
-// al público, solo el porcentaje de avance.
-model Raffle {
-  id           String   @id @default(cuid())
-  title        String
-  description  String   @default("")
-  prize        String
-  imageUrl     String?
-  priceCop     Int?
-  drawDateText String?
-  progressPct  Int      @default(0)
-  status       String   @default("active") // active | coming_soon | finished | sold_out
-  isPublished  Boolean  @default(true)
-  displayOrder Int      @default(0)
-  totalNumbers Int?
-  notes        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+// ============================================================
+// RIFAS
+// ============================================================
+
+enum RaffleStatus {
+  DRAFT
+  COMING_SOON
+  ACTIVE
+  SOLD_OUT
+  FINISHED
+  CANCELLED
 }
 
-model Winner {
-  id           String   @id @default(cuid())
-  name         String
-  prize        String
-  raffleTitle  String?
-  photoUrl     String?
-  drawnAtText  String?
-  isDemo       Boolean  @default(true)
-  isPublished  Boolean  @default(false)
-  displayOrder Int      @default(0)
-  createdAt    DateTime @default(now())
+enum ProgressMode {
+  AUTO // vendidos / total (calculado)
+  MANUAL // porcentaje fijado por el administrador
 }
+
+model Raffle {
+  id                 String       @id @default(cuid())
+  slug               String       @unique
+  title              String
+  description        String       @default("")
+  prize              String
+  imageUrl           String?
+  galleryJson        String       @default("[]") // URLs de imágenes adicionales
+  pricePerNumber     Int // COP por número
+  totalNumbers       Int // 10.000 / 100.000 / 1.000.000...
+  digits             Int // 4, 5, 6... (formato 00042)
+  startsAt           DateTime?
+  drawsAt            DateTime?
+  drawDateText       String? // texto visible flexible ("30 de agosto con Sinuano")
+  status             RaffleStatus @default(DRAFT)
+  progressMode       ProgressMode @default(AUTO)
+  manualProgressPct  Int          @default(0)
+  paidCount          Int          @default(0) // contador atómico de números pagados
+  reservationMinutes Int          @default(10)
+  maxNumbersPerOrder Int          @default(20)
+  terms              String       @default("")
+  displayOrder       Int          @default(0)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+
+  numbers RaffleNumber[]
+  orders  Order[]
+  winners Winner[]
+
+  @@index([status, displayOrder])
+}
+
+// ============================================================
+// MOTOR DE NÚMEROS — asignación perezosa
+// Solo existe fila para números TOMADOS (reservado/pagado/bloqueado).
+// Disponible = ausencia de fila. UNIQUE(raffleId, number) es la garantía
+// definitiva contra ventas duplicadas, a nivel de base de datos.
+// ============================================================
+
+enum NumberStatus {
+  RESERVED
+  PAID
+  BLOCKED
+}
+
+model RaffleNumber {
+  id            String       @id @default(cuid())
+  raffleId      String
+  number        Int
+  status        NumberStatus
+  orderId       String?
+  reservedUntil DateTime?
+  createdAt     DateTime     @default(now())
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+  order  Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@unique([raffleId, number])
+  @@index([raffleId, status])
+  @@index([orderId])
+  @@index([status, reservedUntil])
+}
+
+// ============================================================
+// PARTICIPANTES Y PEDIDOS
+// ============================================================
+
+model Participant {
+  id        String   @id @default(cuid())
+  phone     String   @unique // normalizado 57XXXXXXXXXX
+  name      String
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+}
+
+enum OrderStatus {
+  PENDING // números reservados, esperando pago
+  PAID
+  EXPIRED
+  CANCELLED
+  REJECTED
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  code          String      @unique // código de participación (credencial del comprador)
+  raffleId      String
+  participantId String
+  numbersJson   String // JSON int[] — snapshot para comprobante e historial
+  quantity      Int
+  unitPrice     Int
+  total         Int
+  status        OrderStatus @default(PENDING)
+  paymentMethod String? // wompi | whatsapp | manual
+  reservedUntil DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  raffle      Raffle         @relation(fields: [raffleId], references: [id])
+  participant Participant    @relation(fields: [participantId], references: [id])
+  numbers     RaffleNumber[]
+  payments    Payment[]
+
+  @@index([raffleId, status])
+  @@index([participantId])
+  @@index([status, reservedUntil])
+  @@index([createdAt])
+}
+
+model Payment {
+  id           String   @id @default(cuid())
+  orderId      String
+  provider     String // wompi | manual
+  providerTxId String?  @unique // id de transacción de la pasarela (idempotencia)
+  reference    String? // referencia enviada a la pasarela
+  amount       Int
+  currency     String   @default("COP")
+  status       String // PENDING | APPROVED | DECLINED | VOIDED | ERROR
+  rawJson      String   @default("{}")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  order Order @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
+  @@index([reference])
+}
+
+// ============================================================
+// GANADORES
+// ============================================================
+
+model Winner {
+  id              String   @id @default(cuid())
+  raffleId        String?
+  raffleTitle     String // snapshot por si la rifa se elimina
+  numberValue     Int?
+  numberFormatted String?
+  participantId   String?
+  participantName String
+  prize           String
+  drawnAtText     String?
+  photoUrl        String? // evidencia / foto de entrega
+  isDemo          Boolean  @default(false)
+  isPublished     Boolean  @default(false)
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  raffle Raffle? @relation(fields: [raffleId], references: [id], onDelete: SetNull)
+
+  @@index([isPublished, displayOrder])
+}
+
+// ============================================================
+// USUARIOS ADMINISTRATIVOS Y AUDITORÍA
+// ============================================================
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  SOPORTE
+  FINANZAS
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorEmail String
+  actorRole  String
+  action     String // raffle.create, order.confirm_payment, number.block...
+  entity     String
+  entityId   String?
+  detailJson String   @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+  @@index([actorEmail])
+}
+
+// ============================================================
+// CONFIGURACIÓN
+// ============================================================
 
 model Setting {
   key   String @id

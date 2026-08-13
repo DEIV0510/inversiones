@@ -51,3 +51,6 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# respaldos locales con credenciales
+/_backup/
