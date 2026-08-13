@@ -50,7 +50,7 @@ export default function Header({ whatsappNumber, companyName }: Props) {
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center justify-between gap-3 px-4 sm:px-6 lg:px-8">
         <Link
           href="/#inicio"
-          className="flex items-center gap-2.5 font-display"
+          className="flex shrink-0 items-center gap-2.5 font-display"
           aria-label={`${companyName} — inicio`}
           onClick={() => setOpen(false)}
         >
@@ -67,15 +67,19 @@ export default function Header({ whatsappNumber, companyName }: Props) {
           </span>
         </Link>
 
+        {/* Menú de escritorio: los enlaces largos solo aparecen cuando hay
+            ancho de sobra; en pantallas menores queda el menú completo. */}
         <nav
-          className="hidden min-w-0 items-center gap-5 xl:flex"
+          className="hidden items-center gap-4 xl:flex"
           aria-label="Navegación principal"
         >
-          {NAV_LINKS.slice(0, 6).map((link) => (
+          {NAV_LINKS.slice(0, 6).map((link, i) => (
             <Link
               key={link.href}
               href={link.href}
-              className="whitespace-nowrap text-sm font-semibold text-fg-soft transition-colors hover:text-fg"
+              className={`whitespace-nowrap text-[13px] font-semibold text-fg-soft transition-colors hover:text-fg ${
+                i >= 4 ? "hidden 2xl:inline" : ""
+              }`}
             >
               {link.label}
             </Link>
@@ -105,7 +109,7 @@ export default function Header({ whatsappNumber, companyName }: Props) {
             aria-expanded={open}
             aria-controls="menu-movil"
             aria-label={open ? "Cerrar menú" : "Abrir menú"}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg transition-colors hover:bg-well xl:hidden"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg transition-colors hover:bg-well 2xl:hidden"
           >
             {open ? <IconX /> : <IconMenu />}
           </button>
@@ -115,7 +119,7 @@ export default function Header({ whatsappNumber, companyName }: Props) {
       {/* Menú móvil */}
       <div
         id="menu-movil"
-        className={`xl:hidden ${open ? "block" : "hidden"} border-t border-line bg-bg`}
+        className={`2xl:hidden ${open ? "block" : "hidden"} border-t border-line bg-bg`}
       >
         <nav
           className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6"
