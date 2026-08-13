@@ -1,98 +1,75 @@
-# INVERSIONES D Y S — Plataforma de Sorteos
+# INVERSIONES D Y S — Plataforma de Rifas y Sorteos
 
-Plataforma web de sorteos (dinero en efectivo y motocicletas) para
-**Inversiones D y S** (Sincelejo, Sucre, Colombia), con experiencia dark
-premium tipo app y panel administrativo gestionable 100% desde el celular.
+Plataforma transaccional completa para **Inversiones D y S** (Sincelejo,
+Sucre, Colombia): venta de números con reservas en tiempo real, pagos,
+comprobantes, consulta de boletas y panel administrativo con roles —
+preparada para rifas de **10.000, 100.000 o 1.000.000+ números**.
 
 ## Qué incluye
 
-- **Landing pública** (`/`): sorteo destacado a pantalla completa, cards de
-  sorteos con estado y **porcentaje de avance** (nunca se muestran cantidades
-  de números), modal "Quiero participar" (nombre + WhatsApp → conversación
-  directa), premios, cómo participar, confianza, ganadores, FAQ, condiciones
-  y barra de acción inferior en móvil (Inicio · Sorteos · Mis boletas ·
-  WhatsApp).
-- **Panel administrativo** (`/admin`): login privado, dashboard, CRUD de
-  rifas (imagen desde la galería del celular, título, premio, precio, fecha,
-  slider de porcentaje, estado, orden, visible/oculta, vista previa antes de
-  publicar), ganadores y ajustes (WhatsApp, ubicación, redes).
-- **WhatsApp como canal de conversión**: todos los botones generan mensajes
-  dinámicos con el nombre del sorteo. El número se cambia desde el panel.
-- **"Mis boletas"** queda preparado para la fase de numeración automática
-  (hoy dirige la consulta a WhatsApp).
+**Público** (dark premium, mobile-first, sensación de app):
+- Landing con sorteo destacado y cards de sorteos con porcentaje de avance
+  (regla de negocio: el público JAMÁS ve cantidades, solo el porcentaje).
+- Página de cada sorteo con **selección de números escalable**: buscador
+  puntual (O(1) a cualquier escala), cuadrícula de números disponibles
+  sugeridos y modo "al azar" resuelto en el backend.
+- Checkout de 3 pasos con **reserva temporal** (countdown configurable),
+  pago en línea (Wompi) o coordinación por WhatsApp, **comprobante digital**
+  con código de participación y **Mis boletas** (teléfono + código).
+
+**Motor** (Postgres + Prisma):
+- Asignación perezosa: solo existen filas para números tomados;
+  `UNIQUE(raffleId, number)` arbitra la concurrencia a nivel de base de
+  datos. Verificado: 6 compradores simultáneos del mismo número →
+  exactamente 1 gana.
+- Confirmación de pago **idempotente** (webhook repetido = sin efectos
+  dobles) que jamás duplica un número.
+- Expiración de reservas por barrido (cron) + liberación perezosa (la
+  corrección no depende del cron).
+
+**Panel admin** (RBAC con 4 roles: Super admin, Administrador, Soporte,
+Finanzas): Dashboard con métricas e ingresos, Sorteos (CRUD completo,
+duplicar, estados, imágenes desde el celular), Números (consulta, lista
+paginada, bloqueo por rangos), Pedidos (confirmación manual de pagos),
+Reservas, Pagos, Participantes, Ganadores, Reportes con exportación CSV,
+Configuración, Usuarios y Auditoría de acciones críticas.
 
 ## Stack
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS v4 · Prisma +
-**Postgres (Neon vía Vercel)** · **Vercel Blob** (imágenes; con respaldo en
-disco local para desarrollo) · sharp (optimización a WebP) · jose + bcryptjs
-(sesión JWT en cookie httpOnly).
+Next.js 16 (App Router) · TypeScript · Tailwind v4 · Prisma + **Neon
+Postgres** · **Vercel Blob** · sharp · jose + bcryptjs · Wompi · Vercel
+(hosting + cron).
 
-## Puesta en marcha
+## Empezar
 
 ```bash
 npm install
-copy .env.example .env   # y completa los valores (ver abajo)
-npm run setup            # crea la base de datos y datos de ejemplo
-npm run dev              # http://localhost:5236
+copy .env.example .env    # completar valores (ver docs/DESPLIEGUE.md)
+npm run setup             # prisma db push + seed (super admin + settings)
+npm run dev               # http://localhost:5236
 ```
 
-### Variables de entorno (.env)
+## Pruebas
 
-| Variable | Descripción |
+```bash
+npx vitest run                    # unitarias
+npx tsx scripts/test-engine.ts    # integración: concurrencia, expiración,
+                                  # idempotencia (contra la DB del .env)
+```
+
+## Documentación
+
+| Doc | Contenido |
 | --- | --- |
-| `POSTGRES_PRISMA_URL` | URL pooled de Neon (la inyecta la integración de Vercel) |
-| `POSTGRES_URL_NON_POOLING` | URL directa de Neon (migraciones) |
-| `AUTH_SECRET` | Secreto aleatorio de 64+ caracteres para firmar la sesión |
-| `ADMIN_EMAIL` | Correo del administrador |
-| `ADMIN_PASSWORD_HASH` | Hash bcrypt **en base64** — genera con `npm run hash-password -- "TuContraseña"` |
-| `NEXT_PUBLIC_SITE_URL` | URL pública del sitio (SEO/Open Graph) |
-| `BLOB_READ_WRITE_TOKEN` | Token de Vercel Blob (solo producción; en local las imágenes van a `public/uploads`) |
+| [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Diseño del sistema y del motor de números |
+| [docs/API.md](docs/API.md) | Endpoints públicos y admin |
+| [docs/PAGOS.md](docs/PAGOS.md) | Wompi: activación, webhook, sandbox |
+| [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md) | Infraestructura, variables, backups |
+| [docs/SEGURIDAD.md](docs/SEGURIDAD.md) | Auth, RBAC, rate limiting, auditoría |
 
-> El hash se guarda en base64 porque bcrypt contiene `$` y el cargador de
-> variables de entorno de Next lo corrompería. El comando `hash-password`
-> ya entrega el valor listo para pegar.
+## Legal
 
-## Estructura de datos
-
-- `Raffle`: título, descripción, premio, imagen, precio (COP), fecha (texto
-  flexible), `progressPct` (0–100, lo único visible al público),
-  estado (`active | coming_soon | finished | sold_out`), orden,
-  `isPublished`, `totalNumbers` (**interno**, preparado para la fase de
-  numeración; jamás se expone) y notas.
-- `Winner`: nombre, premio, sorteo, foto, fecha, `isDemo`, `isPublished`.
-- `Setting`: nombre de empresa, WhatsApp, ubicación y redes.
-
-Las rifas se leen de la base de datos: el administrador cambia información →
-se publica → la landing se actualiza (revalidación on-demand + respaldo cada
-5 minutos). No se edita código para operar el sitio.
-
-## Seguridad
-
-- Panel y API protegidos por sesión JWT (cookie httpOnly, SameSite lax).
-- Contraseña con bcrypt (12 rondas), comparación a tiempo constante y
-  limitador de intentos por IP.
-- Validación de entradas con Zod; imágenes validadas y reprocesadas con
-  sharp (nunca se sirve el archivo original).
-- `/admin` y `/api` excluidos de robots.
-
-## Despliegue (Vercel)
-
-Desplegado en Vercel con:
-
-- **Neon Postgres** (`inversiones-db`, integración marketplace) conectado al
-  proyecto `inversiones` — inyecta `POSTGRES_PRISMA_URL` y compañía.
-- **Vercel Blob** (`dys-media`, acceso público) para las imágenes subidas
-  desde el panel — inyecta `BLOB_READ_WRITE_TOKEN`.
-- Variables `AUTH_SECRET`, `ADMIN_EMAIL`, `ADMIN_PASSWORD_HASH` y
-  `NEXT_PUBLIC_SITE_URL` configuradas en el proyecto.
-
-Cada push a `main` despliega automáticamente. Para inicializar una base
-nueva: `vercel env pull`, copiar las URLs de Postgres al `.env` local y
-ejecutar `npm run setup` una sola vez.
-
-## Evolución (fases siguientes)
-
-Numeración automática de boletas, selección/reserva de números, registro de
-compradores, pasarela de pagos, confirmaciones automáticas y estadísticas.
-El modelo de datos y la sección "Mis boletas" ya lo contemplan.
+La plataforma deja los espacios preparados (/terminos, /privacidad y
+términos por sorteo). Los textos legales definitivos y la información de
+autorización correspondiente deben ser aportados por el propietario — no se
+afirma ninguna autorización que no exista.

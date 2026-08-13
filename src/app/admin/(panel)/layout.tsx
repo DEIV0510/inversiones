@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 import AdminShell from "@/components/admin/AdminShell";
+import { getVerifiedSession } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: {
@@ -9,10 +11,18 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default function PanelLayout({
+export default async function PanelLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  // La autenticación se verifica en CADA página (requirePanelAuth):
+  // El shell necesita el rol para filtrar el menú. La seguridad real está en
+  // cada página (requirePanelAuth) y en cada endpoint (requireAdminApi):
   // los layouts no se re-ejecutan en navegaciones suaves.
-  return <AdminShell>{children}</AdminShell>;
+  const session = await getVerifiedSession();
+  if (!session) redirect("/admin/login");
+
+  return (
+    <AdminShell role={session.role} userName={session.name}>
+      {children}
+    </AdminShell>
+  );
 }
