@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter } from "next/font/google";
+import DemoBanner from "@/components/landing/DemoBanner";
+import { getSettings } from "@/lib/settings";
 import "./globals.css";
 
 const archivo = Archivo({
@@ -52,9 +54,10 @@ export const viewport: Viewport = {
   themeColor: "#07060f",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const settings = await getSettings();
   return (
     <html
       lang="es"
@@ -71,6 +74,7 @@ export default function RootLayout({
           }}
         />
         {children}
+        <DemoBanner active={settings.demo_mode === "1"} />
       </body>
     </html>
   );

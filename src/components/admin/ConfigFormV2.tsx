@@ -17,6 +17,7 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
   const [facebookUrl, setFacebookUrl] = useState(initial.facebook_url);
   const [instagramUrl, setInstagramUrl] = useState(initial.instagram_url);
   const [tiktokUrl, setTiktokUrl] = useState(initial.tiktok_url);
+  const [demoMode, setDemoMode] = useState(initial.demo_mode === "1");
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +39,7 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
           facebook_url: facebookUrl.trim(),
           instagram_url: instagramUrl.trim(),
           tiktok_url: tiktokUrl.trim(),
+          demo_mode: demoMode ? "1" : "0",
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -177,6 +179,40 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
         <p className={helpCls}>
           Las redes son opcionales; déjalas vacías para no mostrarlas.
         </p>
+      </div>
+
+      <div className="rounded-2xl border border-line bg-card p-4">
+        <label className="flex cursor-pointer select-none items-center justify-between gap-4">
+          <span>
+            <span className="block text-sm font-semibold text-fg">
+              Modo demostración
+            </span>
+            <span className={helpCls}>
+              Muestra un aviso en el sitio público: “los sorteos mostrados son
+              de ejemplo”. Apágalo cuando publiques tu primer sorteo real.
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={demoMode}
+            aria-label={
+              demoMode
+                ? "Desactivar modo demostración"
+                : "Activar modo demostración"
+            }
+            onClick={() => setDemoMode((v) => !v)}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+              demoMode ? "bg-brand" : "bg-line"
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                demoMode ? "left-6" : "left-1"
+              }`}
+            />
+          </button>
+        </label>
       </div>
 
       {ok ? (

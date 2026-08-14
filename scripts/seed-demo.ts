@@ -59,13 +59,24 @@ async function main() {
 
   // ── Usuarios administrativos (uno por rol, para ver los permisos) ──
   const pass = await bcrypt.hash("Demo.2026.DyS", 12);
-  const roles = [
-    { email: "admin@inversionesdys.com", name: "Administrador", role: "SUPER_ADMIN" as const },
+  // El super admin conserva SU contraseña si ya existe; solo los usuarios de
+  // demostración usan la contraseña de ejemplo.
+  await prisma.adminUser.upsert({
+    where: { email: "admin@inversionesdys.com" },
+    update: { role: "SUPER_ADMIN", isActive: true },
+    create: {
+      email: "admin@inversionesdys.com",
+      name: "Administrador",
+      role: "SUPER_ADMIN",
+      passwordHash: pass,
+    },
+  });
+  const demoUsers = [
     { email: "operador@demo.com", name: "Operador Demo", role: "ADMIN" as const },
     { email: "soporte@demo.com", name: "Soporte Demo", role: "SOPORTE" as const },
     { email: "finanzas@demo.com", name: "Finanzas Demo", role: "FINANZAS" as const },
   ];
-  for (const u of roles) {
+  for (const u of demoUsers) {
     await prisma.adminUser.upsert({
       where: { email: u.email },
       update: { name: u.name, role: u.role, passwordHash: pass, isActive: true },
@@ -82,6 +93,8 @@ async function main() {
     facebook_url: "https://www.facebook.com/profile.php?id=100066477883821",
     instagram_url: "",
     tiktok_url: "",
+    // Aviso público de que los sorteos mostrados son de ejemplo.
+    demo_mode: "1",
   };
   for (const [key, value] of Object.entries(settings)) {
     await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });

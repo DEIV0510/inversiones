@@ -8,6 +8,8 @@ export type SiteSettings = {
   facebook_url: string;
   instagram_url: string;
   tiktok_url: string;
+  /** "1" muestra el aviso de sitio en demostración. */
+  demo_mode: string;
 };
 
 export const SETTING_KEYS: (keyof SiteSettings)[] = [
@@ -18,6 +20,7 @@ export const SETTING_KEYS: (keyof SiteSettings)[] = [
   "facebook_url",
   "instagram_url",
   "tiktok_url",
+  "demo_mode",
 ];
 
 const FALLBACK: SiteSettings = {
@@ -28,6 +31,7 @@ const FALLBACK: SiteSettings = {
   facebook_url: "",
   instagram_url: "",
   tiktok_url: "",
+  demo_mode: "0",
 };
 
 export async function getSettings(): Promise<SiteSettings> {

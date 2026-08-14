@@ -170,6 +170,7 @@ export const settingsSchema = z.object({
   facebook_url: socialUrl.optional(),
   instagram_url: socialUrl.optional(),
   tiktok_url: socialUrl.optional(),
+  demo_mode: z.enum(["0", "1"]).optional(),
 });
 
 export const loginSchema = z.object({
