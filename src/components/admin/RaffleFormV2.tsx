@@ -6,8 +6,18 @@ import { useRef, useState } from "react";
 import { slugify } from "@/lib/slug";
 import { formatCop } from "@/lib/format";
 import { RAFFLE_STATUSES_V2, STATUS_META_V2, type RaffleStatusV2 } from "@/lib/raffle-status";
+import { digitsForTotal } from "@/lib/numbers";
 import { btnOutline, btnPrimary, helpCls, inputCls, labelCls } from "./ui";
-import { IconImage, IconTrash, IconX } from "@/components/icons";
+import { IconImage, IconPlus, IconTrash, IconX } from "@/components/icons";
+
+export type RafflePrizeInitial = {
+  label: string;
+  title: string;
+  amount: string;
+  note: string;
+};
+
+export type RafflePrizedNumberInitial = { number: number; prize: string };
 
 export type RaffleFormInitial = {
   id: string;
@@ -19,6 +29,11 @@ export type RaffleFormInitial = {
   gallery: string[];
   pricePerNumber: number;
   totalNumbers: number;
+  digits: number;
+  selectionMode: string;
+  ticketPacks: number[];
+  prizes: RafflePrizeInitial[];
+  prizedNumbers: RafflePrizedNumberInitial[];
   drawDateText: string | null;
   status: string;
   progressMode: string;
@@ -31,6 +46,49 @@ export type RaffleFormInitial = {
 };
 
 const TOTAL_PRESETS = [100, 1000, 10000, 100000, 1000000];
+const DIGIT_PRESETS = [2, 3, 4, 5, 6, 7];
+const MIN_DIGITS = 2;
+const MAX_DIGITS = 7;
+const DEFAULT_PACKS = [1, 2, 5, 10];
+const MAX_PACKS = 6;
+const MAX_PRIZES = 12;
+const MAX_PRIZED_NUMBERS = 50;
+
+const SELECTION_MODES = [
+  { value: "MANUAL", label: "Solo manual" },
+  { value: "RANDOM", label: "Solo al azar" },
+  { value: "BOTH", label: "Las dos" },
+] as const;
+
+type SelectionModeValue = (typeof SELECTION_MODES)[number]["value"];
+
+type PrizeRow = {
+  id: string;
+  label: string;
+  title: string;
+  amount: string;
+  note: string;
+};
+
+type PrizedNumberRow = { id: string; number: string; prize: string };
+
+/**
+ * Ids solo para las keys de React y los `htmlFor` (no se guardan ni se
+ * envían). Las filas iniciales usan su posición para que el servidor y el
+ * navegador generen exactamente los mismos ids; las que agrega el usuario
+ * (ya en el navegador) usan un contador que no afecta la hidratación.
+ */
+let addedRowSeq = 0;
+function nextRowId(): string {
+  addedRowSeq += 1;
+  return `nueva-${addedRowSeq}`;
+}
+
+/** Cifras mínimas que necesita una cantidad total de números. */
+function neededDigits(total: number): number {
+  if (total <= 0) return MIN_DIGITS;
+  return Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, digitsForTotal(total)));
+}
 
 export default function RaffleFormV2({
   mode,
@@ -56,6 +114,37 @@ export default function RaffleFormV2({
   const [totalNumbers, setTotalNumbers] = useState(
     initial ? String(initial.totalNumbers) : "10000"
   );
+  const [digits, setDigits] = useState(() =>
+    initial?.digits
+      ? Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, initial.digits))
+      : neededDigits(initial?.totalNumbers ?? 10000)
+  );
+  const [digitsNote, setDigitsNote] = useState("");
+  const [selectionMode, setSelectionMode] = useState<SelectionModeValue>(() =>
+    SELECTION_MODES.some((m) => m.value === initial?.selectionMode)
+      ? (initial!.selectionMode as SelectionModeValue)
+      : "BOTH"
+  );
+  const [ticketPacks, setTicketPacks] = useState<number[]>(() =>
+    initial?.ticketPacks?.length ? [...initial.ticketPacks] : [...DEFAULT_PACKS]
+  );
+  const [packDraft, setPackDraft] = useState("");
+  const [prizes, setPrizes] = useState<PrizeRow[]>(() =>
+    (initial?.prizes ?? []).map((p, i) => ({
+      id: `premio-${i}`,
+      label: p.label ?? "",
+      title: p.title ?? "",
+      amount: p.amount ?? "",
+      note: p.note ?? "",
+    }))
+  );
+  const [prizedNumbers, setPrizedNumbers] = useState<PrizedNumberRow[]>(() =>
+    (initial?.prizedNumbers ?? []).map((p, i) => ({
+      id: `premiado-${i}`,
+      number: String(p.number),
+      prize: p.prize ?? "",
+    }))
+  );
   const [drawDateText, setDrawDateText] = useState(initial?.drawDateText ?? "");
   const [status, setStatus] = useState<RaffleStatusV2>(
     (RAFFLE_STATUSES_V2 as readonly string[]).includes(initial?.status ?? "")
@@ -80,11 +169,60 @@ export default function RaffleFormV2({
   const [error, setError] = useState("");
 
   const totalInt = parseInt(totalNumbers || "0", 10) || 0;
-  const digits = totalInt > 0 ? String(totalInt - 1).length : 0;
+  const capacity = Math.pow(10, digits);
+  const numbersLocked = mode === "edit" && !!initial?.hasOrders;
 
   function onTitleChange(value: string) {
     setTitle(value);
     if (!slugTouched) setSlug(slugify(value));
+  }
+
+  /** Cambia las cifras y baja el total si ya no cabe. */
+  function applyDigits(next: number) {
+    setDigits(next);
+    const cap = Math.pow(10, next);
+    if (cap < totalInt) {
+      setTotalNumbers(String(cap));
+      setDigitsNote(
+        `Bajamos la cantidad a ${cap.toLocaleString("es-CO")} números: es todo lo que cabe en ${next} cifras.`
+      );
+    } else {
+      setDigitsNote("");
+    }
+  }
+
+  /** Cambia el total y sube las cifras si hacen falta. */
+  function applyTotal(raw: string) {
+    const clean = raw.replace(/\D/g, "").slice(0, 8);
+    setTotalNumbers(clean);
+    const value = parseInt(clean || "0", 10) || 0;
+    const need = neededDigits(value);
+    if (value > 0 && need > digits) {
+      setDigits(need);
+      setDigitsNote(
+        `Subimos a ${need} cifras para que quepan ${value.toLocaleString("es-CO")} números.`
+      );
+    } else {
+      setDigitsNote("");
+    }
+  }
+
+  function addPack() {
+    const value = parseInt(packDraft || "0", 10) || 0;
+    if (value < 1 || value > 500) return;
+    setPackDraft("");
+    if (ticketPacks.length >= MAX_PACKS || ticketPacks.includes(value)) return;
+    setTicketPacks([...ticketPacks, value].sort((a, b) => a - b));
+  }
+
+  function updatePrize(id: string, patch: Partial<PrizeRow>) {
+    setPrizes((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  function updatePrizedNumber(id: string, patch: Partial<PrizedNumberRow>) {
+    setPrizedNumbers((rows) =>
+      rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    );
   }
 
   async function uploadFile(
@@ -120,6 +258,26 @@ export default function RaffleFormV2({
       gallery,
       pricePerNumber: parseInt(price || "0", 10) || 0,
       totalNumbers: totalInt,
+      digits,
+      selectionMode,
+      ticketPacks,
+      prizes: prizes
+        .filter(
+          (p) =>
+            p.label.trim() || p.title.trim() || p.amount.trim() || p.note.trim()
+        )
+        .map((p) => ({
+          label: p.label.trim(),
+          title: p.title.trim(),
+          amount: p.amount.trim(),
+          note: p.note.trim(),
+        })),
+      prizedNumbers: prizedNumbers
+        .filter((p) => p.number.trim() !== "" || p.prize.trim() !== "")
+        .map((p) => ({
+          number: parseInt(p.number || "0", 10) || 0,
+          prize: p.prize.trim(),
+        })),
       drawDateText: drawDateText.trim(),
       status,
       progressMode: progressMode as "AUTO" | "MANUAL",
@@ -313,14 +471,41 @@ export default function RaffleFormV2({
       {/* Números */}
       <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
         <div>
+          <p className={labelCls}>Cifras del número *</p>
+          <div className="grid grid-cols-6 gap-1.5">
+            {DIGIT_PRESETS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => applyDigits(d)}
+                disabled={numbersLocked}
+                aria-pressed={digits === d}
+                className={`min-h-11 rounded-lg text-sm font-bold tabular-nums ${
+                  digits === d
+                    ? "glow-red-sm bg-brand text-white"
+                    : "border border-line bg-well text-fg-soft hover:border-brand disabled:opacity-40"
+                }`}
+              >
+                {d}
+              </button>
+            ))}
+          </div>
+          <p className={helpCls}>
+            Con {digits} cifras los números van de {"0".repeat(digits)} a{" "}
+            {"9".repeat(digits)} ({capacity.toLocaleString("es-CO")} posibles).
+            {digitsNote ? <span className="text-fg"> {digitsNote}</span> : null}
+            {numbersLocked ? " · Con pedidos existentes no se puede cambiar." : ""}
+          </p>
+        </div>
+        <div>
           <label htmlFor="rf-total" className={labelCls}>Cantidad total de números *</label>
           <div className="mb-2 grid grid-cols-5 gap-1.5">
             {TOTAL_PRESETS.map((preset) => (
               <button
                 key={preset}
                 type="button"
-                onClick={() => setTotalNumbers(String(preset))}
-                disabled={mode === "edit" && initial?.hasOrders}
+                onClick={() => applyTotal(String(preset))}
+                disabled={numbersLocked}
                 className={`min-h-10 rounded-lg text-[11px] font-bold tabular-nums ${
                   totalInt === preset
                     ? "glow-red-sm bg-brand text-white"
@@ -337,15 +522,15 @@ export default function RaffleFormV2({
             inputMode="numeric"
             required
             value={totalNumbers}
-            onChange={(e) => setTotalNumbers(e.target.value.replace(/\D/g, "").slice(0, 8))}
+            onChange={(e) => applyTotal(e.target.value)}
             className={inputCls}
-            disabled={mode === "edit" && initial?.hasOrders}
+            disabled={numbersLocked}
           />
           <p className={helpCls}>
             {totalInt > 0
-              ? `Números de ${digits} dígitos: ${"0".repeat(digits)} a ${String(totalInt - 1).padStart(digits, "0")}`
+              ? `Se venden del ${"0".repeat(digits)} al ${String(totalInt - 1).padStart(digits, "0")}`
               : "Define la cantidad (10 a 10.000.000)"}
-            {mode === "edit" && initial?.hasOrders
+            {numbersLocked
               ? " · Con pedidos existentes no se puede cambiar."
               : ""}
           </p>
@@ -361,6 +546,309 @@ export default function RaffleFormV2({
             <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 3))} className={inputCls} />
           </div>
         </div>
+      </div>
+
+      {/* Cómo compra el cliente */}
+      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+        <div>
+          <p className={labelCls}>¿Cómo elige sus números el comprador?</p>
+          <div className="grid grid-cols-3 gap-2 rounded-xl border border-line bg-well p-1.5">
+            {SELECTION_MODES.map((m) => (
+              <button
+                key={m.value}
+                type="button"
+                onClick={() => setSelectionMode(m.value)}
+                aria-pressed={selectionMode === m.value}
+                className={`min-h-11 rounded-lg px-1 text-[11px] font-bold uppercase tracking-wide ${
+                  selectionMode === m.value
+                    ? "glow-red-sm bg-brand text-white"
+                    : "text-fg-soft"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+          <p className={helpCls}>
+            {selectionMode === "MANUAL"
+              ? "Solo verá el buscador para escoger sus números uno por uno."
+              : selectionMode === "RANDOM"
+                ? "El sistema le asigna los números al azar: no aparece la opción manual."
+                : "Verá las dos opciones: escoger a mano o dejar que el sistema le asigne."}
+          </p>
+        </div>
+
+        <div>
+          <p className={labelCls}>
+            Paquetes de boletas ({ticketPacks.length}/{MAX_PACKS})
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {ticketPacks.length === 0 ? (
+              <span className="text-sm text-fg-faint">
+                Sin botones rápidos: el comprador escribe la cantidad.
+              </span>
+            ) : null}
+            {ticketPacks.map((q) => (
+              <span
+                key={q}
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-well pl-4 pr-2 text-sm font-bold text-fg"
+              >
+                <span className="tabular-nums">
+                  {q === 1 ? "1 boleta" : `${q} boletas`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTicketPacks((packs) => packs.filter((x) => x !== q))
+                  }
+                  aria-label={`Quitar paquete de ${q}`}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white"
+                >
+                  <IconX width={12} height={12} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-2">
+            <input
+              id="rf-pack"
+              type="text"
+              inputMode="numeric"
+              value={packDraft}
+              onChange={(e) =>
+                setPackDraft(e.target.value.replace(/\D/g, "").slice(0, 3))
+              }
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addPack();
+                }
+              }}
+              className={`${inputCls} w-24 text-center tabular-nums`}
+              placeholder="20"
+              aria-label="Cantidad de boletas del paquete"
+              disabled={ticketPacks.length >= MAX_PACKS}
+            />
+            <button
+              type="button"
+              onClick={addPack}
+              disabled={ticketPacks.length >= MAX_PACKS || packDraft === ""}
+              className={btnOutline}
+            >
+              <IconPlus width={14} height={14} />
+              Agregar
+            </button>
+          </div>
+          <p className={helpCls}>
+            Son los botones rápidos que verá el comprador (ej. 2 boletas, 5
+            boletas)
+          </p>
+        </div>
+      </div>
+
+      {/* Premios adicionales */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-semibold text-fg">Premios adicionales</p>
+          <span className="text-xs font-bold tabular-nums text-fg-faint">
+            {prizes.length}/{MAX_PRIZES}
+          </span>
+        </div>
+        {prizes.length === 0 ? (
+          <p className="text-sm text-fg-soft">
+            Todavía no hay premios. Agrega el premio mayor y los anticipados.
+          </p>
+        ) : null}
+        {prizes.map((row, i) => (
+          <div
+            key={row.id}
+            className="flex flex-col gap-2 rounded-xl border border-line bg-well p-3"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold uppercase tracking-wide text-fg-faint">
+                Premio {i + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setPrizes((rows) => rows.filter((x) => x.id !== row.id))
+                }
+                aria-label={`Quitar premio ${i + 1}`}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
+              >
+                <IconTrash width={16} height={16} />
+              </button>
+            </div>
+            <div>
+              <label
+                htmlFor={`rf-prize-label-${row.id}`}
+                className="mb-1 block text-xs font-semibold text-fg-soft"
+              >
+                Etiqueta
+              </label>
+              <input
+                id={`rf-prize-label-${row.id}`}
+                type="text"
+                value={row.label}
+                onChange={(e) => updatePrize(row.id, { label: e.target.value })}
+                className={inputCls}
+                placeholder="Ej: ANTICIPADO · LUNES"
+                maxLength={60}
+              />
+            </div>
+            <div>
+              <label
+                htmlFor={`rf-prize-title-${row.id}`}
+                className="mb-1 block text-xs font-semibold text-fg-soft"
+              >
+                Premio *
+              </label>
+              <input
+                id={`rf-prize-title-${row.id}`}
+                type="text"
+                value={row.title}
+                onChange={(e) => updatePrize(row.id, { title: e.target.value })}
+                className={inputCls}
+                placeholder="Ej: Premio mayor"
+                maxLength={120}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label
+                  htmlFor={`rf-prize-amount-${row.id}`}
+                  className="mb-1 block text-xs font-semibold text-fg-soft"
+                >
+                  Monto
+                </label>
+                <input
+                  id={`rf-prize-amount-${row.id}`}
+                  type="text"
+                  value={row.amount}
+                  onChange={(e) => updatePrize(row.id, { amount: e.target.value })}
+                  className={inputCls}
+                  placeholder="1.000.000"
+                  maxLength={60}
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor={`rf-prize-note-${row.id}`}
+                  className="mb-1 block text-xs font-semibold text-fg-soft"
+                >
+                  Nota
+                </label>
+                <input
+                  id={`rf-prize-note-${row.id}`}
+                  type="text"
+                  value={row.note}
+                  onChange={(e) => updatePrize(row.id, { note: e.target.value })}
+                  className={inputCls}
+                  placeholder="Lotería de Cundinamarca"
+                  maxLength={120}
+                />
+              </div>
+            </div>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            setPrizes((rows) => [
+              ...rows,
+              { id: nextRowId(), label: "", title: "", amount: "", note: "" },
+            ])
+          }
+          disabled={prizes.length >= MAX_PRIZES}
+          className={btnOutline}
+        >
+          <IconPlus width={14} height={14} />
+          Agregar premio
+        </button>
+        <p className={helpCls}>
+          Se muestran en la página del sorteo, debajo del premio principal.
+        </p>
+      </div>
+
+      {/* Ticket premiado */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
+        <div className="flex items-baseline justify-between">
+          <p className="text-sm font-semibold text-fg">Ticket premiado</p>
+          <span className="text-xs font-bold tabular-nums text-fg-faint">
+            {prizedNumbers.length}/{MAX_PRIZED_NUMBERS}
+          </span>
+        </div>
+        {prizedNumbers.map((row, i) => (
+          <div key={row.id} className="flex items-start gap-2">
+            <div className="w-28 shrink-0">
+              <label
+                htmlFor={`rf-pn-number-${row.id}`}
+                className="mb-1 block text-xs font-semibold text-fg-soft"
+              >
+                Número
+              </label>
+              <input
+                id={`rf-pn-number-${row.id}`}
+                type="text"
+                inputMode="numeric"
+                value={row.number}
+                onChange={(e) =>
+                  updatePrizedNumber(row.id, {
+                    number: e.target.value.replace(/\D/g, "").slice(0, MAX_DIGITS),
+                  })
+                }
+                className={`${inputCls} px-3 text-center font-mono tabular-nums`}
+                placeholder={"0".repeat(digits)}
+              />
+            </div>
+            <div className="min-w-0 flex-1">
+              <label
+                htmlFor={`rf-pn-prize-${row.id}`}
+                className="mb-1 block text-xs font-semibold text-fg-soft"
+              >
+                Premio
+              </label>
+              <input
+                id={`rf-pn-prize-${row.id}`}
+                type="text"
+                value={row.prize}
+                onChange={(e) =>
+                  updatePrizedNumber(row.id, { prize: e.target.value })
+                }
+                className={inputCls}
+                placeholder="Ej: 200.000 de una"
+                maxLength={120}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setPrizedNumbers((rows) => rows.filter((x) => x.id !== row.id))
+              }
+              aria-label={`Quitar número premiado ${i + 1}`}
+              className="mt-5 flex min-h-12 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
+            >
+              <IconTrash width={16} height={16} />
+            </button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() =>
+            setPrizedNumbers((rows) => [
+              ...rows,
+              { id: nextRowId(), number: "", prize: "" },
+            ])
+          }
+          disabled={prizedNumbers.length >= MAX_PRIZED_NUMBERS}
+          className={btnOutline}
+        >
+          <IconPlus width={14} height={14} />
+          Agregar número premiado
+        </button>
+        <p className={helpCls}>
+          Si no quieres números premiados, deja la lista vacía
+        </p>
       </div>
 
       {/* Estado y progreso */}

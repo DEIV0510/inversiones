@@ -79,7 +79,25 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     }
   }
 
-  const { gallery, drawsAt, ...data } = parsed.data;
+  const { gallery, drawsAt, digits, ticketPacks, prizes, prizedNumbers, ...data } =
+    parsed.data;
+
+  // Coherencia entre cifras y cantidad de números.
+  const finalTotal = parsed.data.totalNumbers ?? existing.totalNumbers;
+  const finalDigits =
+    digits ??
+    (parsed.data.totalNumbers != null
+      ? digitsForTotal(parsed.data.totalNumbers)
+      : existing.digits);
+  if (Math.pow(10, finalDigits) < finalTotal) {
+    return NextResponse.json(
+      {
+        error: `Con ${finalDigits} cifras solo caben ${Math.pow(10, finalDigits).toLocaleString("es-CO")} números. Sube las cifras o baja la cantidad.`,
+      },
+      { status: 422 }
+    );
+  }
+
   const raffle = await prisma.raffle.update({
     where: { id },
     data: {
@@ -88,11 +106,36 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         ? { drawsAt: drawsAt ? new Date(drawsAt) : null }
         : {}),
       ...(gallery !== undefined ? { galleryJson: JSON.stringify(gallery) } : {}),
-      ...(parsed.data.totalNumbers != null
-        ? { digits: digitsForTotal(parsed.data.totalNumbers) }
+      ...(ticketPacks !== undefined
+        ? { ticketPacksJson: JSON.stringify(ticketPacks) }
         : {}),
+      ...(prizes !== undefined ? { prizesJson: JSON.stringify(prizes) } : {}),
+      digits: finalDigits,
     },
   });
+
+  // Números premiados: se reemplazan los que aún no han sido reclamados.
+  if (prizedNumbers !== undefined) {
+    await prisma.prizedNumber.deleteMany({
+      where: { raffleId: id, claimedAt: null },
+    });
+    const claimed = await prisma.prizedNumber.findMany({
+      where: { raffleId: id },
+      select: { number: true },
+    });
+    const yaReclamados = new Set(claimed.map((p) => p.number));
+    const nuevos = prizedNumbers.filter((p) => !yaReclamados.has(p.number));
+    if (nuevos.length > 0) {
+      await prisma.prizedNumber.createMany({
+        data: nuevos.map((p) => ({
+          raffleId: id,
+          number: p.number,
+          prize: p.prize,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
 
   if (
     parsed.data.imageUrl !== undefined &&

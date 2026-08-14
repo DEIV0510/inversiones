@@ -14,6 +14,14 @@ export const PUBLIC_STATUSES = [
   "FINISHED",
 ] as const;
 
+/** Premio adicional mostrado en la página del sorteo. */
+export type RafflePrize = {
+  label: string; // "ANTICIPADO · LUNES"
+  title: string; // "Premio mayor" / "Bono"
+  amount: string; // "1.000.000"
+  note: string; // "Lotería de Cundinamarca"
+};
+
 export type PublicRaffle = {
   id: string;
   slug: string;
@@ -31,7 +39,19 @@ export type PublicRaffle = {
   maxNumbersPerOrder: number;
   reservationMinutes: number;
   terms: string;
+  selectionMode: string;
+  ticketPacks: number[];
+  prizes: RafflePrize[];
 };
+
+function parseJsonArray<T>(raw: string, isValid: (v: unknown) => boolean): T[] {
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed.filter(isValid) as T[]) : [];
+  } catch {
+    return [];
+  }
+}
 
 /** Porcentaje visible: automático (vendidos/total) o manual. */
 export function progressPctOf(raffle: {
@@ -75,6 +95,15 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     maxNumbersPerOrder: raffle.maxNumbersPerOrder,
     reservationMinutes: raffle.reservationMinutes,
     terms: raffle.terms,
+    selectionMode: raffle.selectionMode,
+    ticketPacks: parseJsonArray<number>(
+      raffle.ticketPacksJson,
+      (v) => typeof v === "number" && v > 0
+    ).slice(0, 6),
+    prizes: parseJsonArray<RafflePrize>(
+      raffle.prizesJson,
+      (v) => typeof v === "object" && v !== null && typeof (v as RafflePrize).title === "string"
+    ).slice(0, 12),
   };
 }
 

@@ -5,12 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { useModalA11y } from "@/components/useModalA11y";
-import {
-  IconCheck,
-  IconTicket,
-  IconWhatsApp,
-  IconX,
-} from "@/components/icons";
+import { IconCheck, IconTicket, IconX } from "@/components/icons";
 
 type Suggestion = { value: number; label: string };
 type SearchResult = {
@@ -22,20 +17,46 @@ type SearchResult = {
 const inputCls =
   "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 
+/** Cuántas columnas usan los botones de paquetes según cuántos haya. */
+const PACK_COLS: Record<number, string> = {
+  1: "grid-cols-2",
+  2: "grid-cols-2",
+  3: "grid-cols-3",
+};
+
 /**
  * Selección de números escalable: nunca se carga el universo completo.
  * Cuadrícula de sugerencias disponibles + buscador puntual + modo azar.
  * La disponibilidad SIEMPRE la decide el backend al reservar.
+ * La forma de elegir (manual / azar / ambas) y los paquetes de boletas
+ * vienen configurados en cada rifa desde el panel.
  */
 export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const router = useRouter();
 
-  const [tab, setTab] = useState<"elegir" | "azar">("elegir");
+  // Modo de selección configurado en la rifa. Cualquier valor desconocido
+  // se trata como "ambas" para no dejar al usuario sin manera de comprar.
+  const onlyManual = raffle.selectionMode === "MANUAL";
+  const onlyRandom = raffle.selectionMode === "RANDOM";
+  const showTabs = !onlyManual && !onlyRandom;
+
+  // Paquetes definidos por el dueño: sin repetidos, ordenados y sin superar
+  // el máximo por pedido. Si no hay paquetes, solo quedan los botones +/−.
+  const packs = [...new Set(raffle.ticketPacks)]
+    .filter(
+      (n) => Number.isFinite(n) && n >= 1 && n <= raffle.maxNumbersPerOrder
+    )
+    .sort((a, b) => a - b)
+    .slice(0, 6);
+
+  const [tab, setTab] = useState<"elegir" | "azar">(
+    onlyRandom ? "azar" : "elegir"
+  );
   const [selected, setSelected] = useState<Map<number, string>>(new Map());
   const [randomQty, setRandomQty] = useState(1);
 
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [loadingSuggestions, setLoadingSuggestions] = useState(true);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(!onlyRandom);
 
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
@@ -57,6 +78,8 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const canContinue = quantity > 0 && quantity <= raffle.maxNumbersPerOrder;
 
   const loadSuggestions = useCallback(async () => {
+    // En modo "solo al azar" nunca se muestran sugerencias: no se pide nada.
+    if (onlyRandom) return;
     setLoadingSuggestions(true);
     try {
       const res = await fetch(
@@ -70,7 +93,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
     } finally {
       setLoadingSuggestions(false);
     }
-  }, [raffle.slug]);
+  }, [raffle.slug, onlyRandom]);
 
   useEffect(() => {
     loadSuggestions();
@@ -205,32 +228,34 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         </div>
       ) : null}
 
-      {/* Tabs */}
-      <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-card p-2">
-        {(
-          [
-            ["elegir", "Elegir mis números"],
-            ["azar", "Al azar"],
-          ] as const
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            aria-pressed={tab === key}
-            className={`min-h-11 rounded-xl text-sm font-bold uppercase tracking-wide transition-colors ${
-              tab === key
-                ? "glow-red-sm bg-brand text-white"
-                : "text-fg-soft hover:text-fg"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Tabs: solo cuando la rifa permite las dos formas de elegir */}
+      {showTabs ? (
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-card p-2">
+          {(
+            [
+              ["elegir", "Elegir mis números"],
+              ["azar", "Al azar"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              aria-pressed={tab === key}
+              className={`min-h-11 rounded-xl text-sm font-bold uppercase tracking-wide transition-colors ${
+                tab === key
+                  ? "glow-red-sm bg-brand text-white"
+                  : "text-fg-soft hover:text-fg"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {tab === "elegir" ? (
-        <div className="mt-4 flex flex-col gap-4">
+        <div className={`flex flex-col gap-4 ${showTabs ? "mt-4" : ""}`}>
           {/* Buscador */}
           <form
             onSubmit={searchNumber}
@@ -353,7 +378,9 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           </div>
         </div>
       ) : (
-        <div className="mt-4 rounded-2xl border border-line bg-card p-5">
+        <div
+          className={`rounded-2xl border border-line bg-card p-5 ${showTabs ? "mt-4" : ""}`}
+        >
           <p className="text-sm font-semibold text-fg">
             ¿Cuántos números quieres? El sistema los elige entre los
             disponibles.
@@ -381,22 +408,32 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               +
             </button>
           </div>
-          <div className="mt-3 grid grid-cols-4 gap-2">
-            {[3, 5, 10, 20].filter((n) => n <= raffle.maxNumbersPerOrder).map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setRandomQty(n)}
-                className={`min-h-11 rounded-xl text-sm font-bold ${
-                  randomQty === n
-                    ? "glow-red-sm bg-brand text-white"
-                    : "border border-line bg-well text-fg-soft hover:border-brand"
-                }`}
+          {packs.length > 0 ? (
+            <>
+              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+                Paquetes de boletas
+              </p>
+              <div
+                className={`mt-2 grid gap-2 ${PACK_COLS[packs.length] ?? "grid-cols-4"}`}
               >
-                {n}
-              </button>
-            ))}
-          </div>
+                {packs.map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setRandomQty(n)}
+                    aria-pressed={randomQty === n}
+                    className={`min-h-11 rounded-xl text-sm font-bold tabular-nums ${
+                      randomQty === n
+                        ? "glow-red-sm bg-brand text-white"
+                        : "border border-line bg-well text-fg-soft hover:border-brand"
+                    }`}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
         </div>
       )}
 

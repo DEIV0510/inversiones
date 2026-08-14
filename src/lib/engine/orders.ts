@@ -335,6 +335,17 @@ export async function confirmOrderPayment(params: {
       });
     }
 
+    // Ticket premiado: si alguno de los números comprados tiene premio
+    // instantáneo y nadie lo había reclamado, queda asignado a esta orden.
+    await tx.prizedNumber.updateMany({
+      where: {
+        raffleId: order.raffleId,
+        number: { in: numbers },
+        claimedAt: null,
+      },
+      data: { claimedAt: new Date(), orderId: order.id },
+    });
+
     const raffle = await tx.raffle.update({
       where: { id: order.raffleId },
       data: { paidCount: { increment: order.quantity } },
@@ -380,6 +391,18 @@ export async function expireOverdueOrders(): Promise<number> {
   return ids.length;
 }
 
+/** Premios instantáneos ganados por una orden (para el comprobante). */
+export async function getPrizesWon(
+  orderId: string
+): Promise<{ number: number; prize: string }[]> {
+  const rows = await prisma.prizedNumber.findMany({
+    where: { orderId },
+    select: { number: true, prize: true },
+    orderBy: { number: "asc" },
+  });
+  return rows;
+}
+
 /** Cancela una orden (admin). Libera números; si estaba pagada, ajusta el contador. */
 export async function cancelOrder(orderId: string): Promise<Order> {
   return prisma.$transaction(async (tx) => {
@@ -394,6 +417,11 @@ export async function cancelOrder(orderId: string): Promise<Order> {
 
     const wasPaid = order.status === "PAID";
     await tx.raffleNumber.deleteMany({ where: { orderId } });
+    // Liberar los premios instantáneos que tenía asignados.
+    await tx.prizedNumber.updateMany({
+      where: { orderId },
+      data: { claimedAt: null, orderId: null },
+    });
     const updated = await tx.order.update({
       where: { id: orderId },
       data: { status: "CANCELLED", reservedUntil: null },

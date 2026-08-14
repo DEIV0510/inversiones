@@ -8,6 +8,7 @@ import {
   IconCheck,
   IconClock,
   IconTicket,
+  IconTrophy,
   IconWhatsApp,
 } from "@/components/icons";
 
@@ -27,6 +28,8 @@ type OrderData = {
   createdAt: string;
   paidAt: string | null;
   companyName: string;
+  /** Premios instantáneos ganados con los números comprados. */
+  prizesWon?: { number: string; prize: string }[];
 };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", {
@@ -132,6 +135,34 @@ export default function OrderView({
             tus boletas.
           </p>
         </div>
+
+        {/* Ticket premiado */}
+        {order.prizesWon && order.prizesWon.length > 0 ? (
+          <div className="neon-card rounded-2xl bg-card p-5 text-center">
+            <span className="glow-red-sm mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white">
+              <IconTrophy width={24} height={24} />
+            </span>
+            <p className="mt-3 font-display text-lg font-black uppercase text-fg">
+              ¡Te ganaste un premio!
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              {order.prizesWon.map((p) => (
+                <div
+                  key={p.number}
+                  className="flex items-center justify-between gap-3 rounded-xl bg-well px-4 py-3 text-left"
+                >
+                  <span className="font-display text-base font-bold tracking-wider text-brand">
+                    {p.number}
+                  </span>
+                  <span className="text-sm font-semibold text-fg">{p.prize}</span>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+              Escríbenos por WhatsApp con tu código para reclamarlo.
+            </p>
+          </div>
+        ) : null}
 
         {/* Comprobante */}
         <div className="neon-card overflow-hidden rounded-3xl bg-card">

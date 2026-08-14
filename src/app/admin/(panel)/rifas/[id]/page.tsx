@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import RaffleFormV2 from "@/components/admin/RaffleFormV2";
+import RaffleFormV2, {
+  type RafflePrizeInitial,
+} from "@/components/admin/RaffleFormV2";
 
 export const metadata: Metadata = { title: "Editar rifa" };
 export const dynamic = "force-dynamic";
@@ -27,6 +29,45 @@ export default async function EditarRifaPage({
     // galería corrupta → vacía
   }
 
+  let ticketPacks: number[] = [];
+  try {
+    const parsed = JSON.parse(raffle.ticketPacksJson);
+    if (Array.isArray(parsed)) {
+      ticketPacks = parsed
+        .map((v) => Number(v))
+        .filter((v) => Number.isInteger(v) && v >= 1);
+    }
+  } catch {
+    // paquetes corruptos → el formulario usa los de siempre
+  }
+
+  let prizes: RafflePrizeInitial[] = [];
+  try {
+    const parsed = JSON.parse(raffle.prizesJson);
+    if (Array.isArray(parsed)) {
+      prizes = parsed.map((p) => {
+        const row = (p ?? {}) as Record<string, unknown>;
+        return {
+          label: typeof row.label === "string" ? row.label : "",
+          title: typeof row.title === "string" ? row.title : "",
+          amount: typeof row.amount === "string" ? row.amount : "",
+          note: typeof row.note === "string" ? row.note : "",
+        };
+      });
+    }
+  } catch {
+    // premios corruptos → lista vacía
+  }
+
+  const prizedRows = await prisma.prizedNumber.findMany({
+    where: { raffleId: id },
+    orderBy: { number: "asc" },
+  });
+  const prizedNumbers = prizedRows.map((p) => ({
+    number: p.number,
+    prize: p.prize,
+  }));
+
   return (
     <div className="flex flex-col gap-5">
       <div>
@@ -47,6 +88,11 @@ export default async function EditarRifaPage({
           gallery,
           pricePerNumber: raffle.pricePerNumber,
           totalNumbers: raffle.totalNumbers,
+          digits: raffle.digits,
+          selectionMode: raffle.selectionMode,
+          ticketPacks,
+          prizes,
+          prizedNumbers,
           drawDateText: raffle.drawDateText,
           status: raffle.status,
           progressMode: raffle.progressMode,

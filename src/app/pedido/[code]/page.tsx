@@ -8,9 +8,10 @@ import { prisma } from "@/lib/db";
 import {
   confirmOrderPayment,
   expireOverdueOrders,
+  getPrizesWon,
   isOrderExpired,
 } from "@/lib/engine/orders";
-import { formatNumbers } from "@/lib/numbers";
+import { formatNumber, formatNumbers } from "@/lib/numbers";
 import { orderWhatsAppMessage } from "@/lib/notifications";
 import { getSettings } from "@/lib/settings";
 import {
@@ -77,6 +78,14 @@ export default async function PedidoPage({
     JSON.parse(order.numbersJson),
     order.raffle.digits
   );
+  // Premios instantáneos ganados (ticket premiado).
+  const prizesWon =
+    order.status === "PAID"
+      ? (await getPrizesWon(order.id)).map((p) => ({
+          number: formatNumber(p.number, order.raffle.digits),
+          prize: p.prize,
+        }))
+      : [];
 
   const whatsappUrl = orderWhatsAppMessage({
     businessPhone: settings.whatsapp_number,
@@ -123,6 +132,7 @@ export default async function PedidoPage({
             createdAt: order.createdAt.toISOString(),
             paidAt: order.paidAt?.toISOString() ?? null,
             companyName: settings.company_name,
+            prizesWon,
           }}
           whatsappUrl={whatsappUrl}
           wompiUrl={wompiUrl}

@@ -122,6 +122,40 @@ async function main() {
       maxNumbersPerOrder: 20,
       terms: "Ejemplo de condiciones: el sorteo se realiza al vender el 100% de los números. El ganador se anuncia por los canales oficiales.",
       displayOrder: 1,
+      selectionMode: "BOTH",
+      ticketPacksJson: JSON.stringify([2, 5, 10, 20]),
+      prizesJson: JSON.stringify([
+        {
+          label: "Premio mayor",
+          title: "Motocicleta 0 KM + $5.000.000",
+          amount: "",
+          note: "Al completarse el 100%",
+        },
+        {
+          label: "Anticipado · Lunes",
+          title: "Bono en efectivo",
+          amount: "1.000.000",
+          note: "Lotería de Cundinamarca",
+        },
+        {
+          label: "Anticipado · Martes",
+          title: "Bono en efectivo",
+          amount: "1.000.000",
+          note: "Lotería de Manizales",
+        },
+        {
+          label: "Anticipado · Miércoles",
+          title: "Bono en efectivo",
+          amount: "500.000",
+          note: "Lotería de la Cruz Roja",
+        },
+      ]),
+      prizedNumbers: {
+        create: [
+          { number: 7777, prize: "$200.000 al instante" },
+          { number: 12345, prize: "Kit de casco y guantes" },
+        ],
+      },
     },
   });
 
@@ -144,6 +178,9 @@ async function main() {
       reservationMinutes: 15,
       maxNumbersPerOrder: 10,
       displayOrder: 2,
+      // Ejemplo de rifa donde el comprador NO elige: el sistema le asigna.
+      selectionMode: "RANDOM",
+      ticketPacksJson: JSON.stringify([1, 3, 5, 10]),
     },
   });
 
@@ -165,6 +202,9 @@ async function main() {
       reservationMinutes: 20,
       maxNumbersPerOrder: 50,
       displayOrder: 3,
+      // Ejemplo de rifa donde el comprador elige su número de la suerte.
+      selectionMode: "MANUAL",
+      ticketPacksJson: JSON.stringify([1, 2, 5]),
     },
   });
 

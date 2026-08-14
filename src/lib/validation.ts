@@ -48,6 +48,38 @@ export const raffleSchema = z.object({
     .int()
     .min(10, "Mínimo 10 números")
     .max(10_000_000, "Máximo 10 millones de números"),
+  // Cifras del número (2 → 00, 6 → 000000). Lo elige el administrador.
+  digits: z
+    .number()
+    .int()
+    .min(2, "Mínimo 2 cifras")
+    .max(7, "Máximo 7 cifras")
+    .optional(),
+  selectionMode: z.enum(["MANUAL", "RANDOM", "BOTH"]).default("BOTH"),
+  ticketPacks: z
+    .array(z.number().int().min(1).max(500))
+    .max(6, "Máximo 6 paquetes")
+    .default([1, 2, 5, 10]),
+  prizes: z
+    .array(
+      z.object({
+        label: z.string().trim().max(60).default(""),
+        title: z.string().trim().min(1, "Escribe el premio").max(120),
+        amount: z.string().trim().max(60).default(""),
+        note: z.string().trim().max(120).default(""),
+      })
+    )
+    .max(12, "Máximo 12 premios")
+    .default([]),
+  prizedNumbers: z
+    .array(
+      z.object({
+        number: z.number().int().min(0).max(9_999_999),
+        prize: z.string().trim().min(1, "Escribe el premio").max(120),
+      })
+    )
+    .max(50, "Máximo 50 números premiados")
+    .default([]),
   drawDateText: z.string().trim().max(120).default(""),
   drawsAt: z.string().datetime().nullable().optional(),
   status: z.enum(RAFFLE_STATUS_VALUES),

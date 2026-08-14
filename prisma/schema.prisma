@@ -27,6 +27,13 @@ enum ProgressMode {
   MANUAL // porcentaje fijado por el administrador
 }
 
+// Cómo puede elegir números el comprador en esta rifa.
+enum SelectionMode {
+  MANUAL // solo eligiendo/buscando sus números
+  RANDOM // solo al azar (el sistema los asigna)
+  BOTH // las dos opciones
+}
+
 model Raffle {
   id                 String       @id @default(cuid())
   slug               String       @unique
@@ -49,12 +56,22 @@ model Raffle {
   maxNumbersPerOrder Int          @default(20)
   terms              String       @default("")
   displayOrder       Int          @default(0)
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
 
-  numbers RaffleNumber[]
-  orders  Order[]
-  winners Winner[]
+  // Cómo elige el comprador sus números.
+  selectionMode SelectionMode @default(BOTH)
+  // Cantidades de boletas ofrecidas como botones rápidos, ej "[1,2,5,10,20]".
+  ticketPacksJson String @default("[1,2,5,10]")
+  // Premios adicionales de la rifa (mayor, anticipados por día...).
+  // [{ label, title, amount, note }]
+  prizesJson String @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  numbers        RaffleNumber[]
+  orders         Order[]
+  winners        Winner[]
+  prizedNumbers  PrizedNumber[]
 
   @@index([status, displayOrder])
 }
@@ -88,6 +105,22 @@ model RaffleNumber {
   @@index([raffleId, status])
   @@index([orderId])
   @@index([status, reservedUntil])
+}
+
+/// Ticket premiado: número con premio instantáneo. Opcional por rifa.
+model PrizedNumber {
+  id        String   @id @default(cuid())
+  raffleId  String
+  number    Int
+  prize     String
+  claimedAt DateTime?
+  orderId   String?
+  createdAt DateTime @default(now())
+
+  raffle Raffle @relation(fields: [raffleId], references: [id], onDelete: Cascade)
+
+  @@unique([raffleId, number])
+  @@index([raffleId, claimedAt])
 }
 
 // ============================================================

@@ -42,14 +42,22 @@ export async function POST(req: NextRequest) {
 
   let optimized: Buffer;
   try {
-    optimized = await sharp(buffer)
+    // `failOn: "none"` permite procesar fotos de celular con metadatos raros
+    // (muy común en iPhone/Android) que de otro modo harían fallar la subida.
+    optimized = await sharp(buffer, { failOn: "none" })
       .rotate()
       .resize({ width: 1400, height: 1400, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer();
-  } catch {
+  } catch (err) {
+    // Se registra el detalle real para diagnóstico; al usuario se le da una
+    // salida clara. Se aceptan JPG, PNG, WebP y HEIC/HEIF de iPhone.
+    console.error("Fallo procesando imagen:", err);
     return NextResponse.json(
-      { error: "Formato de imagen no soportado. Usa JPG, PNG o WebP." },
+      {
+        error:
+          "No pudimos procesar esa imagen. Intenta con otra foto o toma una nueva desde la cámara.",
+      },
       { status: 422 }
     );
   }

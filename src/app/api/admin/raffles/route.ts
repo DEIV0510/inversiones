@@ -46,13 +46,39 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { gallery, drawsAt, ...data } = parsed.data;
+  const { gallery, drawsAt, digits, ticketPacks, prizes, prizedNumbers, ...data } =
+    parsed.data;
+
+  // Las cifras las decide el administrador; si no las envía, se derivan del
+  // total. Deben alcanzar para representar el número más alto.
+  const finalDigits = digits ?? digitsForTotal(parsed.data.totalNumbers);
+  if (Math.pow(10, finalDigits) < parsed.data.totalNumbers) {
+    return NextResponse.json(
+      {
+        error: `Con ${finalDigits} cifras solo caben ${Math.pow(10, finalDigits).toLocaleString("es-CO")} números. Sube las cifras o baja la cantidad.`,
+      },
+      { status: 422 }
+    );
+  }
+
   const raffle = await prisma.raffle.create({
     data: {
       ...data,
       drawsAt: drawsAt ? new Date(drawsAt) : null,
       galleryJson: JSON.stringify(gallery),
-      digits: digitsForTotal(parsed.data.totalNumbers),
+      digits: finalDigits,
+      ticketPacksJson: JSON.stringify(ticketPacks),
+      prizesJson: JSON.stringify(prizes),
+      ...(prizedNumbers.length > 0
+        ? {
+            prizedNumbers: {
+              create: prizedNumbers.map((p) => ({
+                number: p.number,
+                prize: p.prize,
+              })),
+            },
+          }
+        : {}),
     },
   });
 

@@ -14,6 +14,7 @@ import {
   IconCalendar,
   IconGift,
   IconTicket,
+  IconTrophy,
   IconWhatsApp,
 } from "@/components/icons";
 
@@ -134,6 +135,61 @@ export default async function SorteoPage({
               </span>
             </div>
           </div>
+
+          {/* Lista de premios configurada para este sorteo */}
+          {raffle.prizes.length > 0 ? (
+            <section className="mt-5" aria-labelledby="premios-sorteo">
+              <h2
+                id="premios-sorteo"
+                className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint"
+              >
+                Premios de este sorteo
+              </h2>
+              <div className="mt-2.5 flex flex-col gap-2.5">
+                {raffle.prizes.map((prize, i) => {
+                  const Icon = i === 0 ? IconTrophy : IconGift;
+                  return (
+                    <div
+                      key={`${i}-${prize.title}`}
+                      className={`flex items-start gap-3 rounded-2xl bg-card p-4 ${
+                        i === 0 ? "neon-card" : "border border-line"
+                      }`}
+                    >
+                      <span
+                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                          i === 0
+                            ? "bg-brand/15 text-brand"
+                            : "bg-well text-fg-soft"
+                        }`}
+                      >
+                        <Icon width={20} height={20} />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        {prize.label ? (
+                          <p className="text-[10px] font-bold uppercase leading-tight tracking-[0.16em] text-fg-faint">
+                            {prize.label}
+                          </p>
+                        ) : null}
+                        {prize.amount ? (
+                          <p className="mt-1 break-words font-display text-2xl font-black leading-none tabular-nums text-fg sm:text-3xl">
+                            {prize.amount}
+                          </p>
+                        ) : null}
+                        <p className="mt-1 break-words text-sm font-semibold leading-snug text-fg">
+                          {prize.title}
+                        </p>
+                        {prize.note ? (
+                          <p className="mt-1 break-words text-xs leading-relaxed text-fg-soft">
+                            {prize.note}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
 
           <ProgressBar pct={raffle.progressPct} className="mt-4" />
 
