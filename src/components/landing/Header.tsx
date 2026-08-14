@@ -87,9 +87,11 @@ export default function Header({ whatsappNumber, companyName }: Props) {
         </nav>
 
         <div className="flex items-center gap-2">
+          {/* En pantallas muy angostas se omite: "Mis boletas" ya está en la
+              barra inferior, y así el botón de menú nunca queda fuera. */}
           <Link
             href="/boletas"
-            className="inline-flex min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-well px-4 text-sm font-bold text-fg transition-colors hover:border-brand"
+            className="hidden min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full border border-line-strong bg-well px-4 text-sm font-bold text-fg transition-colors hover:border-brand sm:inline-flex"
           >
             <IconTicket width={17} height={17} className="text-brand" />
             Mis boletas
