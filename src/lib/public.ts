@@ -42,6 +42,10 @@ export type PublicRaffle = {
   selectionMode: string;
   /** Si esta rifa cierra la compra por WhatsApp. */
   whatsappCheckout: boolean;
+  /** Si la ficha del sorteo repite la fila del premio. */
+  showPrize: boolean;
+  /** Si la ficha del sorteo repite la fila de la fecha. */
+  showDrawDate: boolean;
   ticketPacks: number[];
   prizes: RafflePrize[];
 };
@@ -105,6 +109,8 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     terms: raffle.terms,
     selectionMode: raffle.selectionMode,
     whatsappCheckout: raffle.whatsappCheckout,
+    showPrize: raffle.showPrize,
+    showDrawDate: raffle.showDrawDate,
     ticketPacks: parseJsonArray<number>(
       raffle.ticketPacksJson,
       (v) => typeof v === "number" && v > 0
@@ -130,6 +136,22 @@ export async function getPublicRaffleBySlug(
   const raffle = await prisma.raffle.findUnique({ where: { slug } });
   if (!raffle || !PUBLIC_STATUSES.includes(raffle.status as never)) return null;
   return toPublicRaffle(raffle);
+}
+
+/**
+ * Rifa por slug SIN filtrar por estado, con la misma proyección pública.
+ *
+ * Es EXCLUSIVAMENTE para la vista previa autenticada: el dueño crea una rifa,
+ * nace en borrador y necesita verla antes de publicarla. Quien la llame tiene
+ * que haber comprobado ANTES que hay sesión de panel válida
+ * (getVerifiedSession); si no, estaría enseñando borradores al público.
+ * Para cualquier pantalla pública se usa getPublicRaffleBySlug.
+ */
+export async function getRaffleBySlugForAdmin(
+  slug: string
+): Promise<PublicRaffle | null> {
+  const raffle = await prisma.raffle.findUnique({ where: { slug } });
+  return raffle ? toPublicRaffle(raffle) : null;
 }
 
 /**

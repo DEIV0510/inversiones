@@ -5,8 +5,14 @@ import Footer from "@/components/landing/Footer";
 import BottomBar from "@/components/landing/BottomBar";
 import ProgressBar from "@/components/landing/ProgressBar";
 import NumberPicker from "@/components/public/NumberPicker";
+import PreviewBanner from "@/components/landing/PreviewBanner";
+import { getVerifiedSession } from "@/lib/auth";
 import { formatCop } from "@/lib/format";
-import { getPrizedGroups, getPublicRaffleBySlug } from "@/lib/public";
+import {
+  getPrizedGroups,
+  getPublicRaffleBySlug,
+  getRaffleBySlugForAdmin,
+} from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { waConsult } from "@/lib/whatsapp";
@@ -20,6 +26,19 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Texto del bloque de compra cuando la rifa no está activa. Los estados
+ * DRAFT y CANCELLED solo se leen en vista previa, porque el público nunca
+ * llega a esas páginas.
+ */
+const TEXTO_NO_ACTIVA: Record<string, string> = {
+  COMING_SOON: "Este sorteo abre muy pronto",
+  SOLD_OUT: "Boletas agotadas",
+  FINISHED: "Sorteo finalizado",
+  CANCELLED: "Sorteo cancelado",
+  DRAFT: "Todavía no has publicado este sorteo",
+};
+
 export async function generateMetadata({
   params,
 }: {
@@ -27,7 +46,18 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params;
   const raffle = await getPublicRaffleBySlug(slug);
-  if (!raffle) return { title: "Sorteo no encontrado" };
+  if (!raffle) {
+    // Puede ser una vista previa: solo con sesión de panel se nombra la rifa,
+    // y aun así se pide a los buscadores que no la indexen.
+    const sesion = await getVerifiedSession();
+    if (!sesion) return { title: "Sorteo no encontrado" };
+    const borrador = await getRaffleBySlugForAdmin(slug);
+    if (!borrador) return { title: "Sorteo no encontrado" };
+    return {
+      title: `Vista previa · ${borrador.title}`,
+      robots: { index: false, follow: false },
+    };
+  }
   return {
     title: raffle.title,
     description: `Participa por ${raffle.prize}. ${raffle.progressPct}% alcanzado.`,
@@ -43,11 +73,25 @@ export default async function SorteoPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const [raffle, settings] = await Promise.all([
+  const [publica, settings] = await Promise.all([
     getPublicRaffleBySlug(slug),
     getSettings(),
   ]);
-  if (!raffle) notFound();
+
+  // Si la rifa no es visible al público (nace en borrador, o quedó cancelada)
+  // la página existe SOLO para quien tiene sesión de panel: así el dueño ve
+  // lo que acaba de crear antes de publicarlo. La comprobación es silenciosa
+  // —no redirige al login— porque para un visitante esta página no existe y
+  // tiene que seguir devolviendo un 404 normal.
+  let raffle = publica;
+  let vistaPrevia = false;
+  if (!raffle) {
+    const sesion = await getVerifiedSession();
+    if (!sesion) notFound();
+    raffle = await getRaffleBySlugForAdmin(slug);
+    if (!raffle) notFound();
+    vistaPrevia = true;
+  }
 
   const meta = statusMetaV2(raffle.status);
   // Números premiados publicados, agrupados por premio.
@@ -60,7 +104,16 @@ export default async function SorteoPage({
         companyName={settings.company_name}
         hideWhatsApp={!raffle.whatsappCheckout}
       />
-      <main className="relative mx-auto w-full max-w-3xl px-4 pb-40 pt-20 sm:px-6 lg:pt-28">
+      {vistaPrevia ? (
+        <PreviewBanner raffleId={raffle.id} status={raffle.status} />
+      ) : null}
+      {/* En vista previa la franja ámbar ocupa sitio bajo la cabecera: el
+          contenido arranca más abajo para que nada quede tapado. */}
+      <main
+        className={`relative mx-auto w-full max-w-3xl px-4 pb-40 sm:px-6 ${
+          vistaPrevia ? "pt-36 lg:pt-40" : "pt-20 lg:pt-28"
+        }`}
+      >
         <div className="dot-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative">
           {/* Imagen + estado */}
@@ -112,17 +165,22 @@ export default async function SorteoPage({
           {/* Avance: va justo debajo del titular, como en la referencia */}
           <ProgressBar pct={raffle.progressPct} className="mt-5" />
 
-          {/* Info */}
+          {/* Info: el precio va siempre; el premio y la fecha solo si el dueño
+              los enciende, porque normalmente ya los dice el titular. Las filas
+              que no se pintan no dejan hueco: divide-y solo pone la línea entre
+              hermanos, así que con una sola fila la tarjeta queda limpia. */}
           <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
-                <IconGift width={16} height={16} className="text-brand" />
-                Premio
-              </span>
-              <span className="text-right font-display text-sm font-extrabold text-fg">
-                {raffle.prize}
-              </span>
-            </div>
+            {raffle.showPrize ? (
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                  <IconGift width={16} height={16} className="text-brand" />
+                  Premio
+                </span>
+                <span className="text-right font-display text-sm font-extrabold text-fg">
+                  {raffle.prize}
+                </span>
+              </div>
+            ) : null}
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
                 <IconTicket width={16} height={16} className="text-brand" />
@@ -132,15 +190,17 @@ export default async function SorteoPage({
                 {formatCop(raffle.pricePerNumber)}
               </span>
             </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
-                <IconCalendar width={16} height={16} className="text-brand" />
-                Fecha
-              </span>
-              <span className="text-right font-display text-sm font-extrabold text-fg">
-                {raffle.drawDateText?.trim() || "Por anunciar"}
-              </span>
-            </div>
+            {raffle.showDrawDate ? (
+              <div className="flex items-center justify-between gap-3 px-4 py-3">
+                <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                  <IconCalendar width={16} height={16} className="text-brand" />
+                  Fecha
+                </span>
+                <span className="text-right font-display text-sm font-extrabold text-fg">
+                  {raffle.drawDateText?.trim() || "Por anunciar"}
+                </span>
+              </div>
+            ) : null}
           </div>
 
           {/* Lista de premios configurada para este sorteo */}
@@ -248,12 +308,14 @@ export default async function SorteoPage({
           ) : (
             <div className="mt-6 rounded-2xl border border-line bg-card p-6 text-center">
               <p className="font-display text-lg font-extrabold uppercase text-fg">
-                {raffle.status === "COMING_SOON"
-                  ? "Este sorteo abre muy pronto"
-                  : raffle.status === "SOLD_OUT"
-                    ? "Boletas agotadas"
-                    : "Sorteo finalizado"}
+                {TEXTO_NO_ACTIVA[raffle.status] ?? "Sorteo no disponible"}
               </p>
+              {vistaPrevia && raffle.status === "DRAFT" ? (
+                <p className="mt-2 text-sm leading-relaxed text-fg-soft">
+                  Cuando lo pongas en “Activa”, aquí aparecerá la selección de
+                  números tal como la verá el comprador.
+                </p>
+              ) : null}
               {raffle.whatsappCheckout ? (
                 <a
                   href={waConsult(settings.whatsapp_number, raffle.title)}

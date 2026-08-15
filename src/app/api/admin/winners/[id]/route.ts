@@ -35,12 +35,35 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "El ganador no existe" }, { status: 404 });
   }
 
-  const { numberInput, ...data } = parsed.data;
-  void numberInput;
-  const winner = await prisma.winner.update({ where: { id }, data });
+  // El esquema es parcial, pero Zod rellena con sus valores por defecto todo
+  // campo que no venga en la petición. Si guardáramos eso tal cual, un cambio
+  // suelto (el interruptor de publicar, por ejemplo) le borraría al ganador la
+  // rifa, la fecha y hasta la foto. Solo se escribe lo que el panel mandó.
+  const enviado = (body ?? {}) as Record<string, unknown>;
+  const tiene = (campo: string) =>
+    Object.prototype.hasOwnProperty.call(enviado, campo);
+
+  const winner = await prisma.winner.update({
+    where: { id },
+    data: {
+      ...(tiene("raffleId") ? { raffleId: parsed.data.raffleId } : {}),
+      ...(tiene("raffleTitle") ? { raffleTitle: parsed.data.raffleTitle } : {}),
+      ...(tiene("participantName")
+        ? { participantName: parsed.data.participantName }
+        : {}),
+      ...(tiene("prize") ? { prize: parsed.data.prize } : {}),
+      ...(tiene("drawnAtText") ? { drawnAtText: parsed.data.drawnAtText } : {}),
+      ...(tiene("photoUrl") ? { photoUrl: parsed.data.photoUrl } : {}),
+      ...(tiene("isDemo") ? { isDemo: parsed.data.isDemo } : {}),
+      ...(tiene("isPublished") ? { isPublished: parsed.data.isPublished } : {}),
+      ...(tiene("displayOrder")
+        ? { displayOrder: parsed.data.displayOrder }
+        : {}),
+    },
+  });
 
   if (
-    parsed.data.photoUrl !== undefined &&
+    tiene("photoUrl") &&
     existing.photoUrl &&
     existing.photoUrl !== parsed.data.photoUrl
   ) {

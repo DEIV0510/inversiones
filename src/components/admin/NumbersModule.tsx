@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from "react";
 import {
-  Chip,
   EmptyState,
   LoadingRows,
   Pager,
   btnOutline,
   btnPrimary,
   formatDate,
+  helpCls,
   inputCls,
   labelCls,
 } from "./ui";
@@ -48,9 +48,52 @@ type NumberRow = {
   participant: { name: string; phone: string } | null;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Fichas de estado: verde libre, ámbar reservado, fucsia vendido, gris resto. */
+const TAG_TONES = {
+  ok: "border-wa/45 bg-wa/12 text-wa",
+  warn: "border-warn/45 bg-warn/12 text-warn",
+  bad: "border-error/45 bg-error/10 text-error",
+  info: "border-brand/45 bg-brand/15 text-brand-light",
+  muted: "border-line-strong bg-well text-fg-faint",
+} as const;
+
+function Tag({
+  tone = "muted",
+  children,
+}: {
+  tone?: keyof typeof TAG_TONES;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${TAG_TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/* Epígrafe de bloque: mayúsculas violetas con una línea que llena el ancho,
+   igual que los formularios de la referencia. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="mb-3 flex items-center gap-3">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-violet">
+        {children}
+      </h2>
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
+    </div>
+  );
+}
+
 const STATUS_CHIP: Record<
   NumberStatus,
-  { text: string; tone: "ok" | "warn" | "info" | "muted" }
+  { text: string; tone: keyof typeof TAG_TONES }
 > = {
   AVAILABLE: { text: "Disponible", tone: "ok" },
   RESERVED: { text: "Reservado", tone: "warn" },
@@ -67,10 +110,10 @@ const FILTERS: { value: string; label: string }[] = [
 
 function rowChip(row: NumberRow) {
   if (row.status === "RESERVED" && !row.alive) {
-    return <Chip tone="muted">Expirada</Chip>;
+    return <Tag tone="muted">Expirada</Tag>;
   }
   const meta = STATUS_CHIP[row.status];
-  return <Chip tone={meta.tone}>{meta.text}</Chip>;
+  return <Tag tone={meta.tone}>{meta.text}</Tag>;
 }
 
 export default function NumbersModule({
@@ -223,6 +266,22 @@ export default function NumbersModule({
     }
   }
 
+  /**
+   * Vuelve a consultar un número que ya se está mostrando en la ficha de
+   * consulta puntual. Se usa después de bloquear o desbloquear: sin esto la
+   * ficha seguiría diciendo "Disponible" para un número recién bloqueado.
+   */
+  async function refreshSingle(value: number) {
+    try {
+      const params = new URLSearchParams({ raffleId, n: String(value) });
+      const res = await fetch(`/api/admin/numbers?${params.toString()}`);
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.single) setSingle(data.single);
+    } catch {
+      // Silencioso: el estado real se sigue viendo en la lista de abajo.
+    }
+  }
+
   async function runBlock(action: "block" | "unblock") {
     if (!raffleId) return;
     const from = parseInt(blockFrom, 10);
@@ -275,6 +334,12 @@ export default function NumbersModule({
           : `${data.unblocked} desbloqueados`
       );
       refreshList();
+      // Si el número que muestra la ficha de arriba entra en el rango que
+      // acaba de cambiar, se refresca para que no quede mostrando lo viejo.
+      const afectado = to ?? from;
+      if (single && single.value >= from && single.value <= afectado) {
+        await refreshSingle(single.value);
+      }
     } catch {
       setBlockError("Error de conexión");
     } finally {
@@ -287,16 +352,13 @@ export default function NumbersModule({
   return (
     <div className="flex flex-col gap-4">
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
 
       {/* Selector de rifa */}
-      <section className="rounded-2xl border border-line bg-card p-4">
+      <section className={cardCls}>
         <label htmlFor="numbers-raffle" className={labelCls}>
           Rifa
         </label>
@@ -324,11 +386,9 @@ export default function NumbersModule({
       ) : (
         <>
           {/* Consulta puntual */}
-          <section className="rounded-2xl border border-line bg-card p-4">
-            <h2 className="font-display text-base font-extrabold uppercase text-fg">
-              Consultar un número
-            </h2>
-            <form onSubmit={lookupNumber} className="mt-3 flex gap-2">
+          <section className={cardCls}>
+            <SectionTitle>Consultar un número</SectionTitle>
+            <form onSubmit={lookupNumber} className="flex gap-2">
               <input
                 type="text"
                 inputMode="numeric"
@@ -337,12 +397,12 @@ export default function NumbersModule({
                 onChange={(e) => setLookup(e.target.value)}
                 placeholder="Ej: 00042"
                 aria-label="Número a consultar"
-                className={inputCls}
+                className={`${inputCls} min-w-0 font-mono tabular-nums`}
               />
               <button
                 type="submit"
                 disabled={lookupBusy || lookup.trim() === ""}
-                className={`${btnPrimary} shrink-0`}
+                className={`${btnPrimary} shrink-0 px-5`}
               >
                 Consultar
               </button>
@@ -353,12 +413,12 @@ export default function NumbersModule({
               </p>
             ) : null}
             {single && singleChip ? (
-              <div className="mt-3 rounded-xl border border-line bg-well p-4">
+              <div className="mt-3 rounded-xl border border-brand/25 bg-brand-deep/20 p-4">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="font-display text-2xl font-extrabold tabular-nums text-fg">
+                  <span className="font-display text-2xl font-black tracking-[0.06em] tabular-nums text-brand-light">
                     {single.number}
                   </span>
-                  <Chip tone={singleChip.tone}>{singleChip.text}</Chip>
+                  <Tag tone={singleChip.tone}>{singleChip.text}</Tag>
                 </div>
                 {single.participant ? (
                   <p className="mt-2 text-sm text-fg-soft">
@@ -381,11 +441,9 @@ export default function NumbersModule({
 
           {/* Bloqueo de rangos */}
           {canBlock ? (
-            <section className="rounded-2xl border border-line bg-card p-4">
-              <h2 className="font-display text-base font-extrabold uppercase text-fg">
-                Bloquear números
-              </h2>
-              <p className="mt-1 text-xs text-fg-soft">
+            <section className={cardCls}>
+              <SectionTitle>Bloquear números</SectionTitle>
+              <p className={helpCls}>
                 Máximo 1000 números por operación. Solo se bloquean números
                 libres: jamás pisa reservas ni ventas.
               </p>
@@ -402,7 +460,7 @@ export default function NumbersModule({
                     value={blockFrom}
                     onChange={(e) => setBlockFrom(e.target.value)}
                     placeholder="Ej: 100"
-                    className={inputCls}
+                    className={`${inputCls} font-mono tabular-nums`}
                   />
                 </div>
                 <div>
@@ -417,7 +475,7 @@ export default function NumbersModule({
                     value={blockTo}
                     onChange={(e) => setBlockTo(e.target.value)}
                     placeholder="Ej: 199"
-                    className={inputCls}
+                    className={`${inputCls} font-mono tabular-nums`}
                   />
                 </div>
               </div>
@@ -440,34 +498,40 @@ export default function NumbersModule({
                 </button>
               </div>
               {blockError ? (
-                <p role="alert" className="mt-2 text-sm font-medium text-error">
+                <p role="alert" className={`mt-3 ${alertCls}`}>
                   {blockError}
                 </p>
               ) : null}
               {blockMsg ? (
-                <p className="mt-2 text-sm font-medium text-fg-soft">{blockMsg}</p>
+                <p className="mt-3 rounded-xl border border-wa/35 bg-wa/10 px-4 py-3 text-sm font-medium text-wa">
+                  {blockMsg}
+                </p>
               ) : null}
             </section>
           ) : null}
 
           {/* Lista paginada de números tomados */}
-          <section className="rounded-2xl border border-line bg-card p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="font-display text-base font-extrabold uppercase text-fg">
+          <section className={cardCls}>
+            <div className="mb-3 flex flex-wrap items-center gap-3">
+              <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-violet">
                 Números tomados
               </h2>
-              <span className="text-xs tabular-nums text-fg-soft">
+              <span aria-hidden="true" className="h-px flex-1 bg-line" />
+              <span className="text-[11px] font-bold uppercase tracking-[0.1em] tabular-nums text-fg-faint">
                 {total.toLocaleString("es-CO")} registros
               </span>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2">
               {FILTERS.map((f) => (
                 <button
                   key={f.value}
                   type="button"
                   onClick={() => selectFilter(f.value)}
+                  aria-pressed={statusFilter === f.value}
                   className={`${btnOutline} ${
-                    statusFilter === f.value ? "border-brand text-brand" : ""
+                    statusFilter === f.value
+                      ? "glow-brand-sm border-brand/60 bg-brand/15 text-brand"
+                      : ""
                   }`}
                 >
                   {f.label}
@@ -488,7 +552,7 @@ export default function NumbersModule({
                       className="rounded-2xl border border-line bg-well p-4"
                     >
                       <div className="flex flex-wrap items-center gap-2.5">
-                        <span className="font-display text-lg font-extrabold tabular-nums text-fg">
+                        <span className="font-display text-lg font-black tracking-[0.06em] tabular-nums text-brand-light">
                           {row.number}
                         </span>
                         {rowChip(row)}

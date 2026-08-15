@@ -206,7 +206,8 @@ export default async function AdminDashboard() {
                     </span>
                   </p>
                   <p className="mt-0.5 truncate text-xs text-fg-soft">
-                    {o.raffle.title} · {o.quantity} números ·{" "}
+                    {o.raffle.title} ·{" "}
+                    {o.quantity === 1 ? "1 número" : `${o.quantity} números`} ·{" "}
                     {dateFmt.format(o.createdAt)}
                   </p>
                 </div>

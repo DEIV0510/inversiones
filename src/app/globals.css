@@ -55,6 +55,22 @@ html {
   scroll-behavior: smooth;
 }
 
+/* ---- Franjas fijas del borde inferior ----
+   Abajo se apilan la barra de navegación del móvil y, si está encendido el
+   modo demostración, su aviso. Cada franja publica aquí su alto para que la
+   barra de compra del sorteo se apoye encima de ellas y su botón
+   "Continuar" nunca quede tapado. */
+:root {
+  --barra-inferior-h: 4rem; /* navegación inferior del móvil */
+  --aviso-demo-h: 0px; /* lo escribe DemoBanner cuando se muestra */
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --barra-inferior-h: 0px; /* en escritorio no hay navegación inferior */
+  }
+}
+
 body {
   @apply bg-bg text-fg font-body antialiased;
   text-rendering: optimizeLegibility;

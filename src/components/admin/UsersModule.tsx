@@ -6,7 +6,6 @@ import { useModalA11y } from "@/components/useModalA11y";
 import {
   btnOutline,
   btnPrimary,
-  Chip,
   EmptyState,
   formatDate,
   helpCls,
@@ -25,6 +24,39 @@ type AdminUserRow = {
   lastLoginAt: string | null;
   createdAt: string;
 };
+
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Panel del modal: mismo pozo de las tarjetas, hoja inferior en móvil. */
+const modalPanelCls =
+  "modal-in max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-card p-6 outline-none sm:rounded-3xl";
+/* Fichas: verde activo, rosa inactivo, fucsia para el rol con más poder. */
+const TAG_TONES = {
+  ok: "border-wa/45 bg-wa/12 text-wa",
+  warn: "border-warn/45 bg-warn/12 text-warn",
+  bad: "border-error/45 bg-error/10 text-error",
+  info: "border-brand/45 bg-brand/15 text-brand-light",
+  muted: "border-line-strong bg-well text-fg-faint",
+} as const;
+
+function Tag({
+  tone = "muted",
+  children,
+}: {
+  tone?: keyof typeof TAG_TONES;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${TAG_TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
 
 const ROLES = Object.keys(ROLE_LABELS) as (keyof typeof ROLE_LABELS)[];
 
@@ -193,10 +225,7 @@ export default function UsersModule({ selfId }: { selfId: string }) {
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
@@ -207,12 +236,9 @@ export default function UsersModule({ selfId }: { selfId: string }) {
         <EmptyState text="No hay usuarios registrados." />
       ) : (
         users.map((u) => (
-          <article
-            key={u.id}
-            className="rounded-2xl border border-line bg-card p-4 shadow-card"
-          >
+          <article key={u.id} className={cardCls}>
             <div className="min-w-0">
-              <h2 className="truncate font-display text-base font-extrabold text-fg">
+              <h2 className="truncate font-display text-lg font-extrabold leading-tight text-fg">
                 {u.name}
                 {u.id === selfId ? (
                   <span className="ml-2 text-xs font-semibold normal-case text-fg-faint">
@@ -221,22 +247,22 @@ export default function UsersModule({ selfId }: { selfId: string }) {
                 ) : null}
               </h2>
               <p className="mt-0.5 truncate text-sm text-fg-soft">{u.email}</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Chip tone={u.role === "SUPER_ADMIN" ? "info" : "warn"}>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <Tag tone={u.role === "SUPER_ADMIN" ? "info" : "muted"}>
                   {ROLE_LABELS[u.role] ?? u.role}
-                </Chip>
+                </Tag>
                 {u.isActive ? (
-                  <Chip tone="ok">Activo</Chip>
+                  <Tag tone="ok">Activo</Tag>
                 ) : (
-                  <Chip tone="bad">Inactivo</Chip>
+                  <Tag tone="bad">Inactivo</Tag>
                 )}
               </div>
-              <p className="mt-1.5 text-xs tabular-nums text-fg-faint">
+              <p className="mt-2 text-xs tabular-nums text-fg-faint">
                 Último acceso: {formatDate(u.lastLoginAt)}
               </p>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
               <button
                 type="button"
                 onClick={() => toggleActive(u)}
@@ -260,7 +286,7 @@ export default function UsersModule({ selfId }: { selfId: string }) {
                 type="button"
                 onClick={() => openEdit(u)}
                 disabled={busyId === u.id}
-                className="glow-brand-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
+                className={`${btnPrimary} min-h-11 px-4 text-xs`}
               >
                 <IconPencil width={15} height={15} />
                 Editar
@@ -282,12 +308,16 @@ export default function UsersModule({ selfId }: { selfId: string }) {
           <div
             ref={panelRef}
             tabIndex={-1}
-            className="modal-in max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-card p-6 outline-none sm:rounded-3xl"
+            className={modalPanelCls}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-display text-xl font-extrabold uppercase text-fg">
+            <h2 className="font-display text-xl font-extrabold uppercase tracking-[0.02em] text-fg">
               {editingId ? "Editar usuario" : "Nuevo usuario"}
             </h2>
+            <span
+              aria-hidden="true"
+              className="mt-3 block h-px w-full bg-line"
+            />
 
             <form
               onSubmit={(e) => {
@@ -385,10 +415,7 @@ export default function UsersModule({ selfId }: { selfId: string }) {
               </div>
 
               {formError ? (
-                <p
-                  role="alert"
-                  className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-                >
+                <p role="alert" className={alertCls}>
                   {formError}
                 </p>
               ) : null}

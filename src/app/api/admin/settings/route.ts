@@ -2,10 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
+import { correoConfigurado } from "@/lib/email";
 import { settingsSchema } from "@/lib/validation";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
 
 export const runtime = "nodejs";
+
+/**
+ * Estado del correo automático para el panel: lo guardado en Configuración y
+ * si el entorno tiene de verdad la clave del proveedor. Sin clave no sale
+ * ningún correo, y el formulario lo dice tal cual.
+ */
+export async function GET() {
+  const auth = await requireAdminApi("settings.manage");
+  if (auth instanceof Response) return auth;
+
+  const rows = await prisma.setting.findMany({
+    where: { key: { in: ["email_enabled", "email_from"] } },
+  });
+  const map = new Map(rows.map((r) => [r.key, r.value.trim()]));
+
+  return NextResponse.json({
+    // Solo un "0" explícito apaga el envío; por defecto está activo.
+    email_enabled: map.get("email_enabled") === "0" ? "0" : "1",
+    email_from: map.get("email_from") ?? "",
+    proveedorListo: correoConfigurado(),
+  });
+}
 
 export async function PATCH(req: NextRequest) {
   const auth = await requireAdminApi("settings.manage");

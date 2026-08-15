@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { EmptyState, LoadingRows, Pager, formatDate, inputCls } from "./ui";
+import {
+  EmptyState,
+  LoadingRows,
+  Pager,
+  formatDate,
+  inputCls,
+  labelCls,
+} from "./ui";
 
 type ReservationRow = {
   id: string;
@@ -22,6 +29,12 @@ type Loaded = {
   perPage: number;
   error: string;
 };
+
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
 
 export default function ReservationsModule() {
   const [page, setPage] = useState(1);
@@ -95,8 +108,12 @@ export default function ReservationsModule() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-line bg-card p-4">
+      <div className={cardCls}>
+        <label htmlFor="rv-raffle" className={labelCls}>
+          Rifa
+        </label>
         <select
+          id="rv-raffle"
           value={raffleId}
           onChange={(e) => {
             setRaffleId(e.target.value);
@@ -115,10 +132,7 @@ export default function ReservationsModule() {
       </div>
 
       {current?.error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {current.error}
         </p>
       ) : null}
@@ -132,25 +146,36 @@ export default function ReservationsModule() {
       ) : (
         <div className="flex flex-col gap-3">
           {current.items.map((row) => (
-            <article
-              key={row.id}
-              className="rounded-2xl border border-line bg-card p-4 shadow-card"
-            >
-              <div className="flex items-start gap-3.5">
-                <span className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-xl bg-well px-2 font-display text-lg font-extrabold tabular-nums text-fg">
+            <article key={row.id} className={cardCls}>
+              <div className="flex items-start gap-3">
+                {/* El número, en fucsia sobre pozo violeta */}
+                <span className="flex h-14 min-w-14 shrink-0 items-center justify-center rounded-xl border border-brand/25 bg-brand-deep/20 px-2 font-display text-lg font-black tracking-[0.04em] tabular-nums text-brand-light">
                   {row.number}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-fg">
-                    {row.raffleTitle}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg">
+                      {row.raffleTitle}
+                    </p>
+                    <span className="inline-flex shrink-0 items-center rounded-full border border-warn/45 bg-warn/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] text-warn">
+                      Reservado
+                    </span>
+                  </div>
                   <p className="mt-1 truncate text-sm text-fg-soft">
                     {row.participant
                       ? `${row.participant.name} · ${row.participant.phone}`
                       : "Sin participante asociado"}
                   </p>
                   <p className="mt-1 text-xs tabular-nums text-fg-faint">
-                    {row.orderCode ? `Pedido ${row.orderCode} · ` : ""}
+                    {row.orderCode ? (
+                      <>
+                        Pedido{" "}
+                        <span className="font-mono uppercase tracking-[0.08em] text-brand-violet">
+                          {row.orderCode}
+                        </span>
+                        {" · "}
+                      </>
+                    ) : null}
                     Reservado {formatDate(row.createdAt)} · Expira{" "}
                     {formatDate(row.reservedUntil)}
                   </p>

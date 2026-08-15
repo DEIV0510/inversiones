@@ -3,12 +3,10 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatCop } from "@/lib/format";
-import { IconCheck, IconX } from "@/components/icons";
+import { IconCheck, IconTicket, IconX } from "@/components/icons";
 import {
-  Chip,
   EmptyState,
   LoadingRows,
-  ORDER_STATUS_CHIP,
   Pager,
   btnOutline,
   btnPrimary,
@@ -39,6 +37,43 @@ type Loaded = {
   error: string;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Fichas de estado: verde pagado, ámbar en espera, rosa cancelado, gris resto. */
+const TAG_TONES = {
+  ok: "border-wa/45 bg-wa/12 text-wa",
+  warn: "border-warn/45 bg-warn/12 text-warn",
+  bad: "border-error/45 bg-error/10 text-error",
+  info: "border-brand/45 bg-brand/15 text-brand-light",
+  muted: "border-line-strong bg-well text-fg-faint",
+} as const;
+
+function Tag({
+  tone = "muted",
+  children,
+}: {
+  tone?: keyof typeof TAG_TONES;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${TAG_TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/* Acción de aprobación: pastilla verde, como la referencia. */
+const btnOk =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-wa/45 bg-wa/12 px-4 text-xs font-bold uppercase tracking-[0.1em] text-wa transition-colors hover:bg-wa/20 disabled:opacity-50";
+/* Acción destructiva: pastilla rosa. */
+const btnDanger =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-error/45 bg-error/10 px-4 text-xs font-bold uppercase tracking-[0.1em] text-error transition-colors hover:bg-error/20 disabled:opacity-50";
+
 const STATUS_OPTIONS = [
   { value: "", label: "Todos los estados" },
   { value: "PENDING", label: "Pendientes" },
@@ -47,6 +82,16 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Cancelados" },
   { value: "REJECTED", label: "En revisión" },
 ];
+
+/* Mismos textos de siempre; solo se fija el color de cada estado. */
+const STATUS_TAG: Record<string, { text: string; tone: keyof typeof TAG_TONES }> =
+  {
+    PENDING: { text: "Pendiente", tone: "warn" },
+    PAID: { text: "Pagada", tone: "ok" },
+    EXPIRED: { text: "Expirada", tone: "muted" },
+    CANCELLED: { text: "Cancelada", tone: "bad" },
+    REJECTED: { text: "En revisión", tone: "bad" },
+  };
 
 const MAX_NUMBERS_VISIBLE = 8;
 
@@ -184,7 +229,7 @@ export default function OrdersModule({
     <div className="flex flex-col gap-4">
       <form
         onSubmit={submitSearch}
-        className="flex flex-col gap-2.5 rounded-2xl border border-line bg-card p-4 sm:flex-row"
+        className={`${cardCls} flex flex-col gap-2.5 sm:flex-row`}
       >
         <input
           type="search"
@@ -192,7 +237,7 @@ export default function OrdersModule({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por código, nombre o teléfono"
           aria-label="Buscar pedidos"
-          className={inputCls}
+          className={`${inputCls} min-w-0`}
         />
         <select
           value={status}
@@ -209,16 +254,13 @@ export default function OrdersModule({
             </option>
           ))}
         </select>
-        <button type="submit" className={`${btnPrimary} shrink-0`}>
+        <button type="submit" className={`${btnPrimary} shrink-0 px-5`}>
           Buscar
         </button>
       </form>
 
       {errorMsg ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {errorMsg}
         </p>
       ) : null}
@@ -232,7 +274,7 @@ export default function OrdersModule({
       ) : (
         <div className="flex flex-col gap-3">
           {current.items.map((order) => {
-            const chip = ORDER_STATUS_CHIP[order.status] ?? {
+            const tag = STATUS_TAG[order.status] ?? {
               text: order.status,
               tone: "muted" as const,
             };
@@ -241,56 +283,58 @@ export default function OrdersModule({
             const busy = busyId === order.id;
 
             return (
-              <article
-                key={order.id}
-                className="rounded-2xl border border-line bg-card p-4 shadow-card"
-              >
+              <article key={order.id} className={cardCls}>
+                {/* Cabecera: nombre grande y estado, como la referencia */}
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="font-display text-base font-extrabold tracking-wide text-fg">
-                      {order.code}
+                    <p className="truncate font-display text-lg font-extrabold leading-tight text-fg">
+                      {order.participant.name}
                     </p>
-                    <p className="mt-0.5 truncate text-sm text-fg-soft">
-                      {order.raffleTitle}
+                    <p className="mt-1 font-mono text-sm tabular-nums text-fg-soft">
+                      {order.participant.phone}
                     </p>
                   </div>
-                  <Chip tone={chip.tone}>{chip.text}</Chip>
+                  <Tag tone={tag.tone}>{tag.text}</Tag>
                 </div>
 
-                <p className="mt-2 text-sm text-fg">
-                  {order.participant.name}
-                  <span className="text-fg-soft"> · {order.participant.phone}</span>
+                <p className="mt-1.5 truncate text-xs text-fg-faint">
+                  <span className="font-mono uppercase tracking-[0.08em] text-brand-violet">
+                    {order.code}
+                  </span>{" "}
+                  · {order.raffleTitle}
                 </p>
 
-                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
-                  {visibleNumbers.map((num) => (
-                    <span
-                      key={num}
-                      className="inline-flex rounded-lg bg-well px-2 py-1 text-xs font-bold tabular-nums text-fg"
-                    >
-                      {num}
-                    </span>
-                  ))}
-                  {hiddenCount > 0 ? (
-                    <span className="text-xs font-semibold text-fg-faint">
-                      +{hiddenCount} más
-                    </span>
-                  ) : null}
+                {/* Números comprados: pozo violeta con las cifras en fucsia */}
+                <div className="mt-3 flex items-start gap-2 rounded-xl border border-brand/25 bg-brand-deep/20 px-3 py-2.5">
+                  <IconTicket
+                    width={16}
+                    height={16}
+                    className="mt-0.5 shrink-0 text-brand"
+                  />
+                  <p className="min-w-0 break-words font-mono text-sm font-bold leading-relaxed tracking-[0.04em] tabular-nums text-brand-light">
+                    {visibleNumbers.join(", ")}
+                    {hiddenCount > 0 ? (
+                      <span className="font-body text-xs font-semibold tracking-normal text-fg-faint">
+                        {" "}
+                        +{hiddenCount} más
+                      </span>
+                    ) : null}
+                  </p>
                 </div>
 
-                <p className="mt-2.5 text-sm text-fg">
-                  <span className="font-bold tabular-nums">
+                {/* Importe grande en fucsia + medio de pago y cantidad */}
+                <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                  <p className="font-display text-2xl font-black leading-none tabular-nums text-brand">
                     {formatCop(order.total)}
-                  </span>
-                  <span className="text-fg-soft">
-                    {" "}
-                    · {order.quantity}{" "}
-                    {order.quantity === 1 ? "número" : "números"} ·{" "}
-                    {methodLabel(order.paymentMethod)}
-                  </span>
-                </p>
+                  </p>
+                  <Tag tone="info">{methodLabel(order.paymentMethod)}</Tag>
+                  <Tag tone="muted">
+                    {order.quantity}{" "}
+                    {order.quantity === 1 ? "número" : "números"}
+                  </Tag>
+                </div>
 
-                <p className="mt-1 text-xs tabular-nums text-fg-faint">
+                <p className="mt-2 text-xs tabular-nums text-fg-faint">
                   Creado {formatDate(order.createdAt)}
                   {order.status === "PENDING" && order.reservedUntil
                     ? ` · Vence ${formatDate(order.reservedUntil)}`
@@ -298,7 +342,7 @@ export default function OrdersModule({
                   {order.paidAt ? ` · Pagado ${formatDate(order.paidAt)}` : ""}
                 </p>
 
-                <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+                <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
                   <Link
                     href={`/pedido/${order.code}`}
                     target="_blank"
@@ -312,7 +356,7 @@ export default function OrdersModule({
                       type="button"
                       onClick={() => cancelOrder(order)}
                       disabled={busy}
-                      className={btnOutline}
+                      className={btnDanger}
                     >
                       <IconX width={15} height={15} />
                       Cancelar
@@ -323,7 +367,7 @@ export default function OrdersModule({
                       type="button"
                       onClick={() => confirmPayment(order)}
                       disabled={busy}
-                      className={`${btnPrimary} min-h-11 px-4 text-xs`}
+                      className={btnOk}
                     >
                       <IconCheck width={15} height={15} />
                       Confirmar pago

@@ -3,6 +3,11 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { IconEye, IconEyeOff } from "@/components/icons";
+import { btnPrimary, inputCls, labelCls } from "./ui";
+
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
 
 export default function LoginForm() {
   const router = useRouter();
@@ -54,10 +59,10 @@ export default function LoginForm() {
             className="h-12 w-12 rounded-full object-cover ring-1 ring-line"
           />
           <div>
-            <p className="font-display text-base font-extrabold uppercase leading-tight text-fg">
-              Inversiones <span className="text-brand">D y S</span>
+            <p className="brand-gradient font-display text-base font-extrabold uppercase leading-tight tracking-[0.06em]">
+              Inversiones D y S
             </p>
-            <p className="text-xs font-semibold uppercase tracking-wide text-fg-soft">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-violet">
               Panel administrativo
             </p>
           </div>
@@ -65,10 +70,7 @@ export default function LoginForm() {
 
         <form onSubmit={onSubmit} className="mt-7 flex flex-col gap-4">
           <div>
-            <label
-              htmlFor="login-email"
-              className="mb-1.5 block text-sm font-semibold text-fg"
-            >
+            <label htmlFor="login-email" className={labelCls}>
               Correo
             </label>
             <input
@@ -78,15 +80,12 @@ export default function LoginForm() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg focus:border-brand focus:outline-none"
+              className={inputCls}
               placeholder="admin@ejemplo.com"
             />
           </div>
           <div>
-            <label
-              htmlFor="login-password"
-              className="mb-1.5 block text-sm font-semibold text-fg"
-            >
+            <label htmlFor="login-password" className={labelCls}>
               Contraseña
             </label>
             <div className="relative">
@@ -97,14 +96,14 @@ export default function LoginForm() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="min-h-12 w-full rounded-xl border border-line bg-well px-4 pr-12 text-base text-fg focus:border-brand focus:outline-none"
+                className={`${inputCls} pr-12`}
                 placeholder="••••••••"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
                 aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-lg text-fg-soft hover:bg-card"
+                className="absolute right-1 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-xl text-fg-soft transition-colors hover:text-brand"
               >
                 {showPassword ? (
                   <IconEyeOff width={19} height={19} />
@@ -116,10 +115,7 @@ export default function LoginForm() {
           </div>
 
           {error ? (
-            <p
-              role="alert"
-              className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-            >
+            <p role="alert" className={alertCls}>
               {error}
             </p>
           ) : null}
@@ -127,7 +123,7 @@ export default function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="glow-brand-sm mt-1 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+            className={`${btnPrimary} mt-1 w-full disabled:cursor-not-allowed`}
           >
             {loading ? "Ingresando…" : "Ingresar"}
           </button>

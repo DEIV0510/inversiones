@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SiteSettings } from "@/lib/settings";
 import { btnPrimary, helpCls, inputCls, labelCls } from "./ui";
 
@@ -19,9 +19,38 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
   const [tiktokUrl, setTiktokUrl] = useState(initial.tiktok_url);
   const [demoMode, setDemoMode] = useState(initial.demo_mode === "1");
 
+  // Correo automático. Vive en Configuración pero no viaja en SiteSettings:
+  // se pide al endpoint, que además dice si el entorno tiene la clave.
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  const [emailFrom, setEmailFrom] = useState("");
+  const [proveedorListo, setProveedorListo] = useState<boolean | null>(null);
+  // Si esa consulta no llegó, el formulario NO conoce la configuración real de
+  // correo: guardar mandaría los valores por defecto y borraría el remitente
+  // que el dueño tuviera puesto. Mientras no cargue, esas dos claves no viajan.
+  const [correoCargado, setCorreoCargado] = useState(false);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [ok, setOk] = useState(false);
+
+  useEffect(() => {
+    let vigente = true;
+    fetch("/api/admin/settings")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!vigente || !data) return;
+        setEmailEnabled(data.email_enabled !== "0");
+        setEmailFrom(typeof data.email_from === "string" ? data.email_from : "");
+        setProveedorListo(Boolean(data.proveedorListo));
+        setCorreoCargado(true);
+      })
+      .catch(() => {
+        /* si no carga, el bloque queda en "comprobando" y no promete nada */
+      });
+    return () => {
+      vigente = false;
+    };
+  }, []);
 
   async function save() {
     setError("");
@@ -40,6 +69,13 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
           instagram_url: instagramUrl.trim(),
           tiktok_url: tiktokUrl.trim(),
           demo_mode: demoMode ? "1" : "0",
+          // Las claves que no viajan se quedan como están en la base.
+          ...(correoCargado
+            ? {
+                email_enabled: emailEnabled ? "1" : "0",
+                email_from: emailFrom.trim().toLowerCase(),
+              }
+            : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -213,6 +249,84 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
             />
           </button>
         </label>
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+        <div className="flex items-start justify-between gap-4">
+          <span>
+            <span className="block text-sm font-semibold text-fg">
+              Números por correo
+            </span>
+            <span className={helpCls}>
+              Al confirmarse el pago, el comprador recibe sus números y su
+              código de participación en el correo que escribió al comprar. Si
+              no dejó correo, no se envía nada.
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={emailEnabled}
+            aria-label={
+              emailEnabled
+                ? "Desactivar el envío de números por correo"
+                : "Activar el envío de números por correo"
+            }
+            onClick={() => setEmailEnabled((v) => !v)}
+            disabled={!correoCargado}
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors before:absolute before:-inset-2.5 before:content-[''] disabled:opacity-50 ${
+              emailEnabled ? "bg-brand" : "bg-line"
+            }`}
+          >
+            <span
+              className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                emailEnabled ? "left-6" : "left-1"
+              }`}
+            />
+          </button>
+        </div>
+
+        {proveedorListo === null ? (
+          <p className="rounded-xl border border-line bg-well px-4 py-3 text-sm text-fg-faint">
+            Comprobando el proveedor de correo…
+          </p>
+        ) : proveedorListo ? (
+          <p className="rounded-xl border border-wa/30 bg-wa/10 px-4 py-3 text-sm font-medium text-wa">
+            Proveedor de correo conectado: los correos salen de verdad.
+          </p>
+        ) : (
+          <p
+            role="alert"
+            className="rounded-xl border border-warn/40 bg-warn/10 px-4 py-3 text-sm leading-relaxed font-medium text-warn"
+          >
+            Falta la clave del proveedor de correo: pídesela a tu desarrollador.
+            Mientras no esté configurada NO se envía ningún correo, aunque el
+            interruptor esté encendido.
+          </p>
+        )}
+
+        <div>
+          <label htmlFor="cf-emailfrom" className={labelCls}>
+            Correo remitente
+          </label>
+          <input
+            id="cf-emailfrom"
+            type="email"
+            inputMode="email"
+            autoComplete="off"
+            value={emailFrom}
+            onChange={(e) => setEmailFrom(e.target.value)}
+            disabled={!correoCargado}
+            className={`${inputCls} disabled:opacity-50`}
+            placeholder="sorteos@tudominio.com"
+            maxLength={200}
+          />
+          <p className={helpCls}>
+            Dirección desde la que llegan los correos. Debe pertenecer a un
+            dominio verificado con el proveedor; si la dejas vacía se usa la
+            dirección configurada en el servidor.
+          </p>
+        </div>
       </div>
 
       {ok ? (

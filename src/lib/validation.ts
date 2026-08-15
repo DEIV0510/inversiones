@@ -57,6 +57,11 @@ export const raffleSchema = z.object({
     .optional(),
   selectionMode: z.enum(["MANUAL", "RANDOM", "BOTH"]).default("BOTH"),
   whatsappCheckout: z.boolean().default(true),
+  // Interruptores de la ficha del sorteo: el premio y la fecha suelen ir ya
+  // dichos en el titular, así que por defecto no se repiten en la tarjeta.
+  // Apagarlos NO borra el dato: sigue guardado y se usa en otras pantallas.
+  showPrize: z.boolean().default(false),
+  showDrawDate: z.boolean().default(false),
   ticketPacks: z
     .array(z.number().int().min(1).max(5000))
     .max(12, "Máximo 12 paquetes")
@@ -206,6 +211,20 @@ export const settingsSchema = z.object({
   instagram_url: socialUrl.optional(),
   tiktok_url: socialUrl.optional(),
   demo_mode: z.enum(["0", "1"]).optional(),
+  /** "1" envía al comprador sus números por correo al confirmarse el pago. */
+  email_enabled: z.enum(["0", "1"]).optional(),
+  /** Dirección desde la que salen los correos; vacío usa la del entorno. */
+  email_from: z
+    .union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .toLowerCase()
+        .email("El correo del remitente no es válido")
+        .max(200),
+    ])
+    .optional(),
 });
 
 export const loginSchema = z.object({

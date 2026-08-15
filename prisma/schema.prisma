@@ -67,6 +67,11 @@ model Raffle {
   // Premios adicionales de la rifa (mayor, anticipados por día...).
   // [{ label, title, amount, note }]
   prizesJson String @default("[]")
+  // Filas opcionales de la ficha del sorteo. El dueño ya escribe el premio y
+  // la fecha dentro del título, así que por defecto la ficha muestra solo el
+  // precio por número y estas dos se encienden a voluntad.
+  showPrize    Boolean @default(false)
+  showDrawDate Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

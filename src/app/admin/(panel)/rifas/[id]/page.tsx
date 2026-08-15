@@ -91,6 +91,8 @@ export default async function EditarRifaPage({
           digits: raffle.digits,
           selectionMode: raffle.selectionMode,
           whatsappCheckout: raffle.whatsappCheckout,
+          showPrize: raffle.showPrize,
+          showDrawDate: raffle.showDrawDate,
           ticketPacks,
           prizes,
           prizedNumbers,

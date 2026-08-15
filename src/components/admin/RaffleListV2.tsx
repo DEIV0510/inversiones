@@ -6,7 +6,20 @@ import { useState } from "react";
 import { formatCop } from "@/lib/format";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { btnOutline } from "./ui";
-import { IconImage, IconPencil } from "@/components/icons";
+import { IconEye, IconImage, IconPencil } from "@/components/icons";
+
+/**
+ * Estados que el público sí ve (copia de PUBLIC_STATUSES de src/lib/public.ts;
+ * aquí se repite porque ese módulo habla con Prisma y no puede entrar en un
+ * componente de cliente). En los demás —borrador, cancelada— la página del
+ * sorteo es una VISTA PREVIA que solo abre quien tiene sesión de panel.
+ */
+const ESTADOS_PUBLICOS = new Set([
+  "COMING_SOON",
+  "ACTIVE",
+  "SOLD_OUT",
+  "FINISHED",
+]);
 
 export type AdminRaffleRow = {
   id: string;
@@ -107,27 +120,51 @@ export default function RaffleListV2({
         const meta = statusMetaV2(raffle.status);
         const available =
           raffle.totalNumbers - raffle.paid - raffle.reserved - raffle.blocked;
+        // Toda rifa se puede abrir en el sitio; si aún no es pública, lo que
+        // se abre es la vista previa (y así se anuncia).
+        const esPublica = ESTADOS_PUBLICOS.has(raffle.status);
+        const verHref = `/sorteo/${raffle.slug}`;
+        const verTexto = esPublica ? "Ver" : "Vista previa";
+        const verTitulo = esPublica
+          ? "Abrir la página del sorteo en el sitio"
+          : "Solo tú puedes verla: el público todavía no";
         return (
           <article
             key={raffle.id}
             className="rounded-2xl border border-line bg-card p-4 shadow-card"
           >
             <div className="flex gap-3.5">
-              {raffle.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={raffle.imageUrl}
-                  alt=""
-                  className="h-[72px] w-[72px] shrink-0 rounded-xl border border-line object-cover"
-                />
-              ) : (
-                <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-well text-fg-faint">
-                  <IconImage width={26} height={26} />
-                </span>
-              )}
+              {/* Foto y título llevan al sitio: del panel al sorteo de un toque. */}
+              <Link
+                href={verHref}
+                target="_blank"
+                title={verTitulo}
+                aria-label={`${verTexto}: ${raffle.title}`}
+                className="shrink-0 rounded-xl transition-opacity hover:opacity-80"
+              >
+                {raffle.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={raffle.imageUrl}
+                    alt=""
+                    className="h-[72px] w-[72px] rounded-xl border border-line object-cover"
+                  />
+                ) : (
+                  <span className="flex h-[72px] w-[72px] items-center justify-center rounded-xl bg-well text-fg-faint">
+                    <IconImage width={26} height={26} />
+                  </span>
+                )}
+              </Link>
               <div className="min-w-0 flex-1">
                 <h2 className="truncate font-display text-base font-extrabold text-fg">
-                  {raffle.title}
+                  <Link
+                    href={verHref}
+                    target="_blank"
+                    title={verTitulo}
+                    className="transition-colors hover:text-brand"
+                  >
+                    {raffle.title}
+                  </Link>
                 </h2>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                   <span
@@ -154,11 +191,13 @@ export default function RaffleListV2({
 
             <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
               <Link
-                href={`/sorteo/${raffle.slug}`}
+                href={verHref}
                 target="_blank"
+                title={verTitulo}
                 className={btnOutline}
               >
-                Ver
+                <IconEye width={15} height={15} />
+                {verTexto}
               </Link>
               <Link href={`/admin/numeros?raffleId=${raffle.id}`} className={btnOutline}>
                 Números

@@ -5,7 +5,6 @@ import { useModalA11y } from "@/components/useModalA11y";
 import {
   btnOutline,
   btnPrimary,
-  Chip,
   EmptyState,
   helpCls,
   inputCls,
@@ -38,6 +37,52 @@ type Winner = {
 };
 
 type RaffleOption = { id: string; title: string };
+
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Panel del modal: mismo pozo de las tarjetas, hoja inferior en móvil. */
+const modalPanelCls =
+  "modal-in max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-card p-6 outline-none sm:rounded-3xl";
+/* Fichas: verde publicado, ámbar demo, gris oculto. */
+const TAG_TONES = {
+  ok: "border-wa/45 bg-wa/12 text-wa",
+  warn: "border-warn/45 bg-warn/12 text-warn",
+  bad: "border-error/45 bg-error/10 text-error",
+  info: "border-brand/45 bg-brand/15 text-brand-light",
+  muted: "border-line-strong bg-well text-fg-faint",
+} as const;
+
+function Tag({
+  tone = "muted",
+  children,
+}: {
+  tone?: keyof typeof TAG_TONES;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${TAG_TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/* Epígrafe de bloque: mayúsculas violetas con una línea que llena el ancho,
+   igual que los formularios de la referencia. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-3">
+      <h3 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-violet">
+        {children}
+      </h3>
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
+    </div>
+  );
+}
 
 export default function WinnersModuleV2() {
   const [winners, setWinners] = useState<Winner[]>([]);
@@ -285,10 +330,7 @@ export default function WinnersModuleV2() {
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
@@ -299,10 +341,7 @@ export default function WinnersModuleV2() {
         <EmptyState text="Aún no hay ganadores registrados. Usa el botón “Registrar ganador”." />
       ) : (
         winners.map((w) => (
-          <article
-            key={w.id}
-            className="rounded-2xl border border-line bg-card p-4 shadow-card"
-          >
+          <article key={w.id} className={cardCls}>
             <div className="flex gap-3.5">
               {w.photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -312,12 +351,12 @@ export default function WinnersModuleV2() {
                   className="h-[72px] w-[72px] shrink-0 rounded-xl border border-line object-cover"
                 />
               ) : (
-                <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl bg-well text-fg-faint">
+                <span className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl border border-brand/25 bg-brand-deep/20 text-brand">
                   <IconTrophy width={26} height={26} />
                 </span>
               )}
               <div className="min-w-0 flex-1">
-                <h2 className="truncate font-display text-base font-extrabold text-fg">
+                <h2 className="truncate font-display text-lg font-extrabold leading-tight text-fg">
                   {w.participantName}
                 </h2>
                 <p className="mt-0.5 truncate text-sm text-fg-soft">
@@ -328,24 +367,24 @@ export default function WinnersModuleV2() {
                   {w.numberFormatted ? (
                     <>
                       {" · Número "}
-                      <span className="font-mono tabular-nums text-fg-soft">
+                      <span className="font-mono font-bold tracking-[0.06em] tabular-nums text-brand-light">
                         {w.numberFormatted}
                       </span>
                     </>
                   ) : null}
                 </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  {w.isDemo ? <Chip tone="warn">Demo</Chip> : null}
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {w.isDemo ? <Tag tone="warn">Demo</Tag> : null}
                   {w.isPublished ? (
-                    <Chip tone="ok">Publicado</Chip>
+                    <Tag tone="ok">Publicado</Tag>
                   ) : (
-                    <Chip tone="muted">Oculto</Chip>
+                    <Tag tone="muted">Oculto</Tag>
                   )}
                 </div>
               </div>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+            <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
               <button
                 type="button"
                 onClick={() => togglePublish(w)}
@@ -367,7 +406,7 @@ export default function WinnersModuleV2() {
                 type="button"
                 onClick={() => openEdit(w)}
                 disabled={busyId === w.id}
-                className="glow-brand-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
+                className={`${btnPrimary} min-h-11 px-4 text-xs`}
               >
                 <IconPencil width={15} height={15} />
                 Editar
@@ -389,10 +428,10 @@ export default function WinnersModuleV2() {
           <div
             ref={panelRef}
             tabIndex={-1}
-            className="modal-in max-h-[92dvh] w-full max-w-md overflow-y-auto rounded-t-3xl border border-line bg-card p-6 outline-none sm:rounded-3xl"
+            className={modalPanelCls}
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="font-display text-xl font-extrabold uppercase text-fg">
+            <h2 className="font-display text-xl font-extrabold uppercase tracking-[0.02em] text-fg">
               {editingId ? "Editar ganador" : "Registrar ganador"}
             </h2>
 
@@ -401,8 +440,9 @@ export default function WinnersModuleV2() {
                 e.preventDefault();
                 save();
               }}
-              className="mt-4 flex flex-col gap-4"
+              className="mt-5 flex flex-col gap-4"
             >
+              <SectionTitle>Datos del sorteo</SectionTitle>
               <div>
                 <label htmlFor="wn-raffle" className={labelCls}>
                   Rifa (opcional)
@@ -435,7 +475,7 @@ export default function WinnersModuleV2() {
                     onChange={(e) =>
                       setNumberInput(e.target.value.replace(/\D/g, "").slice(0, 8))
                     }
-                    className={`${inputCls} font-mono`}
+                    className={`${inputCls} font-mono tracking-[0.06em] tabular-nums`}
                     placeholder="Ej: 0457"
                     disabled={editingId !== null}
                   />
@@ -466,6 +506,7 @@ export default function WinnersModuleV2() {
                 </p>
               </div>
 
+              <SectionTitle>Ganador y premio</SectionTitle>
               <div>
                 <label htmlFor="wn-name" className={labelCls}>
                   Nombre del ganador *
@@ -513,6 +554,7 @@ export default function WinnersModuleV2() {
                 />
               </div>
 
+              <SectionTitle>Publicación</SectionTitle>
               <div>
                 <p className={labelCls}>Foto (opcional)</p>
                 <input
@@ -613,10 +655,7 @@ export default function WinnersModuleV2() {
               </div>
 
               {formError ? (
-                <p
-                  role="alert"
-                  className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-                >
+                <p role="alert" className={alertCls}>
                   {formError}
                 </p>
               ) : null}

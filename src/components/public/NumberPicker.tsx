@@ -523,10 +523,15 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         </div>
       ) : null}
 
-      {/* Barra de resumen: refleja siempre lo que se va a comprar. */}
+      {/* Barra de resumen: refleja siempre lo que se va a comprar. Se apoya
+          encima de la navegación inferior y del aviso de demostración para que
+          "Continuar" quede siempre destapado y se pueda pulsar. */}
       <div
-        className={`fixed inset-x-0 bottom-16 z-30 transition-transform duration-300 lg:bottom-0 ${
-          canContinue ? "translate-y-0" : "translate-y-full"
+        style={{ bottom: "calc(var(--barra-inferior-h) + var(--aviso-demo-h))" }}
+        className={`fixed inset-x-0 z-30 transition-all duration-300 ${
+          canContinue
+            ? "translate-y-0 opacity-100"
+            : "pointer-events-none translate-y-full opacity-0"
         }`}
       >
         <div className="mx-auto w-full max-w-3xl px-4 pb-3">

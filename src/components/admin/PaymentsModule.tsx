@@ -3,12 +3,12 @@
 import { useEffect, useState } from "react";
 import { formatCop } from "@/lib/format";
 import {
-  Chip,
   EmptyState,
   LoadingRows,
   Pager,
   formatDate,
   inputCls,
+  labelCls,
 } from "./ui";
 
 type PaymentRow = {
@@ -32,6 +32,36 @@ type Loaded = {
   error: string;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Fichas de estado: verde aprobado, ámbar en espera, rosa rechazado. */
+const TAG_TONES = {
+  ok: "border-wa/45 bg-wa/12 text-wa",
+  warn: "border-warn/45 bg-warn/12 text-warn",
+  bad: "border-error/45 bg-error/10 text-error",
+  info: "border-brand/45 bg-brand/15 text-brand-light",
+  muted: "border-line-strong bg-well text-fg-faint",
+} as const;
+
+function Tag({
+  tone = "muted",
+  children,
+}: {
+  tone?: keyof typeof TAG_TONES;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.1em] ${TAG_TONES[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
 const PROVIDER_OPTIONS = [
   { value: "", label: "Todos los medios" },
   { value: "wompi", label: "Wompi" },
@@ -47,16 +77,15 @@ const STATUS_OPTIONS = [
   { value: "ERROR", label: "Con error" },
 ];
 
-const STATUS_CHIP: Record<
-  string,
-  { text: string; tone: "ok" | "warn" | "bad" }
-> = {
-  APPROVED: { text: "Aprobado", tone: "ok" },
-  DECLINED: { text: "Rechazado", tone: "bad" },
-  ERROR: { text: "Error", tone: "bad" },
-  PENDING: { text: "Pendiente", tone: "warn" },
-  VOIDED: { text: "Anulado", tone: "warn" },
-};
+/* Mismos textos de siempre; solo se fija el color de cada estado. */
+const STATUS_TAG: Record<string, { text: string; tone: keyof typeof TAG_TONES }> =
+  {
+    APPROVED: { text: "Aprobado", tone: "ok" },
+    DECLINED: { text: "Rechazado", tone: "bad" },
+    ERROR: { text: "Error", tone: "bad" },
+    PENDING: { text: "Pendiente", tone: "warn" },
+    VOIDED: { text: "Anulado", tone: "muted" },
+  };
 
 function providerLabel(provider: string): string {
   if (provider === "wompi") return "Wompi";
@@ -118,44 +147,53 @@ export default function PaymentsModule() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2.5 rounded-2xl border border-line bg-card p-4 sm:flex-row">
-        <select
-          value={provider}
-          onChange={(e) => {
-            setProvider(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filtrar por medio de pago"
-          className={inputCls}
-        >
-          {PROVIDER_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value);
-            setPage(1);
-          }}
-          aria-label="Filtrar por estado"
-          className={inputCls}
-        >
-          {STATUS_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+      <div className={`${cardCls} grid grid-cols-1 gap-3 sm:grid-cols-2`}>
+        <div>
+          <label htmlFor="pm-provider" className={labelCls}>
+            Medio de pago
+          </label>
+          <select
+            id="pm-provider"
+            value={provider}
+            onChange={(e) => {
+              setProvider(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filtrar por medio de pago"
+            className={inputCls}
+          >
+            {PROVIDER_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="pm-status" className={labelCls}>
+            Estado
+          </label>
+          <select
+            id="pm-status"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+            aria-label="Filtrar por estado"
+            className={inputCls}
+          >
+            {STATUS_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {current?.error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {current.error}
         </p>
       ) : null}
@@ -169,45 +207,50 @@ export default function PaymentsModule() {
       ) : (
         <div className="flex flex-col gap-3">
           {current.items.map((payment) => {
-            const chip = STATUS_CHIP[payment.status] ?? {
+            const tag = STATUS_TAG[payment.status] ?? {
               text: payment.status,
               tone: "warn" as const,
             };
             return (
-              <article
-                key={payment.id}
-                className="rounded-2xl border border-line bg-card p-4 shadow-card"
-              >
+              <article key={payment.id} className={cardCls}>
+                {/* Importe grande en fucsia y estado a la derecha */}
                 <div className="flex items-start justify-between gap-3">
-                  <p className="font-display text-xl font-extrabold tabular-nums text-fg">
+                  <p className="font-display text-2xl font-black leading-none tabular-nums text-brand">
                     {formatCop(payment.amount)}
                   </p>
-                  <Chip tone={chip.tone}>{chip.text}</Chip>
+                  <Tag tone={tag.tone}>{tag.text}</Tag>
                 </div>
 
-                <p className="mt-1.5 text-sm text-fg">
-                  {providerLabel(payment.provider)}
-                  <span className="text-fg-soft">
-                    {" "}
-                    · Pedido {payment.orderCode}
+                <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                  <Tag tone="info">{providerLabel(payment.provider)}</Tag>
+                  <span className="text-xs text-fg-faint">
+                    Pedido{" "}
+                    <span className="font-mono uppercase tracking-[0.08em] text-brand-violet">
+                      {payment.orderCode}
+                    </span>
                   </span>
-                </p>
-                <p className="mt-1 truncate text-sm text-fg-soft">
-                  {payment.participant.name} · {payment.participant.phone}
+                </div>
+
+                <p className="mt-2 truncate text-sm text-fg">
+                  {payment.participant.name}
+                  <span className="text-fg-soft">
+                    {" · "}
+                    {payment.participant.phone}
+                  </span>
                 </p>
                 <p className="mt-0.5 truncate text-xs text-fg-faint">
                   {payment.raffleTitle}
                 </p>
 
                 {payment.reference || payment.providerTxId ? (
-                  <p className="mt-2 break-all font-mono text-xs text-fg-faint">
+                  <p className="mt-2 break-all rounded-xl border border-line bg-well px-3 py-2 font-mono text-[11px] leading-relaxed text-fg-faint">
                     {payment.reference ? `Ref: ${payment.reference}` : ""}
                     {payment.reference && payment.providerTxId ? " · " : ""}
                     {payment.providerTxId ? `Tx: ${payment.providerTxId}` : ""}
                   </p>
                 ) : null}
 
-                <p className="mt-1.5 text-xs tabular-nums text-fg-faint">
+                <p className="mt-2 text-xs tabular-nums text-fg-faint">
                   {formatDate(payment.createdAt)}
                 </p>
               </article>

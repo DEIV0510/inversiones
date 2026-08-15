@@ -32,6 +32,8 @@ export type RaffleFormInitial = {
   digits: number;
   selectionMode: string;
   whatsappCheckout: boolean;
+  showPrize: boolean;
+  showDrawDate: boolean;
   ticketPacks: number[];
   prizes: RafflePrizeInitial[];
   prizedNumbers: RafflePrizedNumberInitial[];
@@ -46,6 +48,89 @@ export type RaffleFormInitial = {
   hasOrders: boolean;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Etiqueta menuda de campo secundario dentro de una fila repetida. */
+const subLabelCls =
+  "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-fg-faint";
+/* Botón de opción (cifras, cantidades, modos): apagado oscuro, encendido fucsia. */
+const chipBtnIdle =
+  "border border-line bg-well text-fg-soft transition-colors hover:border-brand hover:text-fg disabled:opacity-40";
+const chipBtnActive = "glow-brand-sm border border-brand bg-brand text-white";
+
+/* Epígrafe de bloque: mayúsculas violetas con una línea que llena el ancho,
+   igual que los formularios de la referencia. */
+function SectionTitle({
+  children,
+  aside,
+}: {
+  children: React.ReactNode;
+  aside?: React.ReactNode;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <h2 className="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-violet">
+        {children}
+      </h2>
+      <span aria-hidden="true" className="h-px flex-1 bg-line" />
+      {aside ? (
+        <span className="shrink-0 text-[11px] font-bold tabular-nums text-fg-faint">
+          {aside}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+/* Interruptor de una línea: etiqueta + ayuda a la izquierda y palanca fucsia a
+   la derecha. Todos los del formulario se ven exactamente igual porque salen
+   de aquí. El área que responde al dedo es de 44px de alto. */
+function SwitchRow({
+  label,
+  help,
+  checked,
+  ariaLabel,
+  onToggle,
+}: {
+  label: string;
+  help: string;
+  checked: boolean;
+  ariaLabel: string;
+  onToggle: () => void;
+}) {
+  return (
+    <label className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-3 rounded-xl border border-line bg-well px-4 py-3">
+      <span className="min-w-0">
+        <span className="block text-sm font-semibold text-fg">{label}</span>
+        <span className={helpCls}>{help}</span>
+      </span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={ariaLabel}
+        onClick={onToggle}
+        className="flex h-11 w-12 shrink-0 items-center justify-center"
+      >
+        <span
+          className={`relative block h-7 w-12 rounded-full transition-colors ${
+            checked ? "bg-brand" : "bg-line"
+          }`}
+        >
+          <span
+            className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+              checked ? "left-6" : "left-1"
+            }`}
+          />
+        </span>
+      </button>
+    </label>
+  );
+}
+
 const TOTAL_PRESETS = [100, 1000, 10000, 100000, 1000000];
 const DIGIT_PRESETS = [2, 3, 4, 5, 6, 7];
 const MIN_DIGITS = 2;
@@ -53,7 +138,9 @@ const MAX_DIGITS = 7;
 const DEFAULT_PACKS = [1, 2, 5, 10];
 const MAX_PACKS = 12;
 const MAX_PRIZES = 12;
-const MAX_PRIZED_NUMBERS = 50;
+/* Tope del servidor: 200 números premiados sumando todos los apartados. */
+const MAX_PRIZED_NUMBERS = 200;
+const MAX_PRIZED_GROUPS = 10;
 
 const SELECTION_MODES = [
   { value: "MANUAL", label: "Solo manual" },
@@ -71,7 +158,112 @@ type PrizeRow = {
   note: string;
 };
 
-type PrizedNumberRow = { id: string; number: string; prize: string };
+/**
+ * Un apartado de números premiados: el premio se escribe UNA vez y debajo van
+ * todos sus números juntos, tal como los dicta el dueño ("10 stickers de un
+ * millón"). `numbers` es el texto crudo del campo; se revisa en cada render.
+ */
+type PrizedGroupRow = { id: string; prize: string; numbers: string };
+
+/** Un apartado ya revisado: sus números limpios y el primer error, si lo hay. */
+type PrizedGroupParsed = {
+  row: PrizedGroupRow;
+  numbers: string[];
+  error: string;
+};
+
+/**
+ * Trocea el texto de un apartado. Acepta comas, espacios, saltos de línea y
+ * punto y coma; los puntos de mil (1.845) se quitan para no partir el número.
+ */
+function splitNumberTokens(text: string): string[] {
+  return text
+    .split(/[\s,;]+/)
+    .map((t) => t.replace(/\./g, ""))
+    .filter((t) => t !== "");
+}
+
+/**
+ * Revisa todos los apartados de una: números válidos, dentro de las cifras de
+ * la rifa, sin repetidos (ni dentro del apartado ni entre apartados) y sin dos
+ * apartados con el mismo premio (se verían juntos en una sola tarjeta).
+ * Devuelve los números ya ordenados y con ceros a la izquierda, como los ve el
+ * comprador, más el error explicado en cristiano.
+ */
+function reviewPrizedGroups(
+  rows: PrizedGroupRow[],
+  digits: number
+): PrizedGroupParsed[] {
+  const capacity = Math.pow(10, digits);
+  /* Dónde salió cada número y cada premio, para cazar los repetidos. */
+  const numeroVisto = new Map<number, number>();
+  const premioVisto = new Map<string, number>();
+  return rows.map((row, i) => {
+    const prize = row.prize.trim();
+    const numbers: string[] = [];
+    let error = "";
+    for (const token of splitNumberTokens(row.numbers)) {
+      if (!/^\d+$/.test(token)) {
+        if (!error) error = `Aquí solo van números: revisa «${token}».`;
+        continue;
+      }
+      const value = parseInt(token, 10);
+      if (value >= capacity) {
+        if (!error)
+          error = `El número ${token} no existe en esta rifa: con ${digits} cifras van del ${"0".repeat(digits)} al ${"9".repeat(digits)}.`;
+        continue;
+      }
+      const padded = String(value).padStart(digits, "0");
+      const antes = numeroVisto.get(value);
+      if (antes !== undefined) {
+        if (!error)
+          error =
+            antes === i
+              ? `El número ${padded} está repetido en este apartado.`
+              : `El número ${padded} ya está en el apartado ${antes + 1}.`;
+        continue;
+      }
+      numeroVisto.set(value, i);
+      numbers.push(padded);
+    }
+    if (!error && numbers.length > 0 && prize === "")
+      error = "Escribe el premio de este apartado (por ejemplo $1.000.000).";
+    const clave = prize.toLowerCase();
+    if (prize !== "") {
+      const antes = premioVisto.get(clave);
+      if (antes !== undefined) {
+        if (!error)
+          error = `El apartado ${antes + 1} ya tiene este mismo premio: al comprador le saldrían juntos en una sola tarjeta. Cambia el texto o pasa los números a ese apartado.`;
+      } else {
+        premioVisto.set(clave, i);
+      }
+    }
+    /* Mismo orden que la página del sorteo: de menor a mayor. */
+    numbers.sort();
+    return { row, numbers, error };
+  });
+}
+
+/** Agrupa el arreglo plano guardado en la base para rearmar los apartados. */
+function groupInitialPrized(
+  rows: RafflePrizedNumberInitial[],
+  digits: number
+): PrizedGroupRow[] {
+  const map = new Map<string, string[]>();
+  for (const row of rows) {
+    const prize = row.prize ?? "";
+    const list = map.get(prize) ?? [];
+    list.push(String(row.number).padStart(digits, "0"));
+    map.set(prize, list);
+  }
+  /* El id sale del índice (nunca de un contador de módulo) para que el
+     servidor y el navegador pinten exactamente lo mismo. */
+  return [...map.entries()].map(([prize, numbers], i) => ({
+    id: `apartado-${i}`,
+    prize,
+    numbers: [...numbers].sort().join(", "),
+  }));
+}
 
 /**
  * Ids solo para las keys de React y los `htmlFor` (no se guardan ni se
@@ -129,6 +321,12 @@ export default function RaffleFormV2({
   const [whatsappCheckout, setWhatsappCheckout] = useState(
     initial?.whatsappCheckout ?? true
   );
+  // Filas opcionales de la ficha del sorteo. Nacen apagadas: el titular ya
+  // dice el premio y la fecha, y repetirlos abajo recarga la tarjeta.
+  const [showPrize, setShowPrize] = useState(initial?.showPrize ?? false);
+  const [showDrawDate, setShowDrawDate] = useState(
+    initial?.showDrawDate ?? false
+  );
   const [ticketPacks, setTicketPacks] = useState<number[]>(() =>
     initial?.ticketPacks?.length ? [...initial.ticketPacks] : [...DEFAULT_PACKS]
   );
@@ -142,12 +340,13 @@ export default function RaffleFormV2({
       note: p.note ?? "",
     }))
   );
-  const [prizedNumbers, setPrizedNumbers] = useState<PrizedNumberRow[]>(() =>
-    (initial?.prizedNumbers ?? []).map((p, i) => ({
-      id: `premiado-${i}`,
-      number: String(p.number),
-      prize: p.prize ?? "",
-    }))
+  const [prizedGroups, setPrizedGroups] = useState<PrizedGroupRow[]>(() =>
+    groupInitialPrized(
+      initial?.prizedNumbers ?? [],
+      initial?.digits
+        ? Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, initial.digits))
+        : neededDigits(initial?.totalNumbers ?? 10000)
+    )
   );
   const [drawDateText, setDrawDateText] = useState(initial?.drawDateText ?? "");
   const [status, setStatus] = useState<RaffleStatusV2>(
@@ -175,6 +374,31 @@ export default function RaffleFormV2({
   const totalInt = parseInt(totalNumbers || "0", 10) || 0;
   const capacity = Math.pow(10, digits);
   const numbersLocked = mode === "edit" && !!initial?.hasOrders;
+  const maxPorPedido = parseInt(maxPerOrder || "0", 10) || 0;
+  // Paquetes que el comprador NO llegaría a ver: la página del sorteo esconde
+  // los que pasan del máximo por pedido, así que aquí se avisa antes.
+  const packsOcultos = ticketPacks.filter(
+    (q) => maxPorPedido > 0 && q > maxPorPedido
+  );
+
+  /* Apartados de números premiados, revisados en cada render (sin estado
+     duplicado): de aquí salen la vista previa, los avisos y lo que se guarda. */
+  const prizedParsed = reviewPrizedGroups(prizedGroups, digits);
+  const prizedTotal = prizedParsed.reduce((n, g) => n + g.numbers.length, 0);
+  /* Números escritos que la rifa no vende: existen con estas cifras pero pasan
+     de la cantidad total, así que nadie podría comprarlos. */
+  const prizedSinVenta = prizedParsed
+    .flatMap((g) => g.numbers)
+    .filter((n) => totalInt > 0 && parseInt(n, 10) >= totalInt);
+  const prizedError =
+    prizedParsed.find((g) => g.error)?.error ||
+    (prizedTotal > MAX_PRIZED_NUMBERS
+      ? `Tienes ${prizedTotal} números premiados y el máximo son ${MAX_PRIZED_NUMBERS}. Quita ${prizedTotal - MAX_PRIZED_NUMBERS}.`
+      : "");
+  /* Ejemplo del campo, con la cantidad de cifras que tenga la rifa. */
+  const prizedPlaceholder = [1845, 2578, 3269]
+    .map((n) => String(n % capacity).padStart(digits, "0"))
+    .join(", ");
 
   function onTitleChange(value: string) {
     setTitle(value);
@@ -223,9 +447,27 @@ export default function RaffleFormV2({
     setPrizes((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
-  function updatePrizedNumber(id: string, patch: Partial<PrizedNumberRow>) {
-    setPrizedNumbers((rows) =>
+  function updatePrizedGroup(id: string, patch: Partial<PrizedGroupRow>) {
+    setPrizedGroups((rows) =>
       rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
+    );
+  }
+
+  /** Quita un número suelto del apartado sin tocar lo demás que haya escrito. */
+  function removeNumberFromGroup(id: string, value: string) {
+    const objetivo = parseInt(value, 10);
+    setPrizedGroups((rows) =>
+      rows.map((r) => {
+        if (r.id !== id) return r;
+        let quitado = false;
+        const resto = splitNumberTokens(r.numbers).filter((token) => {
+          if (quitado || !/^\d+$/.test(token)) return true;
+          if (parseInt(token, 10) !== objetivo) return true;
+          quitado = true;
+          return false;
+        });
+        return { ...r, numbers: resto.join(", ") };
+      })
     );
   }
 
@@ -265,6 +507,8 @@ export default function RaffleFormV2({
       digits,
       selectionMode,
       whatsappCheckout,
+      showPrize,
+      showDrawDate,
       ticketPacks,
       prizes: prizes
         .filter(
@@ -277,12 +521,17 @@ export default function RaffleFormV2({
           amount: p.amount.trim(),
           note: p.note.trim(),
         })),
-      prizedNumbers: prizedNumbers
-        .filter((p) => p.number.trim() !== "" || p.prize.trim() !== "")
-        .map((p) => ({
-          number: parseInt(p.number || "0", 10) || 0,
-          prize: p.prize.trim(),
-        })),
+      /* Los apartados se estiran al arreglo plano que espera el API: cada
+         número lleva repetido el premio de su apartado, que es justo lo que
+         vuelve a agrupar la página del sorteo. */
+      prizedNumbers: prizedParsed
+        .filter((g) => g.row.prize.trim() !== "" && g.numbers.length > 0)
+        .flatMap((g) =>
+          g.numbers.map((n) => ({
+            number: parseInt(n, 10),
+            prize: g.row.prize.trim(),
+          }))
+        ),
       drawDateText: drawDateText.trim(),
       status,
       progressMode: progressMode as "AUTO" | "MANUAL",
@@ -296,6 +545,12 @@ export default function RaffleFormV2({
 
   async function save() {
     setError("");
+    /* Los apartados se revisan antes de salir a la red: el mensaje del
+       servidor sería mucho más seco que el nuestro. */
+    if (prizedError) {
+      setError(prizedError);
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch(
@@ -329,63 +584,66 @@ export default function RaffleFormV2({
       className="flex flex-col gap-5"
     >
       {/* Imagen principal */}
-      <div className="rounded-2xl border border-line bg-card p-4">
-        <p className={labelCls}>Imagen principal del premio</p>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            e.target.value = "";
-            if (f) uploadFile(f, (url) => setImageUrl(url));
-          }}
-          aria-label="Seleccionar imagen principal"
-        />
-        {imageUrl ? (
-          <div className="overflow-hidden rounded-xl border border-line">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="Imagen del sorteo" className="aspect-[4/3] w-full object-cover" />
-            <div className="grid grid-cols-2 gap-2 p-3">
-              <button
-                type="button"
-                onClick={() => fileRef.current?.click()}
-                disabled={uploading}
-                className={btnOutline}
-              >
-                <IconImage width={15} height={15} />
-                {uploading ? "Subiendo…" : "Cambiar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => setImageUrl(null)}
-                disabled={uploading}
-                className={btnOutline}
-              >
-                <IconTrash width={15} height={15} />
-                Quitar
-              </button>
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Imagen del sorteo</SectionTitle>
+        <div>
+          <p className={labelCls}>Imagen principal del premio</p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) uploadFile(f, (url) => setImageUrl(url));
+            }}
+            aria-label="Seleccionar imagen principal"
+          />
+          {imageUrl ? (
+            <div className="overflow-hidden rounded-xl border border-line">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={imageUrl} alt="Imagen del sorteo" className="aspect-[4/3] w-full object-cover" />
+              <div className="grid grid-cols-2 gap-2 p-3">
+                <button
+                  type="button"
+                  onClick={() => fileRef.current?.click()}
+                  disabled={uploading}
+                  className={btnOutline}
+                >
+                  <IconImage width={15} height={15} />
+                  {uploading ? "Subiendo…" : "Cambiar"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageUrl(null)}
+                  disabled={uploading}
+                  className={btnOutline}
+                >
+                  <IconTrash width={15} height={15} />
+                  Quitar
+                </button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading}
-            className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-well text-fg-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
-          >
-            <IconImage width={32} height={32} />
-            <span className="text-sm font-bold uppercase tracking-wide">
-              {uploading ? "Subiendo…" : "Subir imagen"}
-            </span>
-            <span className="text-xs">Desde la galería de tu celular</span>
-          </button>
-        )}
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-well text-fg-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
+            >
+              <IconImage width={32} height={32} />
+              <span className="text-sm font-bold uppercase tracking-wide">
+                {uploading ? "Subiendo…" : "Subir imagen"}
+              </span>
+              <span className="text-xs">Desde la galería de tu celular</span>
+            </button>
+          )}
+        </div>
 
         {/* Galería adicional */}
-        <div className="mt-3">
-          <p className="text-xs font-bold uppercase tracking-wide text-fg-faint">
+        <div>
+          <p className={labelCls}>
             Imágenes adicionales ({gallery.length}/4)
           </p>
           <input
@@ -401,7 +659,7 @@ export default function RaffleFormV2({
             }}
             aria-label="Agregar imagen a la galería"
           />
-          <div className="mt-2 grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {gallery.map((url) => (
               <div key={url} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -410,7 +668,8 @@ export default function RaffleFormV2({
                   type="button"
                   onClick={() => setGallery((g) => g.filter((u) => u !== url))}
                   aria-label="Quitar imagen"
-                  className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white"
+                  /* Igual que en los paquetes: aspa pequeña, área táctil de 44px. */
+                  className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-brand text-white after:absolute after:-inset-2.5 after:content-['']"
                 >
                   <IconX width={12} height={12} />
                 </button>
@@ -432,7 +691,8 @@ export default function RaffleFormV2({
       </div>
 
       {/* Información */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Información del sorteo</SectionTitle>
         <div>
           <label htmlFor="rf-title" className={labelCls}>Nombre del sorteo *</label>
           <input id="rf-title" type="text" required value={title} onChange={(e) => onTitleChange(e.target.value)} className={inputCls} placeholder="Ej: Gran Sorteo Moto 0 KM" maxLength={120} />
@@ -456,6 +716,21 @@ export default function RaffleFormV2({
           <label htmlFor="rf-prize" className={labelCls}>Premio *</label>
           <input id="rf-prize" type="text" required value={prize} onChange={(e) => setPrize(e.target.value)} className={inputCls} placeholder="Ej: Motocicleta 0 KM + $2.000.000" maxLength={160} />
         </div>
+        <SwitchRow
+          label="Mostrar el premio en la ficha"
+          checked={showPrize}
+          onToggle={() => setShowPrize((v) => !v)}
+          ariaLabel={
+            showPrize
+              ? "Dejar de mostrar el premio en la ficha del sorteo"
+              : "Mostrar el premio en la ficha del sorteo"
+          }
+          help={
+            showPrize
+              ? "En la página del sorteo aparecerá la fila «Premio» con este texto."
+              : "Apagado: el premio no se repite en la ficha, porque el nombre del sorteo ya lo dice. El dato sigue guardado y se usa en otras pantallas."
+          }
+        />
         <div>
           <label htmlFor="rf-desc" className={labelCls}>Descripción</label>
           <textarea id="rf-desc" value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputCls} min-h-24 py-3`} placeholder="Descripción comercial del sorteo" maxLength={2000} rows={3} />
@@ -463,18 +738,37 @@ export default function RaffleFormV2({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="rf-price" className={labelCls}>Precio por número *</label>
-            <input id="rf-price" type="text" inputMode="numeric" required value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} className={inputCls} placeholder="10000" />
-            <p className={helpCls}>{price ? formatCop(parseInt(price, 10) || 0) : ""}</p>
+            <input id="rf-price" type="text" inputMode="numeric" required value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} className={`${inputCls} tabular-nums`} placeholder="10000" />
+            {/* brand-light (no brand) para que el texto pequeño cumpla AA */}
+            <p className="mt-1.5 text-sm font-bold tabular-nums text-brand-light">
+              {price ? formatCop(parseInt(price, 10) || 0) : ""}
+            </p>
           </div>
           <div>
             <label htmlFor="rf-date" className={labelCls}>Fecha del sorteo</label>
             <input id="rf-date" type="text" value={drawDateText} onChange={(e) => setDrawDateText(e.target.value)} className={inputCls} placeholder="Ej: 30 de agosto" maxLength={120} />
           </div>
         </div>
+        <SwitchRow
+          label="Mostrar la fecha en la ficha"
+          checked={showDrawDate}
+          onToggle={() => setShowDrawDate((v) => !v)}
+          ariaLabel={
+            showDrawDate
+              ? "Dejar de mostrar la fecha en la ficha del sorteo"
+              : "Mostrar la fecha en la ficha del sorteo"
+          }
+          help={
+            showDrawDate
+              ? "En la página del sorteo aparecerá la fila «Fecha» con este texto."
+              : "Apagado: la ficha no muestra la fecha. Déjalo así cuando la fecha ya va en el nombre del sorteo o todavía no es firme. El dato sigue guardado."
+          }
+        />
       </div>
 
       {/* Números */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Números de la rifa</SectionTitle>
         <div>
           <p className={labelCls}>Cifras del número *</p>
           <div className="grid grid-cols-6 gap-1.5">
@@ -485,10 +779,8 @@ export default function RaffleFormV2({
                 onClick={() => applyDigits(d)}
                 disabled={numbersLocked}
                 aria-pressed={digits === d}
-                className={`min-h-11 rounded-lg text-sm font-bold tabular-nums ${
-                  digits === d
-                    ? "glow-brand-sm bg-brand text-white"
-                    : "border border-line bg-well text-fg-soft hover:border-brand disabled:opacity-40"
+                className={`min-h-11 rounded-xl text-sm font-bold tabular-nums ${
+                  digits === d ? chipBtnActive : chipBtnIdle
                 }`}
               >
                 {d}
@@ -504,17 +796,16 @@ export default function RaffleFormV2({
         </div>
         <div>
           <label htmlFor="rf-total" className={labelCls}>Cantidad total de números *</label>
-          <div className="mb-2 grid grid-cols-5 gap-1.5">
+          <div className="mb-2 grid grid-cols-3 gap-1.5 sm:grid-cols-5">
             {TOTAL_PRESETS.map((preset) => (
               <button
                 key={preset}
                 type="button"
                 onClick={() => applyTotal(String(preset))}
                 disabled={numbersLocked}
-                className={`min-h-10 rounded-lg text-[11px] font-bold tabular-nums ${
-                  totalInt === preset
-                    ? "glow-brand-sm bg-brand text-white"
-                    : "border border-line bg-well text-fg-soft hover:border-brand disabled:opacity-40"
+                aria-pressed={totalInt === preset}
+                className={`min-h-11 rounded-xl px-1 text-[11px] font-bold tabular-nums ${
+                  totalInt === preset ? chipBtnActive : chipBtnIdle
                 }`}
               >
                 {preset.toLocaleString("es-CO")}
@@ -528,7 +819,7 @@ export default function RaffleFormV2({
             required
             value={totalNumbers}
             onChange={(e) => applyTotal(e.target.value)}
-            className={inputCls}
+            className={`${inputCls} tabular-nums`}
             disabled={numbersLocked}
           />
           <p className={helpCls}>
@@ -543,31 +834,32 @@ export default function RaffleFormV2({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label htmlFor="rf-reserva" className={labelCls}>Minutos de reserva</label>
-            <input id="rf-reserva" type="text" inputMode="numeric" value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputCls} />
+            <input id="rf-reserva" type="text" inputMode="numeric" value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
             <p className={helpCls}>Tiempo para pagar antes de liberar.</p>
           </div>
           <div>
             <label htmlFor="rf-max" className={labelCls}>Máx. números por pedido</label>
-            <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputCls} />
+            <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
           </div>
         </div>
       </div>
 
       {/* Cómo compra el cliente */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Cómo compra el cliente</SectionTitle>
         <div>
           <p className={labelCls}>¿Cómo elige sus números el comprador?</p>
-          <div className="grid grid-cols-3 gap-2 rounded-xl border border-line bg-well p-1.5">
+          <div className="grid grid-cols-3 gap-1.5 rounded-2xl border border-line bg-well p-1.5">
             {SELECTION_MODES.map((m) => (
               <button
                 key={m.value}
                 type="button"
                 onClick={() => setSelectionMode(m.value)}
                 aria-pressed={selectionMode === m.value}
-                className={`min-h-11 rounded-lg px-1 text-[11px] font-bold uppercase tracking-wide ${
+                className={`min-h-11 rounded-xl px-1 text-[11px] font-bold uppercase tracking-[0.06em] transition-colors ${
                   selectionMode === m.value
                     ? "glow-brand-sm bg-brand text-white"
-                    : "text-fg-soft"
+                    : "text-fg-soft hover:text-fg"
                 }`}
               >
                 {m.label}
@@ -583,42 +875,21 @@ export default function RaffleFormV2({
           </p>
         </div>
 
-        <label className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-4 border-t border-line pt-4">
-          <span>
-            <span className="block text-sm font-semibold text-fg">
-              Cerrar la compra por WhatsApp
-            </span>
-            <span className={helpCls}>
-              {whatsappCheckout
-                ? "Al comprar, el cliente pasa directo a tu WhatsApp con sus números y el código del pedido."
-                : "Esta rifa no mostrará WhatsApp al cliente por ningún lado. El sistema le entrega los números y el comprobante."}
-            </span>
-          </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={whatsappCheckout}
-            aria-label={
-              whatsappCheckout
-                ? "Desactivar el cierre de compra por WhatsApp"
-                : "Activar el cierre de compra por WhatsApp"
-            }
-            onClick={() => setWhatsappCheckout((v) => !v)}
-            className="flex h-11 w-12 shrink-0 items-center justify-center"
-          >
-            <span
-              className={`relative block h-7 w-12 rounded-full transition-colors ${
-                whatsappCheckout ? "bg-brand" : "bg-line"
-              }`}
-            >
-              <span
-                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                  whatsappCheckout ? "left-6" : "left-1"
-                }`}
-              />
-            </span>
-          </button>
-        </label>
+        <SwitchRow
+          label="Cerrar la compra por WhatsApp"
+          checked={whatsappCheckout}
+          onToggle={() => setWhatsappCheckout((v) => !v)}
+          ariaLabel={
+            whatsappCheckout
+              ? "Desactivar el cierre de compra por WhatsApp"
+              : "Activar el cierre de compra por WhatsApp"
+          }
+          help={
+            whatsappCheckout
+              ? "Al comprar, el cliente pasa directo a tu WhatsApp con sus números y el código del pedido."
+              : "Esta rifa no mostrará WhatsApp al cliente por ningún lado. El sistema le entrega los números y el comprobante."
+          }
+        />
 
         <div>
           <p className={labelCls}>
@@ -633,7 +904,7 @@ export default function RaffleFormV2({
             {ticketPacks.map((q) => (
               <span
                 key={q}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-line-strong bg-well pl-4 pr-2 text-sm font-bold text-fg"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-brand/40 bg-brand/12 pl-4 pr-2 text-sm font-bold text-brand-light"
               >
                 <span className="tabular-nums">
                   {q === 1 ? "1 boleta" : `${q} boletas`}
@@ -644,7 +915,9 @@ export default function RaffleFormV2({
                     setTicketPacks((packs) => packs.filter((x) => x !== q))
                   }
                   aria-label={`Quitar paquete de ${q}`}
-                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white"
+                  /* El círculo se ve de 28px, pero el área que responde al dedo
+                     crece a 44px con el pseudo-elemento, sin mover el diseño. */
+                  className="relative flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white after:absolute after:-inset-2 after:content-['']"
                 >
                   <IconX width={12} height={12} />
                 </button>
@@ -685,17 +958,28 @@ export default function RaffleFormV2({
             Son los botones rápidos que verá el comprador (ej. 2 boletas, 5
             boletas)
           </p>
+          {packsOcultos.length > 0 ? (
+            <p
+              role="status"
+              className="mt-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn"
+            >
+              {packsOcultos.length === 1
+                ? `El paquete de ${packsOcultos[0].toLocaleString("es-CO")} no le aparecerá al comprador: pasa del máximo`
+                : `Los paquetes de ${packsOcultos
+                    .map((q) => q.toLocaleString("es-CO"))
+                    .join(", ")} no le aparecerán al comprador: pasan del máximo`}{" "}
+              de {maxPorPedido.toLocaleString("es-CO")} números por pedido. Sube
+              ese máximo o quita esos paquetes.
+            </p>
+          ) : null}
         </div>
       </div>
 
       {/* Premios adicionales */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
-        <div className="flex items-baseline justify-between">
-          <p className="text-sm font-semibold text-fg">Premios adicionales</p>
-          <span className="text-xs font-bold tabular-nums text-fg-faint">
-            {prizes.length}/{MAX_PRIZES}
-          </span>
-        </div>
+      <div className={`${cardCls} flex flex-col gap-3`}>
+        <SectionTitle aside={`${prizes.length}/${MAX_PRIZES}`}>
+          Premios adicionales
+        </SectionTitle>
         {prizes.length === 0 ? (
           <p className="text-sm text-fg-soft">
             Todavía no hay premios. Agrega el premio mayor y los anticipados.
@@ -704,10 +988,10 @@ export default function RaffleFormV2({
         {prizes.map((row, i) => (
           <div
             key={row.id}
-            className="flex flex-col gap-2 rounded-xl border border-line bg-well p-3"
+            className="flex flex-col gap-2.5 rounded-xl border border-line bg-well p-3"
           >
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wide text-fg-faint">
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-violet">
                 Premio {i + 1}
               </span>
               <button
@@ -724,7 +1008,7 @@ export default function RaffleFormV2({
             <div>
               <label
                 htmlFor={`rf-prize-label-${row.id}`}
-                className="mb-1 block text-xs font-semibold text-fg-soft"
+                className={subLabelCls}
               >
                 Etiqueta
               </label>
@@ -741,7 +1025,7 @@ export default function RaffleFormV2({
             <div>
               <label
                 htmlFor={`rf-prize-title-${row.id}`}
-                className="mb-1 block text-xs font-semibold text-fg-soft"
+                className={subLabelCls}
               >
                 Premio *
               </label>
@@ -759,7 +1043,7 @@ export default function RaffleFormV2({
               <div>
                 <label
                   htmlFor={`rf-prize-amount-${row.id}`}
-                  className="mb-1 block text-xs font-semibold text-fg-soft"
+                  className={subLabelCls}
                 >
                   Monto
                 </label>
@@ -776,7 +1060,7 @@ export default function RaffleFormV2({
               <div>
                 <label
                   htmlFor={`rf-prize-note-${row.id}`}
-                  className="mb-1 block text-xs font-semibold text-fg-soft"
+                  className={subLabelCls}
                 >
                   Nota
                 </label>
@@ -812,89 +1096,190 @@ export default function RaffleFormV2({
         </p>
       </div>
 
-      {/* Ticket premiado */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-line bg-card p-4">
-        <div className="flex items-baseline justify-between">
-          <p className="text-sm font-semibold text-fg">Ticket premiado</p>
-          <span className="text-xs font-bold tabular-nums text-fg-faint">
-            {prizedNumbers.length}/{MAX_PRIZED_NUMBERS}
-          </span>
-        </div>
-        {prizedNumbers.map((row, i) => (
-          <div key={row.id} className="flex items-start gap-2">
-            <div className="w-28 shrink-0">
-              <label
-                htmlFor={`rf-pn-number-${row.id}`}
-                className="mb-1 block text-xs font-semibold text-fg-soft"
-              >
-                Número
-              </label>
-              <input
-                id={`rf-pn-number-${row.id}`}
-                type="text"
-                inputMode="numeric"
-                value={row.number}
-                onChange={(e) =>
-                  updatePrizedNumber(row.id, {
-                    number: e.target.value.replace(/\D/g, "").slice(0, MAX_DIGITS),
-                  })
+      {/* Números premiados por apartados */}
+      <div className={`${cardCls} flex flex-col gap-3`}>
+        <SectionTitle aside={`${prizedTotal}/${MAX_PRIZED_NUMBERS}`}>
+          Números premiados
+        </SectionTitle>
+        <p className={helpCls}>
+          Cada apartado es una tarjeta en la página del sorteo: escribes el
+          premio una sola vez y debajo van todos sus números juntos. Es
+          opcional: si no agregas ningún apartado, esa sección no le aparece al
+          comprador.
+        </p>
+
+        {prizedGroups.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-line bg-well px-4 py-6 text-center text-sm text-fg-soft">
+            Todavía no hay apartados. Esta rifa no mostrará números premiados.
+          </p>
+        ) : null}
+
+        {prizedParsed.map(({ row, numbers, error: rowError }, i) => (
+          <div
+            key={row.id}
+            className="flex flex-col gap-2.5 rounded-xl border border-line bg-well p-3"
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-violet">
+                Apartado {i + 1}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setPrizedGroups((rows) => rows.filter((x) => x.id !== row.id))
                 }
-                className={`${inputCls} px-3 text-center font-mono tabular-nums`}
-                placeholder={"0".repeat(digits)}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <label
-                htmlFor={`rf-pn-prize-${row.id}`}
-                className="mb-1 block text-xs font-semibold text-fg-soft"
+                aria-label={`Quitar el apartado ${i + 1} completo`}
+                className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
               >
-                Premio
+                <IconTrash width={16} height={16} />
+              </button>
+            </div>
+            <div>
+              <label htmlFor={`rf-pg-prize-${row.id}`} className={subLabelCls}>
+                Premio de este apartado *
               </label>
               <input
-                id={`rf-pn-prize-${row.id}`}
+                id={`rf-pg-prize-${row.id}`}
                 type="text"
                 value={row.prize}
                 onChange={(e) =>
-                  updatePrizedNumber(row.id, { prize: e.target.value })
+                  updatePrizedGroup(row.id, { prize: e.target.value })
                 }
                 className={inputCls}
-                placeholder="Ej: 200.000 de una"
+                placeholder="Ej: $1.000.000"
                 maxLength={120}
               />
             </div>
-            <button
-              type="button"
-              onClick={() =>
-                setPrizedNumbers((rows) => rows.filter((x) => x.id !== row.id))
-              }
-              aria-label={`Quitar número premiado ${i + 1}`}
-              className="mt-5 flex min-h-12 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
-            >
-              <IconTrash width={16} height={16} />
-            </button>
+            <div>
+              <label
+                htmlFor={`rf-pg-numbers-${row.id}`}
+                className={subLabelCls}
+              >
+                Números de este apartado ({numbers.length})
+              </label>
+              <textarea
+                id={`rf-pg-numbers-${row.id}`}
+                value={row.numbers}
+                onChange={(e) =>
+                  updatePrizedGroup(row.id, { numbers: e.target.value })
+                }
+                aria-invalid={rowError ? true : undefined}
+                className={`${inputCls} min-h-24 py-3 font-mono text-sm tracking-wide tabular-nums`}
+                placeholder={prizedPlaceholder}
+                maxLength={2000}
+                rows={3}
+              />
+              <p className={helpCls}>
+                Escríbelos todos aquí, separados por comas, espacios o saltos de
+                línea.
+              </p>
+            </div>
+            {rowError ? (
+              <p role="alert" className={alertCls}>
+                {rowError}
+              </p>
+            ) : null}
+
+            {/* Vista previa: el mismo titular y las mismas fichas de la página
+                del sorteo, para que el dueño vea cómo le queda el apartado. */}
+            <div className="rounded-xl border border-line bg-bg2 p-3">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                Así lo verá el comprador
+              </p>
+              {numbers.length === 0 ? (
+                <p className="text-xs leading-relaxed text-fg-soft">
+                  Sin números, este apartado no aparece en la página del sorteo.
+                </p>
+              ) : (
+                <>
+                  <h3 className="flex items-start gap-2.5 font-display text-sm font-black uppercase leading-tight tracking-[0.12em] text-fg">
+                    <span
+                      aria-hidden="true"
+                      className="glow-brand-sm mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+                    />
+                    <span className="min-w-0">
+                      {numbers.length}{" "}
+                      {numbers.length === 1
+                        ? "número premiado"
+                        : "números premiados"}{" "}
+                      con {row.prize.trim() || "…"}
+                    </span>
+                  </h3>
+                  <div className="mt-3 flex flex-wrap gap-1.5">
+                    {numbers.map((n) => (
+                      <span
+                        key={n}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-well py-1.5 pl-2.5 pr-1.5 font-display text-sm font-bold tabular-nums tracking-wider text-brand-light ring-1 ring-brand/30"
+                      >
+                        {n}
+                        <button
+                          type="button"
+                          onClick={() => removeNumberFromGroup(row.id, n)}
+                          aria-label={`Quitar el número ${n} del apartado ${i + 1}`}
+                          /* Se ve de 20px, pero el área que responde al dedo
+                             llega a 44px con el pseudo-elemento. */
+                          className="relative flex h-5 w-5 items-center justify-center rounded-full bg-brand text-white after:absolute after:-inset-3 after:content-['']"
+                        >
+                          <IconX width={10} height={10} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+                    Toca la equis de un número para quitarlo del apartado.
+                  </p>
+                </>
+              )}
+            </div>
           </div>
         ))}
+
         <button
           type="button"
           onClick={() =>
-            setPrizedNumbers((rows) => [
+            setPrizedGroups((rows) => [
               ...rows,
-              { id: nextRowId(), number: "", prize: "" },
+              { id: nextRowId(), prize: "", numbers: "" },
             ])
           }
-          disabled={prizedNumbers.length >= MAX_PRIZED_NUMBERS}
+          disabled={prizedGroups.length >= MAX_PRIZED_GROUPS}
           className={btnOutline}
         >
           <IconPlus width={14} height={14} />
-          Agregar número premiado
+          Agregar apartado
         </button>
         <p className={helpCls}>
-          Si no quieres números premiados, deja la lista vacía
+          Puedes tener hasta {MAX_PRIZED_GROUPS} apartados y{" "}
+          {MAX_PRIZED_NUMBERS} números premiados en total.
         </p>
+
+        {prizedTotal > MAX_PRIZED_NUMBERS ? (
+          <p role="alert" className={alertCls}>
+            Tienes {prizedTotal} números premiados y el máximo son{" "}
+            {MAX_PRIZED_NUMBERS}. Quita {prizedTotal - MAX_PRIZED_NUMBERS}.
+          </p>
+        ) : null}
+
+        {prizedSinVenta.length > 0 ? (
+          <p
+            role="status"
+            className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn"
+          >
+            {prizedSinVenta.length === 1
+              ? `El número ${prizedSinVenta[0]} no se vende en esta rifa`
+              : `Estos números no se venden en esta rifa: ${prizedSinVenta
+                  .slice(0, 8)
+                  .join(", ")}${prizedSinVenta.length > 8 ? "…" : ""}`}{" "}
+            (van del {"0".repeat(digits)} al{" "}
+            {String(totalInt - 1).padStart(digits, "0")}), así que nadie podrá
+            comprarlos.
+          </p>
+        ) : null}
       </div>
 
       {/* Estado y progreso */}
-      <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Estado y publicación</SectionTitle>
         <div>
           <label htmlFor="rf-status" className={labelCls}>Estado</label>
           <select id="rf-status" value={status} onChange={(e) => setStatus(e.target.value as RaffleStatusV2)} className={inputCls}>
@@ -905,15 +1290,17 @@ export default function RaffleFormV2({
         </div>
         <div>
           <p className={labelCls}>Porcentaje de avance público</p>
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-well p-1.5">
+          <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-well p-1.5">
             {(["AUTO", "MANUAL"] as const).map((m) => (
               <button
                 key={m}
                 type="button"
                 onClick={() => setProgressMode(m)}
                 aria-pressed={progressMode === m}
-                className={`min-h-10 rounded-lg text-xs font-bold uppercase tracking-wide ${
-                  progressMode === m ? "glow-brand-sm bg-brand text-white" : "text-fg-soft"
+                className={`min-h-11 rounded-xl text-xs font-bold uppercase tracking-[0.08em] transition-colors ${
+                  progressMode === m
+                    ? "glow-brand-sm bg-brand text-white"
+                    : "text-fg-soft hover:text-fg"
                 }`}
               >
                 {m === "AUTO" ? "Automático" : "Manual"}
@@ -926,10 +1313,10 @@ export default function RaffleFormV2({
               solo el porcentaje.
             </p>
           ) : (
-            <div className="mt-3">
+            <div className="mt-3 rounded-xl border border-line bg-well px-4 py-3">
               <div className="flex items-baseline justify-between">
-                <span className="text-sm font-semibold text-fg">Porcentaje manual</span>
-                <span className="font-display text-xl font-black tabular-nums text-brand">{manualPct}%</span>
+                <span className={labelCls}>Porcentaje manual</span>
+                <span className="font-display text-2xl font-black tabular-nums text-brand">{manualPct}%</span>
               </div>
               <input
                 type="range"
@@ -946,7 +1333,7 @@ export default function RaffleFormV2({
         </div>
         <div>
           <label htmlFor="rf-order" className={labelCls}>Orden de aparición</label>
-          <input id="rf-order" type="text" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputCls} />
+          <input id="rf-order" type="text" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
           <p className={helpCls}>Menor número aparece primero.</p>
         </div>
         <div>
@@ -956,22 +1343,33 @@ export default function RaffleFormV2({
       </div>
 
       {error ? (
-        <p role="alert" className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error">
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
 
       <div className="grid grid-cols-2 gap-3">
         {mode === "edit" ? (
-          <Link href={`/sorteo/${initial!.slug}`} target="_blank" className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:border-brand hover:text-brand">
+          <Link
+            href={`/sorteo/${initial!.slug}`}
+            target="_blank"
+            className={`${btnOutline} min-h-13 px-3 text-[11px] sm:text-xs`}
+          >
             Vista previa
           </Link>
         ) : (
-          <Link href="/admin/rifas" className="inline-flex min-h-13 items-center justify-center rounded-xl border-2 border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg-soft transition-colors hover:border-brand hover:text-fg">
+          <Link
+            href="/admin/rifas"
+            className={`${btnOutline} min-h-13 px-3 text-[11px] sm:text-xs`}
+          >
             Cancelar
           </Link>
         )}
-        <button type="submit" disabled={saving || uploading} className={`${btnPrimary} min-h-13`}>
+        <button
+          type="submit"
+          disabled={saving || uploading}
+          className={`${btnPrimary} min-h-13 px-3 text-[11px] sm:text-sm`}
+        >
           {saving ? "Guardando…" : mode === "create" ? "Crear rifa" : "Guardar cambios"}
         </button>
       </div>

@@ -47,8 +47,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  // Nadie puede degradarse ni desactivarse a sí mismo.
-  if (id === auth.userId && (parsed.data.role || parsed.data.isActive === false)) {
+  const objetivo = await prisma.adminUser.findUnique({ where: { id } });
+  if (!objetivo) {
+    return NextResponse.json({ error: "El usuario no existe" }, { status: 404 });
+  }
+
+  // Nadie puede degradarse ni desactivarse a sí mismo. Ojo: el formulario
+  // manda siempre el rol, así que solo se bloquea cuando el rol CAMBIA de
+  // verdad; si no, nadie podría corregir su propio nombre o contraseña.
+  const cambiaRol = parsed.data.role != null && parsed.data.role !== objetivo.role;
+  if (id === auth.userId && (cambiaRol || parsed.data.isActive === false)) {
     return NextResponse.json(
       { error: "No puedes cambiar tu propio rol ni desactivarte" },
       { status: 409 }
@@ -61,11 +69,21 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     );
   }
 
-  const { password, ...rest } = parsed.data;
+  // El esquema es parcial, pero Zod rellena con su valor por defecto todo
+  // campo ausente: guardarlo tal cual reactivaría una cuenta desactivada al
+  // cambiarle cualquier otro dato. Solo se escribe lo que el panel mandó.
+  const enviado = (body ?? {}) as Record<string, unknown>;
+  const tiene = (campo: string) =>
+    Object.prototype.hasOwnProperty.call(enviado, campo);
+  const { password } = parsed.data;
+
   const user = await prisma.adminUser.update({
     where: { id },
     data: {
-      ...rest,
+      ...(tiene("email") ? { email: parsed.data.email } : {}),
+      ...(tiene("name") ? { name: parsed.data.name } : {}),
+      ...(tiene("role") ? { role: parsed.data.role } : {}),
+      ...(tiene("isActive") ? { isActive: parsed.data.isActive } : {}),
       ...(password ? { passwordHash: await bcrypt.hash(password, 12) } : {}),
     },
     select: { id: true, email: true, name: true, role: true, isActive: true },
@@ -77,7 +95,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     action: "user.update",
     entity: "AdminUser",
     entityId: id,
-    detail: { cambios: Object.keys(parsed.data) },
+    detail: { cambios: Object.keys(enviado) },
   });
 
   return NextResponse.json({ user });

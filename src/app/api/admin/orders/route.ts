@@ -1,10 +1,63 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { requireAdminApi } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { isOrderExpired } from "@/lib/engine/orders";
 import { formatNumbers } from "@/lib/numbers";
 
 export const runtime = "nodejs";
+
+/**
+ * Filtro por estado. "Pendiente" y "Expirada" se calculan igual que en la
+ * tarjeta del panel (isOrderExpired): una orden PENDING cuya reserva ya venció
+ * se ve como expirada, así que también tiene que FILTRARSE como expirada. Si
+ * no, el dueño abre "Pendientes" y le salen pedidos marcados "Expirada".
+ */
+function filtroDeEstado(
+  estado: string | null,
+  ahora: Date
+): Prisma.OrderWhereInput | null {
+  if (estado === "PENDING") {
+    return {
+      status: "PENDING",
+      OR: [{ reservedUntil: null }, { reservedUntil: { gte: ahora } }],
+    };
+  }
+  if (estado === "EXPIRED") {
+    return {
+      OR: [
+        { status: "EXPIRED" },
+        { status: "PENDING", reservedUntil: { lt: ahora } },
+      ],
+    };
+  }
+  if (estado === "PAID" || estado === "CANCELLED" || estado === "REJECTED") {
+    return { status: estado };
+  }
+  return null;
+}
+
+/**
+ * Búsqueda libre: código, nombre o teléfono.
+ *
+ * El teléfono SOLO se busca cuando lo tecleado parece un teléfono (puras
+ * cifras y separadores). Antes se buscaba siempre por las cifras sueltas del
+ * texto, así que un código como "8VEFBBVX" se reducía a "8" y devolvía todos
+ * los pedidos que tuvieran un 8 en el teléfono.
+ */
+function filtroDeBusqueda(search: string): Prisma.OrderWhereInput | null {
+  if (!search) return null;
+  const digitos = search.replace(/\D/g, "");
+  const pareceTelefono = digitos.length >= 3 && /^[\d\s+().-]+$/.test(search);
+  const opciones: Prisma.OrderWhereInput[] = [
+    { code: { contains: search.toUpperCase() } },
+    { participant: { name: { contains: search, mode: "insensitive" } } },
+  ];
+  if (pareceTelefono) {
+    opciones.push({ participant: { phone: { contains: digitos } } });
+  }
+  return { OR: opciones };
+}
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdminApi("orders.view");
@@ -17,21 +70,17 @@ export async function GET(req: NextRequest) {
   const raffleId = sp.get("raffleId");
   const search = (sp.get("q") ?? "").trim();
 
-  const where = {
-    ...(status && ["PENDING", "PAID", "EXPIRED", "CANCELLED", "REJECTED"].includes(status)
-      ? { status: status as "PENDING" | "PAID" | "EXPIRED" | "CANCELLED" | "REJECTED" }
-      : {}),
-    ...(raffleId ? { raffleId } : {}),
-    ...(search
-      ? {
-          OR: [
-            { code: { contains: search.toUpperCase() } },
-            { participant: { phone: { contains: search.replace(/\D/g, "") || search } } },
-            { participant: { name: { contains: search, mode: "insensitive" as const } } },
-          ],
-        }
-      : {}),
-  };
+  // Cada filtro es una condición independiente y se combinan con AND: así el
+  // OR del estado y el OR de la búsqueda no se pisan entre ellos.
+  const condiciones: Prisma.OrderWhereInput[] = [];
+  const porEstado = filtroDeEstado(status, new Date());
+  if (porEstado) condiciones.push(porEstado);
+  if (raffleId) condiciones.push({ raffleId });
+  const porBusqueda = filtroDeBusqueda(search);
+  if (porBusqueda) condiciones.push(porBusqueda);
+
+  const where: Prisma.OrderWhereInput =
+    condiciones.length > 0 ? { AND: condiciones } : {};
 
   const [total, orders] = await Promise.all([
     prisma.order.count({ where }),

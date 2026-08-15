@@ -24,6 +24,16 @@ type ParticipantRow = {
   totalSpent: number;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Casilla de cifra: pozo con el dato arriba y su etiqueta en mayúsculas. */
+const statBoxCls = "rounded-xl border border-line bg-well px-3 py-2.5";
+const statLabelCls =
+  "mt-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-fg-faint";
+
 export default function ParticipantsModule() {
   const [q, setQ] = useState("");
   const [query, setQuery] = useState("");
@@ -80,25 +90,29 @@ export default function ParticipantsModule() {
 
   return (
     <div className="flex flex-col gap-4">
-      <form onSubmit={submitSearch} className="flex gap-2">
+      <form
+        onSubmit={submitSearch}
+        className={`${cardCls} flex flex-col gap-2.5 sm:flex-row`}
+      >
         <input
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Nombre, teléfono o email"
           aria-label="Buscar participante"
-          className={inputCls}
+          className={`${inputCls} min-w-0`}
         />
-        <button type="submit" disabled={loading} className={`${btnPrimary} shrink-0`}>
+        <button
+          type="submit"
+          disabled={loading}
+          className={`${btnPrimary} shrink-0 px-5`}
+        >
           Buscar
         </button>
       </form>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
@@ -116,61 +130,51 @@ export default function ParticipantsModule() {
       ) : (
         <div className="flex flex-col gap-3">
           {items.map((p) => (
-            <article
-              key={p.id}
-              className="rounded-2xl border border-line bg-card p-4 shadow-card"
-            >
+            <article key={p.id} className={cardCls}>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="font-display text-base font-extrabold text-fg">
+                <h2 className="min-w-0 truncate font-display text-lg font-extrabold leading-tight text-fg">
                   {p.name}
                 </h2>
                 <a
                   href={`https://wa.me/${p.phone}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-semibold tabular-nums text-wa"
+                  className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-wa/45 bg-wa/12 px-3.5 font-mono text-sm font-bold tabular-nums text-wa transition-colors hover:bg-wa/20"
                 >
                   <IconWhatsApp width={16} height={16} />
                   {p.phone}
                 </a>
               </div>
-              <p className="text-xs text-fg-faint">
+              <p className="mt-1 truncate text-xs text-fg-faint">
                 {p.email ? `${p.email} · ` : ""}
                 Registrado {formatDate(p.createdAt)}
               </p>
 
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-xl bg-well px-3 py-2">
-                  <p className="text-sm font-bold tabular-nums text-fg">
+                <div className={statBoxCls}>
+                  <p className="font-display text-base font-extrabold tabular-nums text-fg">
                     {p.ordersCount.toLocaleString("es-CO")}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">
-                    Pedidos
-                  </p>
+                  <p className={statLabelCls}>Pedidos</p>
                 </div>
-                <div className="rounded-xl bg-well px-3 py-2">
-                  <p className="text-sm font-bold tabular-nums text-fg">
+                <div className={statBoxCls}>
+                  <p className="font-display text-base font-extrabold tabular-nums text-fg">
                     {p.paidOrders.toLocaleString("es-CO")}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">
-                    Pagados
-                  </p>
+                  <p className={statLabelCls}>Pagados</p>
                 </div>
-                <div className="rounded-xl bg-well px-3 py-2">
-                  <p className="text-sm font-bold tabular-nums text-fg">
+                <div className={statBoxCls}>
+                  <p className="font-display text-base font-extrabold tabular-nums text-brand-light">
                     {p.numbersBought.toLocaleString("es-CO")}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">
-                    Números
-                  </p>
+                  <p className={statLabelCls}>Números</p>
                 </div>
-                <div className="rounded-xl bg-well px-3 py-2">
-                  <p className="text-sm font-bold tabular-nums text-fg">
+                <div className={statBoxCls}>
+                  {/* brand-light (no brand) para que el texto pequeño cumpla AA */}
+                  <p className="font-display text-base font-extrabold tabular-nums text-brand-light">
                     {formatCop(p.totalSpent)}
                   </p>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-fg-faint">
-                    Total gastado
-                  </p>
+                  <p className={statLabelCls}>Total gastado</p>
                 </div>
               </div>
             </article>

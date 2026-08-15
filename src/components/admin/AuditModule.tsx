@@ -22,6 +22,12 @@ type AuditItem = {
   createdAt: string;
 };
 
+/* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
+const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
+/* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
+const alertCls =
+  "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+
 const ENTITY_OPTIONS = [
   { value: "", label: "Todas las entidades" },
   { value: "Raffle", label: "Rifas" },
@@ -98,7 +104,7 @@ export default function AuditModule() {
   return (
     <div className="flex flex-col gap-3">
       {/* Filtros */}
-      <div className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-card p-4 sm:grid-cols-2">
+      <div className={`${cardCls} grid grid-cols-1 gap-3 sm:grid-cols-2`}>
         <div>
           <label htmlFor="au-entity" className={labelCls}>
             Entidad
@@ -128,7 +134,7 @@ export default function AuditModule() {
             type="text"
             value={actionInput}
             onChange={(e) => setActionInput(e.target.value)}
-            className={inputCls}
+            className={`${inputCls} font-mono text-sm`}
             placeholder="Ej: order.confirm"
             maxLength={80}
           />
@@ -136,10 +142,7 @@ export default function AuditModule() {
       </div>
 
       {error ? (
-        <p
-          role="alert"
-          className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
-        >
+        <p role="alert" className={alertCls}>
           {error}
         </p>
       ) : null}
@@ -151,32 +154,31 @@ export default function AuditModule() {
       ) : (
         <>
           {items.map((item) => (
-            <article
-              key={item.id}
-              className="rounded-2xl border border-line bg-card p-3.5"
-            >
+            <article key={item.id} className={cardCls}>
               <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
-                <span className="text-xs tabular-nums text-fg-faint">
+                <span className="text-[11px] font-bold uppercase tracking-[0.1em] tabular-nums text-fg-faint">
                   {formatDate(item.createdAt)}
                 </span>
                 <span className="min-w-0 truncate text-xs text-fg-soft">
                   {item.actorEmail}{" "}
-                  <span className="text-[10px] uppercase tracking-wide text-fg-faint">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-brand-violet">
                     {roleLabel(item.actorRole)}
                   </span>
                 </span>
               </div>
-              <p className="mt-1.5 font-mono text-xs text-fg">{item.action}</p>
+              <p className="mt-2 break-all font-mono text-sm font-bold text-brand-light">
+                {item.action}
+              </p>
               <p className="mt-0.5 truncate text-xs text-fg-faint">
                 {item.entity}
                 {item.entityId ? ` · ${item.entityId}` : ""}
               </p>
               {item.detailJson && item.detailJson !== "{}" ? (
-                <details className="mt-1">
-                  <summary className="flex min-h-11 cursor-pointer items-center text-xs font-bold uppercase tracking-wide text-fg-soft">
+                <details className="mt-2">
+                  <summary className="flex min-h-11 cursor-pointer items-center text-[11px] font-bold uppercase tracking-[0.12em] text-fg-soft transition-colors hover:text-brand">
                     Detalle
                   </summary>
-                  <pre className="mt-1 overflow-x-auto rounded-lg bg-well p-2 text-[11px] text-fg-soft">
+                  <pre className="mt-1 overflow-x-auto rounded-xl border border-line bg-well p-3 text-[11px] leading-relaxed text-fg-soft">
                     {prettyDetail(item.detailJson)}
                   </pre>
                 </details>

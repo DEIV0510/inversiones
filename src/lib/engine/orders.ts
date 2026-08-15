@@ -1,8 +1,10 @@
 import { randomInt } from "node:crypto";
+import { after } from "next/server";
 import type { Order, Raffle } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
-import { validateSelection } from "@/lib/numbers";
+import { formatNumbers, validateSelection } from "@/lib/numbers";
+import { correoConfigurado, enviarBoletas, type BoletasCorreo } from "@/lib/email";
 import {
   ClaimConflictError,
   claimNumbers,
@@ -177,7 +179,13 @@ export async function confirmOrderPayment(params: {
   amount?: number;
   raw?: unknown;
 }): Promise<ConfirmResult> {
-  return prisma.$transaction(async (tx) => {
+  // Cola de correos del flujo automático. Se llena DENTRO de la transacción
+  // (que es donde están los datos) y se envía DESPUÉS de cerrarla: el envío
+  // nunca bloquea ni alarga la transacción, y un fallo del proveedor de
+  // correo no puede tumbar un pago ya cobrado.
+  const correosPendientes: BoletasCorreo[] = [];
+
+  const resultado = await prisma.$transaction(async (tx): Promise<ConfirmResult> => {
     // Bloqueo de fila por orden: serializa confirmaciones concurrentes de la
     // MISMA orden (webhook reintentado por la pasarela + confirmación manual).
     // Sin esto, la segunda transacción vería la orden como PENDING, no
@@ -187,7 +195,7 @@ export async function confirmOrderPayment(params: {
 
     const order = await tx.order.findUnique({
       where: { id: params.orderId },
-      include: { raffle: true },
+      include: { raffle: true, participant: true },
     });
     if (!order) return { ok: false, reason: "Orden no encontrada" };
 
@@ -360,8 +368,40 @@ export async function confirmOrderPayment(params: {
       });
     }
 
+    // Flujo automático: si el comprador dejó su correo, sus números le llegan
+    // por email. Solo en la transición real a PAGADA, nunca en los reintentos
+    // idempotentes (un webhook repetido no puede duplicar el correo).
+    const correo = order.participant.email?.trim();
+    if (correo && correoConfigurado()) {
+      correosPendientes.push({
+        para: correo,
+        nombre: order.participant.name,
+        codigo: order.code,
+        tituloRifa: order.raffle.title,
+        numeros: formatNumbers(numbers, order.raffle.digits),
+        total: order.total,
+      });
+    }
+
     return { ok: true, order: updated, alreadyPaid: false };
   });
+
+  // Envío fuera de la transacción y sin await: la respuesta al comprador no
+  // espera al proveedor de correo. after() deja que el envío termine aunque
+  // la respuesta ya se haya mandado (en serverless, un fetch suelto se corta);
+  // fuera de una petición (scripts, pruebas) se dispara y ya. enviarBoletas
+  // nunca lanza.
+  for (const datos of correosPendientes) {
+    try {
+      // Callback, no promesa: si after() no está disponible nada se ha
+      // enviado todavía y el respaldo no duplica el correo.
+      after(() => enviarBoletas(datos));
+    } catch {
+      void enviarBoletas(datos);
+    }
+  }
+
+  return resultado;
 }
 
 /**
