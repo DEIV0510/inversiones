@@ -31,10 +31,13 @@ export const metadata: Metadata = {
 
 export default async function PedidoPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ code: string }>;
+  searchParams: Promise<{ enviar?: string }>;
 }) {
   const { code } = await params;
+  const { enviar } = await searchParams;
 
   let order = await prisma.order.findUnique({
     where: { code },
@@ -113,6 +116,7 @@ export default async function PedidoPage({
       <Header
         whatsappNumber={settings.whatsapp_number}
         companyName={settings.company_name}
+        hideWhatsApp={!order.raffle.whatsappCheckout}
       />
       <main className="mx-auto w-full max-w-2xl px-4 pb-28 pt-20 sm:px-6 lg:pt-28">
         <OrderView
@@ -134,12 +138,16 @@ export default async function PedidoPage({
             companyName: settings.company_name,
             prizesWon,
           }}
-          whatsappUrl={whatsappUrl}
+          whatsappUrl={order.raffle.whatsappCheckout ? whatsappUrl : null}
           wompiUrl={wompiUrl}
+          autoEnviarWhatsApp={enviar === "1" && order.raffle.whatsappCheckout}
         />
       </main>
-      <Footer settings={settings} />
-      <BottomBar whatsappNumber={settings.whatsapp_number} />
+      <Footer settings={settings} hideWhatsApp={!order.raffle.whatsappCheckout} />
+      <BottomBar
+        whatsappNumber={settings.whatsapp_number}
+        hideWhatsApp={!order.raffle.whatsappCheckout}
+      />
     </>
   );
 }

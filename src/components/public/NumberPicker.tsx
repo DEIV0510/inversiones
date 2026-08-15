@@ -17,13 +17,6 @@ type SearchResult = {
 const inputCls =
   "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
 
-/** Cuántas columnas usan los botones de paquetes según cuántos haya. */
-const PACK_COLS: Record<number, string> = {
-  1: "grid-cols-2",
-  2: "grid-cols-2",
-  3: "grid-cols-3",
-};
-
 /**
  * Selección de números escalable: nunca se carga el universo completo.
  * Cuadrícula de sugerencias disponibles + buscador puntual + modo azar.
@@ -47,7 +40,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       (n) => Number.isFinite(n) && n >= 1 && n <= raffle.maxNumbersPerOrder
     )
     .sort((a, b) => a - b)
-    .slice(0, 6);
+    .slice(0, 12);
 
   const [tab, setTab] = useState<"elegir" | "azar">(
     onlyRandom ? "azar" : "elegir"
@@ -80,7 +73,8 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const loadSuggestions = useCallback(async () => {
     // En modo "solo al azar" nunca se muestran sugerencias: no se pide nada.
     if (onlyRandom) return;
-    setLoadingSuggestions(true);
+    // El estado ya arranca en "cargando" y quien recarga a mano lo vuelve a
+    // encender; aquí no se toca para no renderizar de más al montar.
     try {
       const res = await fetch(
         `/api/public/raffles/${raffle.slug}/suggestions?count=24`,
@@ -96,7 +90,16 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   }, [raffle.slug, onlyRandom]);
 
   useEffect(() => {
-    loadSuggestions();
+    // La primera carga se pide fuera del render: así el estado solo cambia
+    // cuando llega la respuesta, sin encadenar renders al montar.
+    let vivo = true;
+    (async () => {
+      await Promise.resolve();
+      if (vivo) await loadSuggestions();
+    })();
+    return () => {
+      vivo = false;
+    };
   }, [loadSuggestions]);
 
   function toggle(value: number, label: string) {
@@ -182,6 +185,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           });
           setCheckoutOpen(false);
           setSearchResult(null);
+          setLoadingSuggestions(true);
           loadSuggestions();
           setFormError("");
           setNotice(
@@ -194,7 +198,13 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         setFormError(data.error || "No fue posible crear tu pedido");
         return;
       }
-      router.push(`/pedido/${data.code}`);
+      // Si la rifa cierra por WhatsApp, el comprador pasa derecho a la
+      // conversación con sus números y su código.
+      router.push(
+        raffle.whatsappCheckout
+          ? `/pedido/${data.code}?enviar=1`
+          : `/pedido/${data.code}`
+      );
     } catch {
       setFormError("Error de conexión. Intenta de nuevo.");
     } finally {
@@ -228,13 +238,14 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         </div>
       ) : null}
 
-      {/* Tabs: solo cuando la rifa permite las dos formas de elegir */}
+      {/* Cuando la rifa permite las dos formas, el cliente NUNCA ve las
+          palabras "manual" ni "aleatorio": solo dos accesos claros. */}
       {showTabs ? (
         <div className="grid grid-cols-2 gap-2 rounded-2xl border border-line bg-card p-2">
           {(
             [
-              ["elegir", "Elegir mis números"],
-              ["azar", "Al azar"],
+              ["azar", "Compra rápida"],
+              ["elegir", "Escoger mis números"],
             ] as const
           ).map(([key, label]) => (
             <button
@@ -329,7 +340,10 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               </p>
               <button
                 type="button"
-                onClick={loadSuggestions}
+                onClick={() => {
+                  setLoadingSuggestions(true);
+                  loadSuggestions();
+                }}
                 disabled={loadingSuggestions}
                 className="min-h-10 rounded-lg px-3 text-xs font-bold uppercase tracking-wide text-brand hover:bg-well disabled:opacity-50"
               >
@@ -378,62 +392,68 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           </div>
         </div>
       ) : (
-        <div
-          className={`rounded-2xl border border-line bg-card p-5 ${showTabs ? "mt-4" : ""}`}
-        >
-          <p className="text-sm font-semibold text-fg">
-            ¿Cuántos números quieres? El sistema los elige entre los
-            disponibles.
-          </p>
-          <div className="mt-4 flex items-center justify-center gap-4">
-            <button
-              type="button"
-              onClick={() => setRandomQty((q) => Math.max(1, q - 1))}
-              aria-label="Menos números"
-              className="flex h-12 w-12 items-center justify-center rounded-xl border border-line-strong text-xl font-black text-fg hover:border-brand"
-            >
-              −
-            </button>
-            <span className="min-w-16 text-center font-display text-4xl font-black tabular-nums text-fg">
-              {randomQty}
-            </span>
-            <button
-              type="button"
-              onClick={() =>
-                setRandomQty((q) => Math.min(raffle.maxNumbersPerOrder, q + 1))
-              }
-              aria-label="Más números"
-              className="flex h-12 w-12 items-center justify-center rounded-xl border border-line-strong text-xl font-black text-fg hover:border-brand"
-            >
-              +
-            </button>
-          </div>
+        <div className={showTabs ? "mt-4" : ""}>
+          {/* Paquetes: la forma principal de comprar. Botones anchos, uno
+              debajo del otro, con la cantidad y su precio total. */}
           {packs.length > 0 ? (
             <>
-              <p className="mt-4 text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-                Paquetes de boletas
+              <p className="mb-2.5 text-center font-display text-lg font-black uppercase tracking-wide text-fg">
+                Adquiérelos
               </p>
-              <div
-                className={`mt-2 grid gap-2 ${PACK_COLS[packs.length] ?? "grid-cols-4"}`}
-              >
-                {packs.map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setRandomQty(n)}
-                    aria-pressed={randomQty === n}
-                    className={`min-h-11 rounded-xl text-sm font-bold tabular-nums ${
-                      randomQty === n
-                        ? "glow-red-sm bg-brand text-white"
-                        : "border border-line bg-well text-fg-soft hover:border-brand"
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-2.5">
+                {packs.map((n) => {
+                  const activo = randomQty === n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setRandomQty(n)}
+                      aria-pressed={activo}
+                      className={`flex min-h-14 w-full items-center justify-center gap-2.5 rounded-xl px-4 text-center font-bold text-white transition-all active:scale-[0.99] ${
+                        activo
+                          ? "glow-red bg-brand ring-2 ring-white/70"
+                          : "bg-brand hover:bg-brand-dark"
+                      }`}
+                    >
+                      <IconTicket width={20} height={20} className="shrink-0" />
+                      <span className="text-base tabular-nums sm:text-lg">
+                        {n} {n === 1 ? "Número" : "Números"}{" "}
+                        {formatCop(n * raffle.pricePerNumber)}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </>
           ) : null}
+
+          {/* Cantidad libre, por si quiere una distinta a los paquetes. */}
+          <div className="mt-2.5 flex items-center justify-between gap-3 rounded-2xl border border-line bg-card px-4 py-3">
+            <span className="text-sm font-semibold text-fg">Otra cantidad</span>
+            <span className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setRandomQty((q) => Math.max(1, q - 1))}
+                aria-label="Menos boletas"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-line-strong text-xl font-black text-fg hover:border-brand"
+              >
+                −
+              </button>
+              <span className="min-w-10 text-center font-display text-2xl font-black tabular-nums text-fg">
+                {randomQty}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setRandomQty((q) => Math.min(raffle.maxNumbersPerOrder, q + 1))
+                }
+                aria-label="Más boletas"
+                className="flex h-11 w-11 items-center justify-center rounded-xl border border-line-strong text-xl font-black text-fg hover:border-brand"
+              >
+                +
+              </button>
+            </span>
+          </div>
         </div>
       )}
 

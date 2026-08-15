@@ -19,9 +19,15 @@ const NAV_LINKS = [
 type Props = {
   whatsappNumber: string;
   companyName: string;
+  /** Rifas configuradas sin WhatsApp: no se le ofrece al comprador. */
+  hideWhatsApp?: boolean;
 };
 
-export default function Header({ whatsappNumber, companyName }: Props) {
+export default function Header({
+  whatsappNumber,
+  companyName,
+  hideWhatsApp,
+}: Props) {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -96,15 +102,17 @@ export default function Header({ whatsappNumber, companyName }: Props) {
             <IconTicket width={17} height={17} className="text-brand" />
             Mis boletas
           </Link>
-          <a
-            href={waGeneral(whatsappNumber)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glow-red-sm hidden min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark lg:inline-flex"
-          >
-            <IconWhatsApp width={16} height={16} />
-            Participar
-          </a>
+          {hideWhatsApp ? null : (
+            <a
+              href={waGeneral(whatsappNumber)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glow-red-sm hidden min-h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-full bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark lg:inline-flex"
+            >
+              <IconWhatsApp width={16} height={16} />
+              Participar
+            </a>
+          )}
           <button
             type="button"
             onClick={() => setOpen((v) => !v)}
@@ -137,16 +145,18 @@ export default function Header({ whatsappNumber, companyName }: Props) {
               {link.label}
             </Link>
           ))}
-          <a
-            href={waGeneral(whatsappNumber)}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => setOpen(false)}
-            className="glow-red-sm mt-2 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
-          >
-            <IconWhatsApp width={18} height={18} />
-            Quiero participar
-          </a>
+          {hideWhatsApp ? null : (
+            <a
+              href={waGeneral(whatsappNumber)}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setOpen(false)}
+              className="glow-red-sm mt-2 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
+            >
+              <IconWhatsApp width={18} height={18} />
+              Quiero participar
+            </a>
+          )}
         </nav>
       </div>
     </header>

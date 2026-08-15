@@ -147,12 +147,12 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       Hablar por WhatsApp
                     </a>
                   )}
-                  <a
+                  <Link
                     href="/#sorteos"
                     className="inline-flex min-h-12 items-center justify-center rounded-xl border border-line-strong px-8 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:border-brand hover:text-brand sm:min-h-14"
                   >
                     Ver todos los sorteos
-                  </a>
+                  </Link>
                 </div>
               </Reveal>
             </div>

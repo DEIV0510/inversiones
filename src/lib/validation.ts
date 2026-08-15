@@ -56,9 +56,10 @@ export const raffleSchema = z.object({
     .max(7, "Máximo 7 cifras")
     .optional(),
   selectionMode: z.enum(["MANUAL", "RANDOM", "BOTH"]).default("BOTH"),
+  whatsappCheckout: z.boolean().default(true),
   ticketPacks: z
-    .array(z.number().int().min(1).max(500))
-    .max(6, "Máximo 6 paquetes")
+    .array(z.number().int().min(1).max(5000))
+    .max(12, "Máximo 12 paquetes")
     .default([1, 2, 5, 10]),
   prizes: z
     .array(
@@ -78,7 +79,7 @@ export const raffleSchema = z.object({
         prize: z.string().trim().min(1, "Escribe el premio").max(120),
       })
     )
-    .max(50, "Máximo 50 números premiados")
+    .max(200, "Máximo 200 números premiados")
     .default([]),
   drawDateText: z.string().trim().max(120).default(""),
   drawsAt: z.string().datetime().nullable().optional(),
@@ -86,7 +87,7 @@ export const raffleSchema = z.object({
   progressMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   manualProgressPct: z.number().int().min(0).max(100).default(0),
   reservationMinutes: z.number().int().min(3).max(1440).default(10),
-  maxNumbersPerOrder: z.number().int().min(1).max(500).default(20),
+  maxNumbersPerOrder: z.number().int().min(1).max(5000).default(20),
   terms: z.string().trim().max(5000).default(""),
   displayOrder: z.number().int().min(0).max(9999).default(0),
 });
@@ -105,8 +106,10 @@ export const createOrderSchema = z
     email: z
       .union([z.literal(""), z.string().trim().email("Correo no válido").max(200)])
       .optional(),
-    numbers: z.array(z.number().int().min(0).max(9_999_999)).max(500).optional(),
-    randomCount: z.number().int().min(1).max(500).optional(),
+    // El tope real lo impone maxNumbersPerOrder de cada rifa; aquí solo
+    // ponemos el techo absoluto para no aceptar cargas absurdas.
+    numbers: z.array(z.number().int().min(0).max(9_999_999)).max(5000).optional(),
+    randomCount: z.number().int().min(1).max(5000).optional(),
   })
   .refine(
     (v) => (v.numbers && v.numbers.length > 0) || (v.randomCount ?? 0) > 0,

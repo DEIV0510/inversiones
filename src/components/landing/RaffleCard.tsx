@@ -101,7 +101,7 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
               Participar
               <IconArrowRight width={17} height={17} />
             </Link>
-          ) : isComing ? (
+          ) : isComing && raffle.whatsappCheckout ? (
             <a
               href={waConsult(whatsappNumber, raffle.title)}
               target="_blank"

@@ -6,7 +6,7 @@ import BottomBar from "@/components/landing/BottomBar";
 import ProgressBar from "@/components/landing/ProgressBar";
 import NumberPicker from "@/components/public/NumberPicker";
 import { formatCop } from "@/lib/format";
-import { getPublicRaffleBySlug } from "@/lib/public";
+import { getPrizedGroups, getPublicRaffleBySlug } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { waConsult } from "@/lib/whatsapp";
@@ -50,12 +50,15 @@ export default async function SorteoPage({
   if (!raffle) notFound();
 
   const meta = statusMetaV2(raffle.status);
+  // Números premiados publicados, agrupados por premio.
+  const prizedGroups = await getPrizedGroups(raffle.id, raffle.digits);
 
   return (
     <>
       <Header
         whatsappNumber={settings.whatsapp_number}
         companyName={settings.company_name}
+        hideWhatsApp={!raffle.whatsappCheckout}
       />
       <main className="relative mx-auto w-full max-w-3xl px-4 pb-40 pt-20 sm:px-6 lg:pt-28">
         <div className="dot-grid pointer-events-none absolute inset-0" aria-hidden="true" />
@@ -193,6 +196,38 @@ export default async function SorteoPage({
 
           <ProgressBar pct={raffle.progressPct} className="mt-4" />
 
+          {/* Números premiados: se publican para que la gente los busque. */}
+          {prizedGroups.length > 0 ? (
+            <section className="mt-6 flex flex-col gap-4">
+              {prizedGroups.map((grupo) => (
+                <div
+                  key={grupo.prize}
+                  className="rounded-2xl border border-line bg-card p-4"
+                >
+                  <h2 className="text-center font-display text-base font-black uppercase leading-tight text-fg sm:text-lg">
+                    {grupo.numbers.length}{" "}
+                    {grupo.numbers.length === 1 ? "número premiado" : "números premiados"}{" "}
+                    con {grupo.prize}
+                  </h2>
+                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                    {grupo.numbers.map((n) => (
+                      <span
+                        key={n}
+                        className="rounded-md bg-well px-2.5 py-1.5 font-display text-sm font-bold tracking-wider text-brand ring-1 ring-brand/30"
+                      >
+                        {n}
+                      </span>
+                    ))}
+                  </div>
+                  <p className="mt-2.5 text-center text-xs text-fg-soft">
+                    Si compras uno de estos números, el premio es tuyo al
+                    instante.
+                  </p>
+                </div>
+              ))}
+            </section>
+          ) : null}
+
           {/* Selección de números */}
           {raffle.status === "ACTIVE" ? (
             <NumberPicker raffle={raffle} />
@@ -205,15 +240,17 @@ export default async function SorteoPage({
                     ? "Boletas agotadas"
                     : "Sorteo finalizado"}
               </p>
-              <a
-                href={waConsult(settings.whatsapp_number, raffle.title)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="glow-red-sm mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
-              >
-                <IconWhatsApp width={18} height={18} />
-                Consultar por WhatsApp
-              </a>
+              {raffle.whatsappCheckout ? (
+                <a
+                  href={waConsult(settings.whatsapp_number, raffle.title)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="glow-red-sm mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+                >
+                  <IconWhatsApp width={18} height={18} />
+                  Consultar por WhatsApp
+                </a>
+              ) : null}
             </div>
           )}
 
@@ -229,8 +266,12 @@ export default async function SorteoPage({
           ) : null}
         </div>
       </main>
-      <Footer settings={settings} />
-      <BottomBar whatsappNumber={settings.whatsapp_number} />
+      <Footer settings={settings} hideWhatsApp={!raffle.whatsappCheckout} />
+      {/* Si esta rifa no cierra por WhatsApp, no se le muestra al cliente. */}
+      <BottomBar
+        whatsappNumber={settings.whatsapp_number}
+        hideWhatsApp={!raffle.whatsappCheckout}
+      />
     </>
   );
 }

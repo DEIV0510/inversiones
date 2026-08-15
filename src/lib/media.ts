@@ -1,13 +1,13 @@
-import { randomBytes } from "node:crypto";
+﻿import { randomBytes } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Almacenamiento de imágenes con dos backends:
- * - Vercel Blob cuando existe BLOB_READ_WRITE_TOKEN (producción en Vercel).
+ * Almacenamiento de imÃ¡genes con dos backends:
+ * - Vercel Blob cuando existe BLOB_READ_WRITE_TOKEN (producciÃ³n en Vercel).
  * - Disco local en public/uploads como respaldo (desarrollo/VPS).
  */
-function useBlob(): boolean {
+function usaBlob(): boolean {
   return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
@@ -23,11 +23,11 @@ export function isBlobUrl(url: string): boolean {
   }
 }
 
-/** Guarda una imagen ya optimizada (webp) y devuelve su URL pública. */
+/** Guarda una imagen ya optimizada (webp) y devuelve su URL pÃºblica. */
 export async function saveImage(buffer: Buffer): Promise<string> {
   const fileName = `up-${Date.now()}-${randomBytes(4).toString("hex")}.webp`;
 
-  if (useBlob()) {
+  if (usaBlob()) {
     const { put } = await import("@vercel/blob");
     const blob = await put(`uploads/${fileName}`, buffer, {
       access: "public",
@@ -42,12 +42,12 @@ export async function saveImage(buffer: Buffer): Promise<string> {
   return `/uploads/${fileName}`;
 }
 
-/** Elimina una imagen subida (Blob o disco). Nunca lanza: no es crítico. */
+/** Elimina una imagen subida (Blob o disco). Nunca lanza: no es crÃ­tico. */
 export async function deleteImage(url: string | null): Promise<void> {
   if (!url) return;
   try {
     if (isBlobUrl(url)) {
-      if (!useBlob()) return;
+      if (!usaBlob()) return;
       const { del } = await import("@vercel/blob");
       await del(url);
       return;

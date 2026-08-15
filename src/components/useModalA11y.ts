@@ -14,7 +14,11 @@ const FOCUSABLE =
 export function useModalA11y(open: boolean, onClose: () => void) {
   const panelRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
+  // El ref se sincroniza en un efecto: tocarlo durante el render rompe las
+  // reglas de React y el modo estricto.
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (!open) return;

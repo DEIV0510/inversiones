@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -31,6 +31,7 @@ export type RaffleFormInitial = {
   totalNumbers: number;
   digits: number;
   selectionMode: string;
+  whatsappCheckout: boolean;
   ticketPacks: number[];
   prizes: RafflePrizeInitial[];
   prizedNumbers: RafflePrizedNumberInitial[];
@@ -50,7 +51,7 @@ const DIGIT_PRESETS = [2, 3, 4, 5, 6, 7];
 const MIN_DIGITS = 2;
 const MAX_DIGITS = 7;
 const DEFAULT_PACKS = [1, 2, 5, 10];
-const MAX_PACKS = 6;
+const MAX_PACKS = 12;
 const MAX_PRIZES = 12;
 const MAX_PRIZED_NUMBERS = 50;
 
@@ -74,9 +75,9 @@ type PrizedNumberRow = { id: string; number: string; prize: string };
 
 /**
  * Ids solo para las keys de React y los `htmlFor` (no se guardan ni se
- * envían). Las filas iniciales usan su posición para que el servidor y el
+ * envÃ­an). Las filas iniciales usan su posiciÃ³n para que el servidor y el
  * navegador generen exactamente los mismos ids; las que agrega el usuario
- * (ya en el navegador) usan un contador que no afecta la hidratación.
+ * (ya en el navegador) usan un contador que no afecta la hidrataciÃ³n.
  */
 let addedRowSeq = 0;
 function nextRowId(): string {
@@ -84,7 +85,7 @@ function nextRowId(): string {
   return `nueva-${addedRowSeq}`;
 }
 
-/** Cifras mínimas que necesita una cantidad total de números. */
+/** Cifras mÃ­nimas que necesita una cantidad total de nÃºmeros. */
 function neededDigits(total: number): number {
   if (total <= 0) return MIN_DIGITS;
   return Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, digitsForTotal(total)));
@@ -124,6 +125,9 @@ export default function RaffleFormV2({
     SELECTION_MODES.some((m) => m.value === initial?.selectionMode)
       ? (initial!.selectionMode as SelectionModeValue)
       : "BOTH"
+  );
+  const [whatsappCheckout, setWhatsappCheckout] = useState(
+    initial?.whatsappCheckout ?? true
   );
   const [ticketPacks, setTicketPacks] = useState<number[]>(() =>
     initial?.ticketPacks?.length ? [...initial.ticketPacks] : [...DEFAULT_PACKS]
@@ -184,7 +188,7 @@ export default function RaffleFormV2({
     if (cap < totalInt) {
       setTotalNumbers(String(cap));
       setDigitsNote(
-        `Bajamos la cantidad a ${cap.toLocaleString("es-CO")} números: es todo lo que cabe en ${next} cifras.`
+        `Bajamos la cantidad a ${cap.toLocaleString("es-CO")} nÃºmeros: es todo lo que cabe en ${next} cifras.`
       );
     } else {
       setDigitsNote("");
@@ -200,7 +204,7 @@ export default function RaffleFormV2({
     if (value > 0 && need > digits) {
       setDigits(need);
       setDigitsNote(
-        `Subimos a ${need} cifras para que quepan ${value.toLocaleString("es-CO")} números.`
+        `Subimos a ${need} cifras para que quepan ${value.toLocaleString("es-CO")} nÃºmeros.`
       );
     } else {
       setDigitsNote("");
@@ -209,7 +213,7 @@ export default function RaffleFormV2({
 
   function addPack() {
     const value = parseInt(packDraft || "0", 10) || 0;
-    if (value < 1 || value > 500) return;
+    if (value < 1 || value > 5000) return;
     setPackDraft("");
     if (ticketPacks.length >= MAX_PACKS || ticketPacks.includes(value)) return;
     setTicketPacks([...ticketPacks, value].sort((a, b) => a - b));
@@ -242,7 +246,7 @@ export default function RaffleFormV2({
       }
       onDone(data.url);
     } catch {
-      setError("Error de conexión al subir la imagen");
+      setError("Error de conexiÃ³n al subir la imagen");
     } finally {
       setUploading(false);
     }
@@ -260,6 +264,7 @@ export default function RaffleFormV2({
       totalNumbers: totalInt,
       digits,
       selectionMode,
+      whatsappCheckout,
       ticketPacks,
       prizes: prizes
         .filter(
@@ -309,7 +314,7 @@ export default function RaffleFormV2({
       router.push("/admin/rifas");
       router.refresh();
     } catch {
-      setError("Error de conexión. Intenta de nuevo.");
+      setError("Error de conexiÃ³n. Intenta de nuevo.");
     } finally {
       setSaving(false);
     }
@@ -350,7 +355,7 @@ export default function RaffleFormV2({
                 className={btnOutline}
               >
                 <IconImage width={15} height={15} />
-                {uploading ? "Subiendo…" : "Cambiar"}
+                {uploading ? "Subiendoâ€¦" : "Cambiar"}
               </button>
               <button
                 type="button"
@@ -372,16 +377,16 @@ export default function RaffleFormV2({
           >
             <IconImage width={32} height={32} />
             <span className="text-sm font-bold uppercase tracking-wide">
-              {uploading ? "Subiendo…" : "Subir imagen"}
+              {uploading ? "Subiendoâ€¦" : "Subir imagen"}
             </span>
-            <span className="text-xs">Desde la galería de tu celular</span>
+            <span className="text-xs">Desde la galerÃ­a de tu celular</span>
           </button>
         )}
 
-        {/* Galería adicional */}
+        {/* GalerÃ­a adicional */}
         <div className="mt-3">
           <p className="text-xs font-bold uppercase tracking-wide text-fg-faint">
-            Imágenes adicionales ({gallery.length}/4)
+            ImÃ¡genes adicionales ({gallery.length}/4)
           </p>
           <input
             ref={galleryRef}
@@ -394,7 +399,7 @@ export default function RaffleFormV2({
               if (f && gallery.length < 4)
                 uploadFile(f, (url) => setGallery((g) => [...g, url]));
             }}
-            aria-label="Agregar imagen a la galería"
+            aria-label="Agregar imagen a la galerÃ­a"
           />
           <div className="mt-2 grid grid-cols-4 gap-2">
             {gallery.map((url) => (
@@ -426,7 +431,7 @@ export default function RaffleFormV2({
         </div>
       </div>
 
-      {/* Información */}
+      {/* InformaciÃ³n */}
       <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
         <div>
           <label htmlFor="rf-title" className={labelCls}>Nombre del sorteo *</label>
@@ -445,19 +450,19 @@ export default function RaffleFormV2({
             className={`${inputCls} font-mono text-sm`}
             placeholder="gran-sorteo-moto"
           />
-          <p className={helpCls}>La página será /sorteo/{slug || "…"}</p>
+          <p className={helpCls}>La pÃ¡gina serÃ¡ /sorteo/{slug || "â€¦"}</p>
         </div>
         <div>
           <label htmlFor="rf-prize" className={labelCls}>Premio *</label>
           <input id="rf-prize" type="text" required value={prize} onChange={(e) => setPrize(e.target.value)} className={inputCls} placeholder="Ej: Motocicleta 0 KM + $2.000.000" maxLength={160} />
         </div>
         <div>
-          <label htmlFor="rf-desc" className={labelCls}>Descripción</label>
-          <textarea id="rf-desc" value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputCls} min-h-24 py-3`} placeholder="Descripción comercial del sorteo" maxLength={2000} rows={3} />
+          <label htmlFor="rf-desc" className={labelCls}>DescripciÃ³n</label>
+          <textarea id="rf-desc" value={description} onChange={(e) => setDescription(e.target.value)} className={`${inputCls} min-h-24 py-3`} placeholder="DescripciÃ³n comercial del sorteo" maxLength={2000} rows={3} />
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label htmlFor="rf-price" className={labelCls}>Precio por número *</label>
+            <label htmlFor="rf-price" className={labelCls}>Precio por nÃºmero *</label>
             <input id="rf-price" type="text" inputMode="numeric" required value={price} onChange={(e) => setPrice(e.target.value.replace(/\D/g, ""))} className={inputCls} placeholder="10000" />
             <p className={helpCls}>{price ? formatCop(parseInt(price, 10) || 0) : ""}</p>
           </div>
@@ -468,10 +473,10 @@ export default function RaffleFormV2({
         </div>
       </div>
 
-      {/* Números */}
+      {/* NÃºmeros */}
       <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
         <div>
-          <p className={labelCls}>Cifras del número *</p>
+          <p className={labelCls}>Cifras del nÃºmero *</p>
           <div className="grid grid-cols-6 gap-1.5">
             {DIGIT_PRESETS.map((d) => (
               <button
@@ -491,14 +496,14 @@ export default function RaffleFormV2({
             ))}
           </div>
           <p className={helpCls}>
-            Con {digits} cifras los números van de {"0".repeat(digits)} a{" "}
+            Con {digits} cifras los nÃºmeros van de {"0".repeat(digits)} a{" "}
             {"9".repeat(digits)} ({capacity.toLocaleString("es-CO")} posibles).
             {digitsNote ? <span className="text-fg"> {digitsNote}</span> : null}
-            {numbersLocked ? " · Con pedidos existentes no se puede cambiar." : ""}
+            {numbersLocked ? " Â· Con pedidos existentes no se puede cambiar." : ""}
           </p>
         </div>
         <div>
-          <label htmlFor="rf-total" className={labelCls}>Cantidad total de números *</label>
+          <label htmlFor="rf-total" className={labelCls}>Cantidad total de nÃºmeros *</label>
           <div className="mb-2 grid grid-cols-5 gap-1.5">
             {TOTAL_PRESETS.map((preset) => (
               <button
@@ -531,7 +536,7 @@ export default function RaffleFormV2({
               ? `Se venden del ${"0".repeat(digits)} al ${String(totalInt - 1).padStart(digits, "0")}`
               : "Define la cantidad (10 a 10.000.000)"}
             {numbersLocked
-              ? " · Con pedidos existentes no se puede cambiar."
+              ? " Â· Con pedidos existentes no se puede cambiar."
               : ""}
           </p>
         </div>
@@ -542,16 +547,16 @@ export default function RaffleFormV2({
             <p className={helpCls}>Tiempo para pagar antes de liberar.</p>
           </div>
           <div>
-            <label htmlFor="rf-max" className={labelCls}>Máx. números por pedido</label>
-            <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 3))} className={inputCls} />
+            <label htmlFor="rf-max" className={labelCls}>MÃ¡x. nÃºmeros por pedido</label>
+            <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputCls} />
           </div>
         </div>
       </div>
 
-      {/* Cómo compra el cliente */}
+      {/* CÃ³mo compra el cliente */}
       <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
         <div>
-          <p className={labelCls}>¿Cómo elige sus números el comprador?</p>
+          <p className={labelCls}>Â¿CÃ³mo elige sus nÃºmeros el comprador?</p>
           <div className="grid grid-cols-3 gap-2 rounded-xl border border-line bg-well p-1.5">
             {SELECTION_MODES.map((m) => (
               <button
@@ -571,12 +576,49 @@ export default function RaffleFormV2({
           </div>
           <p className={helpCls}>
             {selectionMode === "MANUAL"
-              ? "Solo verá el buscador para escoger sus números uno por uno."
+              ? "Solo verÃ¡ el buscador para escoger sus nÃºmeros uno por uno."
               : selectionMode === "RANDOM"
-                ? "El sistema le asigna los números al azar: no aparece la opción manual."
-                : "Verá las dos opciones: escoger a mano o dejar que el sistema le asigne."}
+                ? "El sistema le asigna los nÃºmeros al azar: no aparece la opciÃ³n manual."
+                : "VerÃ¡ las dos opciones: escoger a mano o dejar que el sistema le asigne."}
           </p>
         </div>
+
+        <label className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-4 border-t border-line pt-4">
+          <span>
+            <span className="block text-sm font-semibold text-fg">
+              Cerrar la compra por WhatsApp
+            </span>
+            <span className={helpCls}>
+              {whatsappCheckout
+                ? "Al comprar, el cliente pasa directo a tu WhatsApp con sus nÃºmeros y el cÃ³digo del pedido."
+                : "Esta rifa no mostrarÃ¡ WhatsApp al cliente por ningÃºn lado. El sistema le entrega los nÃºmeros y el comprobante."}
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={whatsappCheckout}
+            aria-label={
+              whatsappCheckout
+                ? "Desactivar el cierre de compra por WhatsApp"
+                : "Activar el cierre de compra por WhatsApp"
+            }
+            onClick={() => setWhatsappCheckout((v) => !v)}
+            className="flex h-11 w-12 shrink-0 items-center justify-center"
+          >
+            <span
+              className={`relative block h-7 w-12 rounded-full transition-colors ${
+                whatsappCheckout ? "bg-brand" : "bg-line"
+              }`}
+            >
+              <span
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+                  whatsappCheckout ? "left-6" : "left-1"
+                }`}
+              />
+            </span>
+          </button>
+        </label>
 
         <div>
           <p className={labelCls}>
@@ -585,7 +627,7 @@ export default function RaffleFormV2({
           <div className="flex flex-wrap gap-2">
             {ticketPacks.length === 0 ? (
               <span className="text-sm text-fg-faint">
-                Sin botones rápidos: el comprador escribe la cantidad.
+                Sin botones rÃ¡pidos: el comprador escribe la cantidad.
               </span>
             ) : null}
             {ticketPacks.map((q) => (
@@ -616,7 +658,7 @@ export default function RaffleFormV2({
               inputMode="numeric"
               value={packDraft}
               onChange={(e) =>
-                setPackDraft(e.target.value.replace(/\D/g, "").slice(0, 3))
+                setPackDraft(e.target.value.replace(/\D/g, "").slice(0, 4))
               }
               onKeyDown={(e) => {
                 if (e.key === "Enter") {
@@ -640,7 +682,7 @@ export default function RaffleFormV2({
             </button>
           </div>
           <p className={helpCls}>
-            Son los botones rápidos que verá el comprador (ej. 2 boletas, 5
+            Son los botones rÃ¡pidos que verÃ¡ el comprador (ej. 2 boletas, 5
             boletas)
           </p>
         </div>
@@ -656,7 +698,7 @@ export default function RaffleFormV2({
         </div>
         {prizes.length === 0 ? (
           <p className="text-sm text-fg-soft">
-            Todavía no hay premios. Agrega el premio mayor y los anticipados.
+            TodavÃ­a no hay premios. Agrega el premio mayor y los anticipados.
           </p>
         ) : null}
         {prizes.map((row, i) => (
@@ -692,7 +734,7 @@ export default function RaffleFormV2({
                 value={row.label}
                 onChange={(e) => updatePrize(row.id, { label: e.target.value })}
                 className={inputCls}
-                placeholder="Ej: ANTICIPADO · LUNES"
+                placeholder="Ej: ANTICIPADO Â· LUNES"
                 maxLength={60}
               />
             </div>
@@ -744,7 +786,7 @@ export default function RaffleFormV2({
                   value={row.note}
                   onChange={(e) => updatePrize(row.id, { note: e.target.value })}
                   className={inputCls}
-                  placeholder="Lotería de Cundinamarca"
+                  placeholder="LoterÃ­a de Cundinamarca"
                   maxLength={120}
                 />
               </div>
@@ -766,7 +808,7 @@ export default function RaffleFormV2({
           Agregar premio
         </button>
         <p className={helpCls}>
-          Se muestran en la página del sorteo, debajo del premio principal.
+          Se muestran en la pÃ¡gina del sorteo, debajo del premio principal.
         </p>
       </div>
 
@@ -785,7 +827,7 @@ export default function RaffleFormV2({
                 htmlFor={`rf-pn-number-${row.id}`}
                 className="mb-1 block text-xs font-semibold text-fg-soft"
               >
-                Número
+                NÃºmero
               </label>
               <input
                 id={`rf-pn-number-${row.id}`}
@@ -825,7 +867,7 @@ export default function RaffleFormV2({
               onClick={() =>
                 setPrizedNumbers((rows) => rows.filter((x) => x.id !== row.id))
               }
-              aria-label={`Quitar número premiado ${i + 1}`}
+              aria-label={`Quitar nÃºmero premiado ${i + 1}`}
               className="mt-5 flex min-h-12 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
             >
               <IconTrash width={16} height={16} />
@@ -844,10 +886,10 @@ export default function RaffleFormV2({
           className={btnOutline}
         >
           <IconPlus width={14} height={14} />
-          Agregar número premiado
+          Agregar nÃºmero premiado
         </button>
         <p className={helpCls}>
-          Si no quieres números premiados, deja la lista vacía
+          Si no quieres nÃºmeros premiados, deja la lista vacÃ­a
         </p>
       </div>
 
@@ -862,7 +904,7 @@ export default function RaffleFormV2({
           </select>
         </div>
         <div>
-          <p className={labelCls}>Porcentaje de avance público</p>
+          <p className={labelCls}>Porcentaje de avance pÃºblico</p>
           <div className="grid grid-cols-2 gap-2 rounded-xl border border-line bg-well p-1.5">
             {(["AUTO", "MANUAL"] as const).map((m) => (
               <button
@@ -874,13 +916,13 @@ export default function RaffleFormV2({
                   progressMode === m ? "glow-red-sm bg-brand text-white" : "text-fg-soft"
                 }`}
               >
-                {m === "AUTO" ? "Automático" : "Manual"}
+                {m === "AUTO" ? "AutomÃ¡tico" : "Manual"}
               </button>
             ))}
           </div>
           {progressMode === "AUTO" ? (
             <p className={helpCls}>
-              Se calcula solo: vendidos ÷ total. El público NUNCA ve cantidades,
+              Se calcula solo: vendidos Ã· total. El pÃºblico NUNCA ve cantidades,
               solo el porcentaje.
             </p>
           ) : (
@@ -903,13 +945,13 @@ export default function RaffleFormV2({
           )}
         </div>
         <div>
-          <label htmlFor="rf-order" className={labelCls}>Orden de aparición</label>
+          <label htmlFor="rf-order" className={labelCls}>Orden de apariciÃ³n</label>
           <input id="rf-order" type="text" inputMode="numeric" value={displayOrder} onChange={(e) => setDisplayOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={inputCls} />
-          <p className={helpCls}>Menor número aparece primero.</p>
+          <p className={helpCls}>Menor nÃºmero aparece primero.</p>
         </div>
         <div>
-          <label htmlFor="rf-terms" className={labelCls}>Términos y condiciones del sorteo</label>
-          <textarea id="rf-terms" value={terms} onChange={(e) => setTerms(e.target.value)} className={`${inputCls} min-h-24 py-3`} placeholder="Condiciones específicas de esta rifa (visibles en su página)" maxLength={5000} rows={4} />
+          <label htmlFor="rf-terms" className={labelCls}>TÃ©rminos y condiciones del sorteo</label>
+          <textarea id="rf-terms" value={terms} onChange={(e) => setTerms(e.target.value)} className={`${inputCls} min-h-24 py-3`} placeholder="Condiciones especÃ­ficas de esta rifa (visibles en su pÃ¡gina)" maxLength={5000} rows={4} />
         </div>
       </div>
 
@@ -930,7 +972,7 @@ export default function RaffleFormV2({
           </Link>
         )}
         <button type="submit" disabled={saving || uploading} className={`${btnPrimary} min-h-13`}>
-          {saving ? "Guardando…" : mode === "create" ? "Crear rifa" : "Guardar cambios"}
+          {saving ? "Guardandoâ€¦" : mode === "create" ? "Crear rifa" : "Guardar cambios"}
         </button>
       </div>
     </form>

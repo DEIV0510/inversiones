@@ -77,12 +77,27 @@ export default function OrderView({
   order,
   whatsappUrl,
   wompiUrl,
+  autoEnviarWhatsApp = false,
 }: {
   order: OrderData;
-  whatsappUrl: string;
+  /** null cuando la rifa está configurada sin WhatsApp. */
+  whatsappUrl: string | null;
   wompiUrl: string | null;
+  autoEnviarWhatsApp?: boolean;
 }) {
   const router = useRouter();
+  const yaEnviado = useRef(false);
+
+  // Rifas que cierran por WhatsApp: apenas se crea el pedido, se abre la
+  // conversación con los números y el código. Solo una vez.
+  useEffect(() => {
+    if (!autoEnviarWhatsApp || !whatsappUrl || yaEnviado.current) return;
+    yaEnviado.current = true;
+    const id = window.setTimeout(() => {
+      window.location.href = whatsappUrl;
+    }, 1200);
+    return () => window.clearTimeout(id);
+  }, [autoEnviarWhatsApp, whatsappUrl]);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState("");
   const [copied, setCopied] = useState(false);
@@ -235,7 +250,7 @@ export default function OrderView({
           </button>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className={`grid gap-3 ${whatsappUrl ? "grid-cols-2" : ""}`}>
           <Link
             href="/boletas"
             className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg hover:border-brand hover:text-brand"
@@ -243,15 +258,17 @@ export default function OrderView({
             <IconTicket width={17} height={17} />
             Mis boletas
           </Link>
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glow-wa inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-wa px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-wa-dark"
-          >
-            <IconWhatsApp width={17} height={17} />
-            WhatsApp
-          </a>
+          {whatsappUrl ? (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glow-wa inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-wa px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-wa-dark"
+            >
+              <IconWhatsApp width={17} height={17} />
+              WhatsApp
+            </a>
+          ) : null}
         </div>
       </div>
     );
@@ -318,15 +335,22 @@ export default function OrderView({
               Pagar en línea (Nequi, PSE, tarjeta)
             </a>
           ) : null}
-          <a
-            href={whatsappUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="glow-wa inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-wa px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-wa-dark active:scale-[0.98]"
-          >
-            <IconWhatsApp width={20} height={20} />
-            Coordinar pago por WhatsApp
-          </a>
+          {whatsappUrl ? (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glow-wa inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-wa px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-wa-dark active:scale-[0.98]"
+            >
+              <IconWhatsApp width={20} height={20} />
+              {autoEnviarWhatsApp ? "Enviar mi compra por WhatsApp" : "Coordinar pago por WhatsApp"}
+            </a>
+          ) : null}
+          {autoEnviarWhatsApp ? (
+            <p className="text-center text-xs text-fg-soft">
+              Te estamos llevando a WhatsApp… si no abre, toca el botón verde.
+            </p>
+          ) : null}
           {wompiUrl ? (
             <button
               type="button"
@@ -375,22 +399,24 @@ export default function OrderView({
         <h1 className="font-display text-2xl font-black uppercase text-fg">{title}</h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">{detail}</p>
       </div>
-      <div className="grid w-full grid-cols-2 gap-3">
+      <div className={`grid w-full gap-3 ${whatsappUrl ? "grid-cols-2" : ""}`}>
         <Link
           href={`/sorteo/${order.raffleSlug}`}
           className="glow-red-sm inline-flex min-h-13 items-center justify-center rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
         >
           Intentar de nuevo
         </Link>
-        <a
-          href={whatsappUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg hover:border-brand"
-        >
-          <IconWhatsApp width={17} height={17} />
-          WhatsApp
-        </a>
+        {whatsappUrl ? (
+          <a
+            href={whatsappUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg hover:border-brand"
+          >
+            <IconWhatsApp width={17} height={17} />
+            WhatsApp
+          </a>
+        ) : null}
       </div>
     </div>
   );

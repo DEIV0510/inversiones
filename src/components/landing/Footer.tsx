@@ -25,9 +25,11 @@ const LEGAL_LINKS = [
 
 type Props = {
   settings: SiteSettings;
+  /** Rifas configuradas sin WhatsApp: no se le ofrece al comprador. */
+  hideWhatsApp?: boolean;
 };
 
-export default function Footer({ settings }: Props) {
+export default function Footer({ settings, hideWhatsApp }: Props) {
   const socials = [
     { url: settings.facebook_url, label: "Facebook", icon: IconFacebook },
     { url: settings.instagram_url, label: "Instagram", icon: IconInstagram },
@@ -52,22 +54,25 @@ export default function Footer({ settings }: Props) {
             </span>
           </p>
           <p className="mt-4 max-w-xs text-sm leading-relaxed">
-            Sorteos de dinero en efectivo y motocicletas con atención directa
-            por WhatsApp.
+            {hideWhatsApp
+              ? "Sorteos de dinero en efectivo y motocicletas con entrega inmediata al ganador."
+              : "Sorteos de dinero en efectivo y motocicletas con atención directa por WhatsApp."}
           </p>
           <p className="mt-4 flex items-center gap-2 text-sm">
             <IconMapPin width={16} height={16} className="shrink-0 text-brand" />
             {settings.location}
           </p>
-          <a
-            href={waGeneral(settings.whatsapp_number)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-fg transition-colors hover:text-wa"
-          >
-            <IconWhatsApp width={16} height={16} className="shrink-0 text-wa" />
-            WhatsApp: {settings.whatsapp_display}
-          </a>
+          {hideWhatsApp ? null : (
+            <a
+              href={waGeneral(settings.whatsapp_number)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-fg transition-colors hover:text-wa"
+            >
+              <IconWhatsApp width={16} height={16} className="shrink-0 text-wa" />
+              WhatsApp: {settings.whatsapp_display}
+            </a>
+          )}
           {socials.length > 0 ? (
             <div className="mt-5 flex gap-3">
               {socials.map((social) => (

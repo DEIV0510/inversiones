@@ -59,6 +59,9 @@ model Raffle {
 
   // Cómo elige el comprador sus números.
   selectionMode SelectionMode @default(BOTH)
+  // Si la compra se cierra por WhatsApp. Apagado, esta rifa no muestra
+  // WhatsApp por ningún lado al comprador.
+  whatsappCheckout Boolean @default(true)
   // Cantidades de boletas ofrecidas como botones rápidos, ej "[1,2,5,10,20]".
   ticketPacksJson String @default("[1,2,5,10]")
   // Premios adicionales de la rifa (mayor, anticipados por día...).

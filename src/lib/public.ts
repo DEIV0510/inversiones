@@ -40,8 +40,16 @@ export type PublicRaffle = {
   reservationMinutes: number;
   terms: string;
   selectionMode: string;
+  /** Si esta rifa cierra la compra por WhatsApp. */
+  whatsappCheckout: boolean;
   ticketPacks: number[];
   prizes: RafflePrize[];
+};
+
+/** Números premiados agrupados por premio, para mostrarlos al público. */
+export type PrizedGroup = {
+  prize: string;
+  numbers: string[];
 };
 
 function parseJsonArray<T>(raw: string, isValid: (v: unknown) => boolean): T[] {
@@ -96,10 +104,11 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     reservationMinutes: raffle.reservationMinutes,
     terms: raffle.terms,
     selectionMode: raffle.selectionMode,
+    whatsappCheckout: raffle.whatsappCheckout,
     ticketPacks: parseJsonArray<number>(
       raffle.ticketPacksJson,
       (v) => typeof v === "number" && v > 0
-    ).slice(0, 6),
+    ).slice(0, 12),
     prizes: parseJsonArray<RafflePrize>(
       raffle.prizesJson,
       (v) => typeof v === "object" && v !== null && typeof (v as RafflePrize).title === "string"
@@ -121,6 +130,30 @@ export async function getPublicRaffleBySlug(
   const raffle = await prisma.raffle.findUnique({ where: { slug } });
   if (!raffle || !PUBLIC_STATUSES.includes(raffle.status as never)) return null;
   return toPublicRaffle(raffle);
+}
+
+/**
+ * Números premiados de una rifa, agrupados por premio para mostrarlos como
+ * en las plataformas de referencia ("50 números premiados con 1 millón").
+ */
+export async function getPrizedGroups(
+  raffleId: string,
+  digits: number
+): Promise<PrizedGroup[]> {
+  const rows = await prisma.prizedNumber.findMany({
+    where: { raffleId },
+    orderBy: { number: "asc" },
+    select: { number: true, prize: true },
+  });
+  const map = new Map<string, string[]>();
+  for (const row of rows) {
+    const list = map.get(row.prize) ?? [];
+    list.push(String(row.number).padStart(digits, "0"));
+    map.set(row.prize, list);
+  }
+  return [...map.entries()]
+    .map(([prize, numbers]) => ({ prize, numbers }))
+    .sort((a, b) => b.numbers.length - a.numbers.length);
 }
 
 export async function getPublishedWinners() {
