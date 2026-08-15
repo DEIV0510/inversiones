@@ -1,26 +1,41 @@
 @import "tailwindcss";
 
 @theme {
-  /* Fondo oscuro con profundidad (plataforma premium de sorteos) */
-  --color-bg: #07060f;
-  --color-bg2: #0b0918;
-  --color-card: #12101d;
-  --color-well: #1a1729;
-  --color-line: #272338;
-  --color-line-strong: #3d3757;
+  /* Fondo violeta muy oscuro, como la plataforma de referencia */
+  --color-bg: #0a0714;
+  --color-bg2: #0f0a1e;
+  --color-card: #171029;
+  --color-well: #201636;
+  --color-line: #2c2148;
+  --color-line-strong: #40316b;
 
   /* Texto (fg-faint cumple AA 4.5:1 sobre bg y well) */
-  --color-fg: #f6f5fa;
-  --color-fg-soft: #a7a3bb;
-  --color-fg-faint: #918cab;
+  --color-fg: #f4f2fb;
+  --color-fg-soft: #a9a2c6;
+  --color-fg-faint: #948cb6;
 
-  /* Errores sobre fondos oscuros (≈7:1 sobre card) */
-  --color-error: #ff8a92;
+  /* Estado "en espera": pendientes / reservados. Ámbar de la referencia,
+     el mismo tono del punto de la leyenda (Libres · Pendientes · Pagados).
+     NO es un error: es un número apartado esperando confirmación.
+     Contraste: 8.56:1 sobre card y 7.95:1 sobre well (AA y AAA). */
+  --color-warn: #f59e0b;
 
-  /* Marca: rojo como neón de acento */
-  --color-brand: #e8202f;
-  --color-brand-dark: #c01523;
-  --color-brand-deep: #8a0f1b;
+  /* SOLO errores reales de formulario y acciones destructivas (nunca estados
+     públicos). Rosa con fondo violeta, para que no choque con la paleta
+     fucsia ni se confunda con la marca.
+     Contraste: 7.98:1 sobre card y 7.42:1 sobre well (AA y AAA). */
+  --color-error: #ff85a1;
+
+  /* Marca: fucsia/violeta neón */
+  --color-brand: #c026d3;
+  --color-brand-dark: #a21caf;
+  --color-brand-deep: #6b1170;
+  --color-brand-light: #e879f9;
+  --color-brand-violet: #a855f7;
+
+  /* Acentos de la referencia */
+  --color-accent-blue: #2563eb;
+  --color-accent-cyan: #22d3ee;
 
   /* WhatsApp */
   --color-wa: #25d366;
@@ -31,8 +46,8 @@
 
   --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px -12px rgb(0 0 0 / 0.6);
   --shadow-card-hover: 0 2px 4px rgb(0 0 0 / 0.5), 0 18px 44px -12px rgb(0 0 0 / 0.7);
-  --shadow-glow: 0 0 34px -8px rgb(232 32 47 / 0.6);
-  --shadow-glow-sm: 0 0 18px -6px rgb(232 32 47 / 0.55);
+  --shadow-glow: 0 0 34px -8px rgb(192 38 211 / 0.65);
+  --shadow-glow-sm: 0 0 18px -6px rgb(192 38 211 / 0.6);
   --shadow-glow-wa: 0 0 22px -6px rgb(37 211 102 / 0.55);
 }
 
@@ -56,10 +71,10 @@ body {
 }
 
 /* ---- Glow de marca ---- */
-.glow-red {
+.glow-brand {
   box-shadow: var(--shadow-glow);
 }
-.glow-red-sm {
+.glow-brand-sm {
   box-shadow: var(--shadow-glow-sm);
 }
 .glow-wa {
@@ -68,11 +83,51 @@ body {
 
 /* Borde neón para cards destacadas */
 .neon-card {
-  border: 1px solid rgb(232 32 47 / 0.45);
+  border: 1px solid rgb(192 38 211 / 0.45);
   box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.04),
-    0 0 0 1px rgb(232 32 47 / 0.08),
-    0 0 34px -10px rgb(232 32 47 / 0.5);
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 0 0 1px rgb(192 38 211 / 0.1),
+    0 0 34px -10px rgb(192 38 211 / 0.55);
+}
+
+/* Título de la plataforma: degradado fucsia → violeta como la referencia */
+.brand-gradient {
+  background-image: linear-gradient(
+    100deg,
+    var(--color-brand-light) 0%,
+    var(--color-brand) 45%,
+    var(--color-brand-violet) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Titular del sorteo: blanco que se funde en violeta */
+.title-gradient {
+  background-image: linear-gradient(
+    100deg,
+    #ffffff 0%,
+    #f4f2fb 38%,
+    var(--color-brand-light) 78%,
+    var(--color-brand-violet) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Fichas de número tipo boleta (comprobante) */
+.ticket-chip {
+  background-image: linear-gradient(
+    150deg,
+    var(--color-brand-violet) 0%,
+    var(--color-brand) 55%,
+    var(--color-brand-light) 100%
+  );
+  box-shadow:
+    0 0 18px -4px rgb(192 38 211 / 0.75),
+    inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 
 /* ---- Scroll reveal ----
@@ -94,7 +149,7 @@ body {
 /* ---- Barra de progreso ---- */
 .progress-fill {
   transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
-  box-shadow: 0 0 14px -2px rgb(232 32 47 / 0.75);
+  box-shadow: 0 0 14px -2px rgb(192 38 211 / 0.8);
 }
 
 /* ---- Slider de porcentaje (área táctil ≥44px, pulgar de 28px) ---- */

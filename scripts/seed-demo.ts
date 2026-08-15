@@ -24,14 +24,6 @@ const NOMBRES = [
   "Diana Carolina Meza",
 ];
 
-function pick<T>(arr: T[], n: number): T[] {
-  const copy = [...arr];
-  const out: T[] = [];
-  while (out.length < n && copy.length > 0) {
-    out.push(copy.splice(Math.floor(Math.random() * copy.length), 1)[0]);
-  }
-  return out;
-}
 
 function randomNumbers(total: number, count: number, used: Set<number>): number[] {
   const out: number[] = [];
@@ -178,8 +170,9 @@ async function main() {
       reservationMinutes: 15,
       maxNumbersPerOrder: 10,
       displayOrder: 2,
-      // Ejemplo de rifa donde el comprador NO elige: el sistema le asigna.
-      selectionMode: "RANDOM",
+      // Ejemplo de rifa con las DOS formas de comprar a la vez: la compra
+      // rápida por paquetes y, debajo, la elección del número (sin pestañas).
+      selectionMode: "BOTH",
       ticketPacksJson: JSON.stringify([1, 3, 5, 10]),
     },
   });

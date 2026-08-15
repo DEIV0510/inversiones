@@ -1,4 +1,4 @@
-import Reveal from "./Reveal";
+﻿import Reveal from "./Reveal";
 import { waGeneral } from "@/lib/whatsapp";
 import {
   IconMapPin,
@@ -98,7 +98,7 @@ export default function AboutSection({
               href={waGeneral(whatsappNumber)}
               target="_blank"
               rel="noopener noreferrer"
-              className="glow-red-sm mt-3.5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
+              className="glow-brand-sm mt-3.5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
             >
               <IconWhatsApp width={18} height={18} />
               Hablar por WhatsApp

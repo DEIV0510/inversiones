@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useRef, useState } from "react";
 import { useModalA11y } from "@/components/useModalA11y";
@@ -367,7 +367,7 @@ export default function WinnersModuleV2() {
                 type="button"
                 onClick={() => openEdit(w)}
                 disabled={busyId === w.id}
-                className="glow-red-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
+                className="glow-brand-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
               >
                 <IconPencil width={15} height={15} />
                 Editar

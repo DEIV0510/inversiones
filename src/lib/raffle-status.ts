@@ -1,4 +1,4 @@
-// Metadatos de estado de rifa (v2), seguros para componentes cliente.
+﻿// Metadatos de estado de rifa (v2), seguros para componentes cliente.
 
 export const RAFFLE_STATUSES_V2 = [
   "DRAFT",
@@ -20,7 +20,7 @@ export const STATUS_META_V2: Record<
     label: "Próximamente",
     badgeClass: "border border-line-strong bg-well text-fg",
   },
-  ACTIVE: { label: "Activa", badgeClass: "bg-brand text-white glow-red-sm" },
+  ACTIVE: { label: "Activa", badgeClass: "bg-brand text-white glow-brand-sm" },
   SOLD_OUT: { label: "Agotada", badgeClass: "bg-brand-deep text-white" },
   FINISHED: { label: "Finalizada", badgeClass: "bg-well text-fg-soft" },
   CANCELLED: { label: "Cancelada", badgeClass: "bg-well text-fg-faint" },

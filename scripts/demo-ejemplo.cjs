@@ -15,7 +15,9 @@ const MOTO = [1458, 2783, 3569, 4892, 5237];
     await p.raffle.update({
       where: { id: efectivo.id },
       data: {
-        selectionMode: "RANDOM",
+        // Ambas formas de comprar, apiladas en la misma pantalla: primero la
+        // compra rápida por paquetes y debajo la elección del número.
+        selectionMode: "BOTH",
         whatsappCheckout: true,
         maxNumbersPerOrder: 600,
         ticketPacksJson: JSON.stringify([16, 20, 27, 40, 80, 160, 300, 600]),

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { ROLE_LABELS } from "@/lib/rbac";
@@ -260,7 +260,7 @@ export default function UsersModule({ selfId }: { selfId: string }) {
                 type="button"
                 onClick={() => openEdit(u)}
                 disabled={busyId === u.id}
-                className="glow-red-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
+                className="glow-brand-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark disabled:opacity-50"
               >
                 <IconPencil width={15} height={15} />
                 Editar

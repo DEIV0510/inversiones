@@ -1,4 +1,4 @@
-import Reveal from "./Reveal";
+﻿import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
 import { IconBanknote, IconGift, IconMoto } from "@/components/icons";
 
@@ -23,7 +23,7 @@ export default function PrizesSection() {
                 key={prize.title}
                 className="flex flex-col items-center gap-2.5 rounded-2xl border border-line bg-card px-2 py-4 text-center transition-colors hover:border-brand/60 sm:py-5"
               >
-                <span className="glow-red-sm flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-white">
+                <span className="glow-brand-sm flex h-11 w-11 items-center justify-center rounded-xl bg-brand text-white">
                   <prize.icon width={22} height={22} />
                 </span>
                 <p className="font-display text-[11px] font-extrabold uppercase leading-tight text-fg sm:text-sm">

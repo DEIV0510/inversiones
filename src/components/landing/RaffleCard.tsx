@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { waConsult } from "@/lib/whatsapp";
@@ -96,7 +96,7 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
           {isActive ? (
             <Link
               href={`/sorteo/${raffle.slug}`}
-              className="glow-red-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+              className="glow-brand-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
             >
               Participar
               <IconArrowRight width={17} height={17} />

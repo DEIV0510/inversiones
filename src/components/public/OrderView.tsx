@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
 import {
+  IconCalendar,
   IconCheck,
   IconClock,
   IconTicket,
@@ -40,6 +41,406 @@ const dateFmt = new Intl.DateTimeFormat("es-CO", {
   minute: "2-digit",
 });
 
+/** Fecha corta para el pie de la boleta (cabe en una línea en móvil). */
+const dateShortFmt = new Intl.DateTimeFormat("es-CO", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+});
+
+/* ==========================================================================
+   Descarga de la boleta como imagen (Canvas 2D, sin dependencias externas)
+   ========================================================================== */
+
+/** Lienzo lógico de la boleta; se dibuja a 2x para que se vea nítido. */
+const IMG_W = 720;
+const IMG_H = 1000;
+const IMG_ESCALA = 2;
+
+/**
+ * Paleta en crudo: el canvas no entiende las variables CSS de Tailwind, así
+ * que aquí se replican los mismos tokens de globals.css.
+ */
+const PALETA = {
+  bg: "#0a0714", // bg
+  card: "#171029", // card
+  line: "#40316b", // line-strong
+  fg: "#f4f2fb", // fg
+  fgSoft: "#a9a2c6", // fg-soft
+  fgFaint: "#948cb6", // fg-faint
+  brand: "#c026d3", // brand
+  brandLight: "#e879f9", // brand-light
+  brandViolet: "#a855f7", // brand-violet
+  wa: "#25d366", // wa
+  blanco: "#ffffff",
+};
+
+type DatosBoleta = {
+  titulo: string;
+  numeros: string[];
+  estado: string;
+  fecha: string;
+  codigo: string;
+  empresa: string;
+  fuente: string;
+};
+
+/** Rectángulo redondeado dibujado a mano (no depende de ctx.roundRect). */
+function rectRedondeado(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const radio = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.moveTo(x + radio, y);
+  ctx.lineTo(x + w - radio, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radio);
+  ctx.lineTo(x + w, y + h - radio);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radio, y + h);
+  ctx.lineTo(x + radio, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radio);
+  ctx.lineTo(x, y + radio);
+  ctx.quadraticCurveTo(x, y, x + radio, y);
+  ctx.closePath();
+}
+
+/** Ancho que ocupará un texto con espaciado manual entre letras. */
+function anchoEspaciado(ctx: CanvasRenderingContext2D, texto: string, espaciado: number) {
+  const letras = Array.from(texto);
+  if (letras.length === 0) return 0;
+  let total = 0;
+  for (const letra of letras) total += ctx.measureText(letra).width + espaciado;
+  return total - espaciado;
+}
+
+/** Texto con letter-spacing (el canvas no lo soporta de forma fiable). */
+function textoEspaciado(
+  ctx: CanvasRenderingContext2D,
+  texto: string,
+  x: number,
+  y: number,
+  espaciado: number,
+  alineacion: "left" | "center" | "right" = "left"
+) {
+  const total = anchoEspaciado(ctx, texto, espaciado);
+  let cursor = x;
+  if (alineacion === "center") cursor = x - total / 2;
+  if (alineacion === "right") cursor = x - total;
+  const alineacionPrevia = ctx.textAlign;
+  ctx.textAlign = "left";
+  for (const letra of Array.from(texto)) {
+    ctx.fillText(letra, cursor, y);
+    cursor += ctx.measureText(letra).width + espaciado;
+  }
+  ctx.textAlign = alineacionPrevia;
+  return total;
+}
+
+/** Recorta con puntos suspensivos cuando el texto no cabe en el ancho dado. */
+function recortarTexto(ctx: CanvasRenderingContext2D, texto: string, maxAncho: number) {
+  if (ctx.measureText(texto).width <= maxAncho) return texto;
+  let corto = texto;
+  while (corto.length > 1 && ctx.measureText(`${corto}…`).width > maxAncho) {
+    corto = corto.slice(0, -1);
+  }
+  return `${corto}…`;
+}
+
+/** Parte el título en varias líneas sin salirse nunca del ancho disponible. */
+function envolverTexto(
+  ctx: CanvasRenderingContext2D,
+  texto: string,
+  maxAncho: number,
+  maxLineas: number
+) {
+  const palabras = texto.split(/\s+/).filter(Boolean);
+  const lineas: string[] = [];
+  let actual = "";
+  let sobran = false;
+
+  for (let i = 0; i < palabras.length; i++) {
+    const prueba = actual ? `${actual} ${palabras[i]}` : palabras[i];
+    if (!actual || ctx.measureText(prueba).width <= maxAncho) {
+      actual = prueba;
+      continue;
+    }
+    lineas.push(actual);
+    actual = palabras[i];
+    if (lineas.length >= maxLineas) {
+      sobran = true;
+      actual = "";
+      break;
+    }
+  }
+  if (actual && lineas.length < maxLineas) lineas.push(actual);
+  if (lineas.length === 0) lineas.push("");
+
+  const ajustadas = lineas.map((linea) => recortarTexto(ctx, linea, maxAncho));
+  if (sobran) {
+    const ultima = ajustadas.length - 1;
+    let corto = ajustadas[ultima].replace(/…$/, "");
+    while (corto.length > 1 && ctx.measureText(`${corto}…`).width > maxAncho) {
+      corto = corto.slice(0, -1);
+    }
+    ajustadas[ultima] = `${corto}…`;
+  }
+  return ajustadas;
+}
+
+/**
+ * Pinta la boleta completa en el canvas recibido.
+ * Devuelve false si el navegador no ofrece contexto 2D.
+ */
+function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+
+  canvas.width = IMG_W * IMG_ESCALA;
+  canvas.height = IMG_H * IMG_ESCALA;
+  ctx.scale(IMG_ESCALA, IMG_ESCALA);
+
+  const fuente = datos.fuente;
+
+  // ---- Fondo violeta muy oscuro con halo fucsia ----
+  ctx.fillStyle = PALETA.bg;
+  ctx.fillRect(0, 0, IMG_W, IMG_H);
+  const halo = ctx.createRadialGradient(IMG_W * 0.82, 120, 8, IMG_W * 0.82, 120, 380);
+  halo.addColorStop(0, "rgba(192, 38, 211, 0.34)");
+  halo.addColorStop(1, "rgba(192, 38, 211, 0)");
+  ctx.fillStyle = halo;
+  ctx.fillRect(0, 0, IMG_W, IMG_H);
+
+  // ---- Tarjeta con borde fucsia ----
+  rectRedondeado(ctx, 36, 36, IMG_W - 72, IMG_H - 72, 40);
+  ctx.fillStyle = PALETA.card;
+  ctx.fill();
+  ctx.strokeStyle = PALETA.brand;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+
+  ctx.textBaseline = "alphabetic";
+  ctx.textAlign = "left";
+
+  // ---- Marca ----
+  ctx.font = `700 14px ${fuente}`;
+  ctx.fillStyle = PALETA.brandLight;
+  textoEspaciado(ctx, datos.empresa.toUpperCase(), IMG_W / 2, 92, 3.5, "center");
+
+  // ---- Etiqueta "BOLETA OFICIAL" con el cuadrito fucsia ----
+  ctx.font = `700 15px ${fuente}`;
+  const etiqueta = "BOLETA OFICIAL";
+  const anchoEtiqueta = anchoEspaciado(ctx, etiqueta, 4);
+  const inicioEtiqueta = (IMG_W - (anchoEtiqueta + 22)) / 2;
+  ctx.fillStyle = PALETA.brand;
+  ctx.fillRect(inicioEtiqueta, 116, 10, 10);
+  ctx.fillStyle = PALETA.fgFaint;
+  textoEspaciado(ctx, etiqueta, inicioEtiqueta + 22, 126, 4, "left");
+
+  // ---- Sello de aprobado (círculo verde con chulo) ----
+  ctx.beginPath();
+  ctx.arc(IMG_W - 96, 112, 30, 0, Math.PI * 2);
+  ctx.strokeStyle = PALETA.wa;
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(IMG_W - 109, 112);
+  ctx.lineTo(IMG_W - 100, 121);
+  ctx.lineTo(IMG_W - 83, 103);
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.stroke();
+  ctx.lineCap = "butt";
+
+  // ---- Nombre del sorteo (máximo 2 líneas; encoge antes de recortar) ----
+  ctx.fillStyle = PALETA.fg;
+  ctx.textAlign = "center";
+  const titulo = datos.titulo.toUpperCase();
+  let tamTitulo = 40;
+  let lineasTitulo: string[] = [];
+  for (const tam of [40, 34, 29, 25]) {
+    tamTitulo = tam;
+    ctx.font = `800 ${tam}px ${fuente}`;
+    lineasTitulo = envolverTexto(ctx, titulo, 452, 2);
+    if (!lineasTitulo[lineasTitulo.length - 1].endsWith("…")) break;
+  }
+  ctx.font = `800 ${tamTitulo}px ${fuente}`;
+  const altoLinea = Math.round(tamTitulo * 1.16);
+  let y = 186;
+  for (const linea of lineasTitulo) {
+    ctx.fillText(linea, IMG_W / 2, y);
+    y += altoLinea;
+  }
+  y -= altoLinea;
+
+  // ---- Separador punteado ----
+  y += 42;
+  ctx.setLineDash([6, 8]);
+  ctx.strokeStyle = PALETA.line;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(84, y);
+  ctx.lineTo(IMG_W - 84, y);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ---- Etiqueta "TUS NÚMEROS" ----
+  y += 46;
+  ctx.font = `700 16px ${fuente}`;
+  ctx.fillStyle = PALETA.fgFaint;
+  textoEspaciado(ctx, "TUS NÚMEROS", IMG_W / 2, y, 4.5, "center");
+
+  // ---- Fichas con los números ----
+  const contenidoX = 72;
+  const contenidoW = IMG_W - 144;
+  const gridArriba = y + 28;
+  const gridAbajo = 782;
+  const total = datos.numeros.length;
+  const separacion = 16;
+  const alturaGrid = gridAbajo - gridArriba;
+
+  // Se reparte en más columnas solo cuando hace falta: se elige la primera
+  // distribución en la que caben todos los números.
+  const distribuciones = [
+    { columnas: 2, alto: 96, tam: 38 },
+    { columnas: 2, alto: 78, tam: 34 },
+    { columnas: 3, alto: 64, tam: 26 },
+    { columnas: 4, alto: 54, tam: 20 },
+  ];
+  let elegida = distribuciones[0];
+  let filas = 1;
+  for (const opcion of distribuciones) {
+    elegida = opcion;
+    filas = Math.max(1, Math.floor((alturaGrid + separacion) / (opcion.alto + separacion)));
+    if (opcion.columnas * filas >= total) break;
+  }
+
+  const columnas = elegida.columnas;
+  const altoFicha = elegida.alto;
+  const tamFicha = elegida.tam;
+  const anchoFicha = (contenidoW - separacion * (columnas - 1)) / columnas;
+
+  let capacidad = columnas * filas;
+  let restantes = 0;
+  if (total > capacidad) {
+    // Ni con la rejilla más densa caben: se reserva una línea para el "y N más"
+    filas = Math.max(
+      1,
+      Math.floor((alturaGrid - 36 + separacion) / (altoFicha + separacion))
+    );
+    capacidad = columnas * filas;
+    restantes = Math.max(0, total - capacidad);
+  }
+
+  const visibles = datos.numeros.slice(0, capacidad);
+
+  // Con pocos números la rejilla se equilibra un poco en vertical para que la
+  // boleta no quede con un hueco enorme antes del pie.
+  const filasUsadas = Math.max(1, Math.ceil(visibles.length / columnas));
+  const alturaUsada =
+    filasUsadas * (altoFicha + separacion) - separacion + (restantes > 0 ? 32 : 0);
+  const desplazamiento = Math.max(0, (alturaGrid - alturaUsada) / 2);
+
+  ctx.textBaseline = "middle";
+  visibles.forEach((numero, i) => {
+    const col = i % columnas;
+    const fila = Math.floor(i / columnas);
+    // Una fila incompleta (la última, o la única cuando hay un solo número) se
+    // centra en horizontal para que la boleta no quede coja.
+    const enEstaFila = Math.min(columnas, visibles.length - fila * columnas);
+    const sangria = ((columnas - enEstaFila) * (anchoFicha + separacion)) / 2;
+    const fx = contenidoX + sangria + col * (anchoFicha + separacion);
+    const fy = gridArriba + desplazamiento + fila * (altoFicha + separacion);
+    const degradado = ctx.createLinearGradient(fx, fy, fx + anchoFicha, fy + altoFicha);
+    degradado.addColorStop(0, PALETA.brandViolet);
+    degradado.addColorStop(0.55, PALETA.brand);
+    degradado.addColorStop(1, PALETA.brandLight);
+    rectRedondeado(ctx, fx, fy, anchoFicha, altoFicha, 20);
+    ctx.fillStyle = degradado;
+    ctx.fill();
+    ctx.font = `800 ${tamFicha}px ${fuente}`;
+    ctx.fillStyle = PALETA.blanco;
+    const etiquetaNumero = recortarTexto(ctx, numero, anchoFicha - 16);
+    textoEspaciado(ctx, etiquetaNumero, fx + anchoFicha / 2, fy + altoFicha / 2 + 1, 3, "center");
+  });
+  ctx.textBaseline = "alphabetic";
+
+  if (restantes > 0) {
+    ctx.font = `700 18px ${fuente}`;
+    ctx.fillStyle = PALETA.fgSoft;
+    ctx.textAlign = "center";
+    ctx.fillText(
+      `y ${restantes} más`,
+      IMG_W / 2,
+      Math.min(
+        gridArriba + desplazamiento + filasUsadas * (altoFicha + separacion) + 14,
+        gridAbajo + 18
+      )
+    );
+  }
+
+  // ---- Pie: fecha, estado y código ----
+  ctx.setLineDash([6, 8]);
+  ctx.strokeStyle = PALETA.line;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(84, 806);
+  ctx.lineTo(IMG_W - 84, 806);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.beginPath();
+  ctx.arc(88, 840, 5, 0, Math.PI * 2);
+  ctx.fillStyle = PALETA.brand;
+  ctx.fill();
+  ctx.textAlign = "left";
+  ctx.font = `600 17px ${fuente}`;
+  ctx.fillStyle = PALETA.fgSoft;
+  ctx.fillText(recortarTexto(ctx, datos.fecha, 260), 104, 846);
+
+  ctx.font = `700 15px ${fuente}`;
+  ctx.fillStyle = PALETA.wa;
+  textoEspaciado(ctx, datos.estado.toUpperCase(), IMG_W - 84, 846, 3, "right");
+
+  ctx.font = `700 13px ${fuente}`;
+  ctx.fillStyle = PALETA.fgFaint;
+  textoEspaciado(ctx, "CÓDIGO DE PARTICIPACIÓN", IMG_W / 2, 884, 3.5, "center");
+  ctx.font = `800 26px ${fuente}`;
+  ctx.fillStyle = PALETA.brandLight;
+  textoEspaciado(ctx, datos.codigo.toUpperCase(), IMG_W / 2, 916, 6, "center");
+
+  ctx.font = `700 12px ${fuente}`;
+  ctx.fillStyle = PALETA.fgFaint;
+  textoEspaciado(ctx, "GUARDA ESTA IMAGEN COMO COMPROBANTE", IMG_W / 2, 946, 3, "center");
+
+  return true;
+}
+
+/** Icono de descarga (solo se usa en esta vista). */
+function IconDescargar({ width = 18, height = 18 }: { width?: number; height?: number }) {
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 3v12" />
+      <path d="m7 11 5 5 5-5" />
+      <path d="M4 20h16" />
+    </svg>
+  );
+}
+
 function Countdown({ until, onExpired }: { until: string; onExpired: () => void }) {
   const [remaining, setRemaining] = useState(() =>
     Math.max(0, new Date(until).getTime() - Date.now())
@@ -73,6 +474,123 @@ function Countdown({ until, onExpired }: { until: string; onExpired: () => void 
   );
 }
 
+/** Título de sección: mayúsculas con el punto fucsia de la plataforma. */
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="flex items-center gap-2.5 font-display text-base font-black uppercase tracking-wide text-fg">
+      <span
+        aria-hidden
+        className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+      />
+      {children}
+    </h2>
+  );
+}
+
+/**
+ * Tarjeta de boleta: es lo que el comprador guarda como captura de pantalla.
+ * Se usa en todos los estados del pedido; solo el pago aprobado lleva el
+ * sello verde y el resplandor.
+ */
+function BoletaCard({
+  title,
+  numbers,
+  estado,
+  fecha,
+  tono,
+  nota,
+}: {
+  title: string;
+  numbers: string[];
+  estado: string;
+  fecha: string;
+  tono: "pagada" | "espera" | "inactiva";
+  nota?: string;
+}) {
+  const pagada = tono === "pagada";
+  const inactiva = tono === "inactiva";
+  return (
+    <div
+      className={`relative overflow-hidden rounded-3xl bg-card px-4 py-6 sm:px-6 ${
+        inactiva ? "border border-line" : "neon-card"
+      }`}
+    >
+      {/* Halo difuso de fucsia, igual que el fondo de la plataforma */}
+      {inactiva ? null : (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -right-20 -top-24 h-48 w-48 rounded-full bg-brand/20 blur-3xl"
+        />
+      )}
+
+      {/* Sello de estado en la esquina superior derecha */}
+      <span
+        className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border ${
+          pagada ? "glow-wa border-wa text-wa" : "border-line-strong text-fg-faint"
+        }`}
+      >
+        {pagada ? (
+          <IconCheck width={18} height={18} strokeWidth={3} />
+        ) : (
+          <IconClock width={18} height={18} />
+        )}
+      </span>
+
+      <div className="relative">
+        <p className="flex items-center justify-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+          <span
+            aria-hidden
+            className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-[2px] bg-brand"
+          />
+          Boleta oficial
+        </p>
+        <p className="mt-2 px-10 text-center font-display text-xl font-black uppercase leading-tight text-fg sm:text-2xl">
+          {title}
+        </p>
+
+        <div className="my-5 border-t border-dashed border-line-strong" />
+
+        <p className="text-center text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+          Tus números
+        </p>
+        <ul className="mt-3 grid grid-cols-2 gap-2.5">
+          {numbers.map((n) => (
+            <li
+              key={n}
+              className={`flex min-h-14 items-center justify-center rounded-2xl px-1 font-display text-xl font-black tabular-nums tracking-[0.12em] sm:text-2xl ${
+                inactiva
+                  ? "border border-line bg-well text-fg-soft"
+                  : "ticket-chip text-white"
+              }`}
+            >
+              {n}
+            </li>
+          ))}
+        </ul>
+
+        <div className="mt-5 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-[11px] font-semibold text-fg-soft">
+            <IconCalendar width={13} height={13} className="shrink-0 text-brand" />
+            {fecha}
+          </span>
+          <span
+            className={`text-right text-[11px] font-bold uppercase tracking-[0.14em] ${
+              pagada ? "text-wa" : "text-fg-faint"
+            }`}
+          >
+            {estado}
+          </span>
+        </div>
+        {nota ? (
+          <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+            {nota}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export default function OrderView({
   order,
   whatsappUrl,
@@ -101,6 +619,8 @@ export default function OrderView({
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState("");
   const [copied, setCopied] = useState(false);
+  const [descargando, setDescargando] = useState(false);
+  const [errorDescarga, setErrorDescarga] = useState(false);
 
   async function verifyPayment() {
     setVerifying(true);
@@ -124,6 +644,68 @@ export default function OrderView({
     }
   }
 
+  /**
+   * Dibuja la boleta en un canvas y la descarga como PNG.
+   * Funciona sin conexión; si el navegador no soporta canvas, se avisa y
+   * queda el mensaje de "guarda una captura de pantalla".
+   */
+  async function descargarBoleta() {
+    if (descargando) return;
+    setDescargando(true);
+    setErrorDescarga(false);
+    let url = "";
+    try {
+      const canvas = document.createElement("canvas");
+      // Reutilizamos la tipografía del sitio si ya está cargada.
+      const fuente =
+        (typeof window !== "undefined" &&
+          window.getComputedStyle(document.body).fontFamily) ||
+        "system-ui, sans-serif";
+      const fechaBoleta = order.paidAt
+        ? dateShortFmt.format(new Date(order.paidAt))
+        : dateShortFmt.format(new Date(order.createdAt));
+
+      const dibujada = dibujarBoleta(canvas, {
+        titulo: order.raffleTitle,
+        numeros: order.numbers,
+        estado: "Aprobado",
+        fecha: fechaBoleta,
+        codigo: order.code,
+        empresa: order.companyName,
+        fuente,
+      });
+      if (!dibujada) throw new Error("sin-canvas");
+
+      url = await new Promise<string>((resolve, reject) => {
+        if (typeof canvas.toBlob === "function") {
+          canvas.toBlob((blob) => {
+            if (blob) resolve(URL.createObjectURL(blob));
+            else reject(new Error("sin-blob"));
+          }, "image/png");
+        } else {
+          resolve(canvas.toDataURL("image/png"));
+        }
+      });
+
+      const enlace = document.createElement("a");
+      enlace.href = url;
+      enlace.download = `boleta-${order.code}.png`;
+      enlace.rel = "noopener";
+      document.body.appendChild(enlace);
+      enlace.click();
+      enlace.remove();
+      if (url.startsWith("blob:")) {
+        const objetoUrl = url;
+        window.setTimeout(() => URL.revokeObjectURL(objetoUrl), 4000);
+      }
+    } catch {
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+      setErrorDescarga(true);
+    } finally {
+      setDescargando(false);
+    }
+  }
+
   async function copyCode() {
     try {
       await navigator.clipboard.writeText(order.code);
@@ -134,27 +716,46 @@ export default function OrderView({
     }
   }
 
+  /** Ficha del código: la credencial para consultar las boletas. */
+  const codigoBox = (
+    <button
+      type="button"
+      onClick={copyCode}
+      className="w-full rounded-2xl border border-dashed border-line-strong bg-well px-4 py-4 text-center transition-colors hover:border-brand"
+    >
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+        Código de participación {copied ? "· copiado ✓" : "· toca para copiar"}
+      </p>
+      <p className="mt-1.5 font-display text-2xl font-black tracking-[0.24em] text-brand sm:text-3xl">
+        {order.code}
+      </p>
+    </button>
+  );
+
   // ============ PAGADA: comprobante ============
   if (order.status === "PAID") {
+    const fechaPago = order.paidAt
+      ? dateShortFmt.format(new Date(order.paidAt))
+      : dateShortFmt.format(new Date(order.createdAt));
+
     return (
       <div className="flex flex-col gap-5">
         <div className="text-center">
-          <span className="glow-wa mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-wa text-white">
-            <IconCheck width={30} height={30} strokeWidth={3} />
-          </span>
-          <h1 className="mt-4 font-display text-2xl font-black uppercase text-fg sm:text-3xl">
-            ¡Participación confirmada!
+          <h1 className="font-display text-3xl font-black leading-tight text-fg sm:text-4xl">
+            <span aria-hidden className="mr-1.5">
+              🎉
+            </span>
+            ¡Pago aprobado!
           </h1>
-          <p className="mt-1 text-sm text-fg-soft">
-            Guarda este comprobante. Tu código es tu credencial para consultar
-            tus boletas.
+          <p className="mt-2 text-sm text-fg-soft">
+            Guarda una captura de pantalla de tus boletas
           </p>
         </div>
 
         {/* Ticket premiado */}
         {order.prizesWon && order.prizesWon.length > 0 ? (
           <div className="neon-card rounded-2xl bg-card p-5 text-center">
-            <span className="glow-red-sm mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white">
+            <span className="glow-brand-sm mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white">
               <IconTrophy width={24} height={24} />
             </span>
             <p className="mt-3 font-display text-lg font-black uppercase text-fg">
@@ -173,27 +774,56 @@ export default function OrderView({
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-xs leading-relaxed text-fg-soft">
-              Escríbenos por WhatsApp con tu código para reclamarlo.
-            </p>
+            {whatsappUrl ? (
+              <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+                Escríbenos por WhatsApp con tu código para reclamarlo.
+              </p>
+            ) : (
+              <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+                Guarda tu código: es la credencial para reclamarlo.
+              </p>
+            )}
           </div>
         ) : null}
 
-        {/* Comprobante */}
-        <div className="neon-card overflow-hidden rounded-3xl bg-card">
-          <div className="border-b border-line bg-bg2 px-5 py-4 text-center">
-            <p className="font-display text-base font-extrabold uppercase tracking-wide text-fg">
-              {order.companyName}
+        {/* Boleta oficial */}
+        <BoletaCard
+          title={order.raffleTitle}
+          numbers={order.numbers}
+          estado="Aprobado"
+          fecha={fechaPago}
+          tono="pagada"
+          nota="Guarda esta imagen como comprobante"
+        />
+
+        {/* Descarga del comprobante como PNG (se dibuja en el navegador) */}
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={descargarBoleta}
+            disabled={descargando}
+            className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-xl bg-accent-blue px-5 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-accent-blue/85 active:scale-[0.98] disabled:opacity-60"
+          >
+            <IconDescargar width={18} height={18} />
+            {descargando ? "Generando imagen…" : "Descargar como imagen"}
+          </button>
+          {errorDescarga ? (
+            <p role="alert" className="text-center text-xs leading-relaxed text-fg-soft">
+              No pudimos generar la imagen en este dispositivo. Guarda una captura de
+              pantalla de tus boletas.
             </p>
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-fg-faint">
-              Comprobante de participación
-            </p>
+          ) : null}
+        </div>
+
+        {/* Detalle de la compra */}
+        <div className="rounded-2xl border border-line bg-card p-5">
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-light">
+            {order.companyName}
+          </p>
+          <div className="mt-1.5">
+            <SectionTitle>Detalle de tu compra</SectionTitle>
           </div>
-          <div className="flex flex-col gap-3 px-5 py-4 text-sm">
-            <div className="flex justify-between gap-3">
-              <span className="text-fg-faint">Sorteo</span>
-              <span className="text-right font-semibold text-fg">{order.raffleTitle}</span>
-            </div>
+          <div className="mt-4 flex flex-col gap-3 text-sm">
             <div className="flex justify-between gap-3">
               <span className="text-fg-faint">Premio</span>
               <span className="text-right font-semibold text-fg">{order.prize}</span>
@@ -208,24 +838,11 @@ export default function OrderView({
                 <span className="text-right font-semibold text-fg">{order.drawDateText}</span>
               </div>
             ) : null}
-            <div>
-              <p className="text-fg-faint">Tus números</p>
-              <div className="mt-1.5 flex flex-wrap gap-1.5">
-                {order.numbers.map((n) => (
-                  <span
-                    key={n}
-                    className="rounded-lg bg-brand px-2.5 py-1.5 font-display text-sm font-bold tracking-wider text-white"
-                  >
-                    {n}
-                  </span>
-                ))}
-              </div>
-            </div>
             <div className="flex justify-between gap-3 border-t border-line pt-3">
               <span className="text-fg-faint">
                 {order.quantity} × {formatCop(order.unitPrice)}
               </span>
-              <span className="font-display text-lg font-black tabular-nums text-fg">
+              <span className="font-display text-lg font-black tabular-nums text-brand">
                 {formatCop(order.total)}
               </span>
             </div>
@@ -236,18 +853,7 @@ export default function OrderView({
               </span>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={copyCode}
-            className="w-full border-t border-dashed border-line bg-bg2 px-5 py-4 text-center transition-colors hover:bg-well"
-          >
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-fg-faint">
-              Código de participación {copied ? "· copiado ✓" : "· toca para copiar"}
-            </p>
-            <p className="mt-1 font-display text-3xl font-black tracking-[0.3em] text-brand">
-              {order.code}
-            </p>
-          </button>
+          <div className="mt-4">{codigoBox}</div>
         </div>
 
         <div className={`grid gap-3 ${whatsappUrl ? "grid-cols-2" : ""}`}>
@@ -279,10 +885,13 @@ export default function OrderView({
     return (
       <div className="flex flex-col gap-5">
         <div className="text-center">
-          <h1 className="font-display text-2xl font-black uppercase text-fg sm:text-3xl">
-            Paso 3 de 3 · <span className="text-brand">Realiza el pago</span>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-light">
+            Paso 3 de 3
+          </p>
+          <h1 className="mt-1.5 font-display text-3xl font-black leading-tight text-fg sm:text-4xl">
+            Realiza el pago
           </h1>
-          <p className="mt-1 text-sm text-fg-soft">
+          <p className="mt-2 text-sm text-fg-soft">
             Tus números están reservados mientras completas el pago.
           </p>
         </div>
@@ -300,37 +909,33 @@ export default function OrderView({
           </div>
         ) : null}
 
+        {/* Boleta reservada */}
+        <BoletaCard
+          title={order.raffleTitle}
+          numbers={order.numbers}
+          estado="Pendiente de pago"
+          fecha={dateShortFmt.format(new Date(order.createdAt))}
+          tono="espera"
+          nota="Guarda esta imagen mientras confirmamos"
+        />
+
         <div className="rounded-2xl border border-line bg-card p-5">
-          <div className="flex justify-between gap-3 text-sm">
-            <span className="text-fg-faint">Sorteo</span>
-            <span className="text-right font-semibold text-fg">{order.raffleTitle}</span>
-          </div>
-          <div className="mt-2">
-            <p className="text-sm text-fg-faint">Tus números reservados</p>
-            <div className="mt-1.5 flex flex-wrap gap-1.5">
-              {order.numbers.map((n) => (
-                <span
-                  key={n}
-                  className="rounded-lg bg-well px-2.5 py-1.5 font-display text-sm font-bold tracking-wider text-fg"
-                >
-                  {n}
-                </span>
-              ))}
-            </div>
-          </div>
-          <div className="mt-3 flex justify-between gap-3 border-t border-line pt-3">
-            <span className="text-sm text-fg-faint">Total a pagar</span>
-            <span className="font-display text-2xl font-black tabular-nums text-fg">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+              Total a pagar
+            </span>
+            <span className="font-display text-2xl font-black tabular-nums text-brand">
               {formatCop(order.total)}
             </span>
           </div>
+          <div className="mt-4">{codigoBox}</div>
         </div>
 
         <div className="flex flex-col gap-3">
           {wompiUrl ? (
             <a
               href={wompiUrl}
-              className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+              className="glow-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
             >
               Pagar en línea (Nequi, PSE, tarjeta)
             </a>
@@ -346,7 +951,8 @@ export default function OrderView({
               {autoEnviarWhatsApp ? "Enviar mi compra por WhatsApp" : "Coordinar pago por WhatsApp"}
             </a>
           ) : null}
-          {autoEnviarWhatsApp ? (
+          {/* Solo se nombra WhatsApp cuando el canal existe de verdad */}
+          {autoEnviarWhatsApp && whatsappUrl ? (
             <p className="text-center text-xs text-fg-soft">
               Te estamos llevando a WhatsApp… si no abre, toca el botón verde.
             </p>
@@ -369,8 +975,7 @@ export default function OrderView({
         </div>
 
         <p className="text-center text-xs leading-relaxed text-fg-faint">
-          Código de tu pedido: <strong className="text-fg-soft">{order.code}</strong>.
-          Guárdalo para consultar tus boletas.
+          Guarda tu código de participación para consultar tus boletas.
         </p>
       </div>
     );
@@ -383,26 +988,48 @@ export default function OrderView({
       : order.status === "CANCELLED"
         ? "Pedido cancelado"
         : "No pudimos confirmar este pedido";
+  // El texto de contacto solo nombra WhatsApp si la rifa tiene ese canal.
   const detail =
     order.status === "EXPIRED"
       ? "El tiempo de reserva terminó y los números volvieron a estar disponibles. Puedes intentarlo de nuevo."
       : order.status === "CANCELLED"
-        ? "Este pedido fue cancelado. Si crees que es un error, escríbenos."
-        : "Hubo un problema con este pedido. Escríbenos por WhatsApp y lo resolvemos.";
+        ? "Este pedido fue cancelado. Si crees que es un error, comunícate con nosotros."
+        : whatsappUrl
+          ? "Hubo un problema con este pedido. Escríbenos por WhatsApp y lo resolvemos."
+          : "Hubo un problema con este pedido. Comunícate con nosotros para resolverlo.";
+  const estado =
+    order.status === "EXPIRED"
+      ? "Reserva expirada"
+      : order.status === "CANCELLED"
+        ? "Cancelada"
+        : "Sin confirmar";
 
   return (
-    <div className="flex flex-col items-center gap-5 text-center">
-      <span className="flex h-16 w-16 items-center justify-center rounded-full bg-well text-fg-faint">
-        <IconClock width={30} height={30} />
-      </span>
-      <div>
-        <h1 className="font-display text-2xl font-black uppercase text-fg">{title}</h1>
+    <div className="flex flex-col gap-5">
+      <div className="text-center">
+        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-well text-fg-faint">
+          <IconClock width={30} height={30} />
+        </span>
+        <h1 className="mt-4 font-display text-2xl font-black leading-tight text-fg sm:text-3xl">
+          {title}
+        </h1>
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">{detail}</p>
       </div>
+
+      {/* Boleta sin validez: mismo formato, sin resplandor */}
+      <BoletaCard
+        title={order.raffleTitle}
+        numbers={order.numbers}
+        estado={estado}
+        fecha={dateShortFmt.format(new Date(order.createdAt))}
+        tono="inactiva"
+        nota="Esta boleta ya no participa"
+      />
+
       <div className={`grid w-full gap-3 ${whatsappUrl ? "grid-cols-2" : ""}`}>
         <Link
           href={`/sorteo/${order.raffleSlug}`}
-          className="glow-red-sm inline-flex min-h-13 items-center justify-center rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+          className="glow-brand-sm inline-flex min-h-13 items-center justify-center rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
         >
           Intentar de nuevo
         </Link>

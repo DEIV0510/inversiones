@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -127,7 +127,7 @@ export default function LoginForm() {
           <button
             type="submit"
             disabled={loading}
-            className="glow-red-sm mt-1 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
+            className="glow-brand-sm mt-1 inline-flex min-h-12 items-center justify-center rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? "Ingresando…" : "Ingresar"}
           </button>

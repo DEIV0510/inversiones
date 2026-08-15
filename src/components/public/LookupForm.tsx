@@ -6,8 +6,9 @@ import { formatCop } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { IconTicket, IconWhatsApp } from "@/components/icons";
 
+/* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. */
 const inputCls =
-  "min-h-12 w-full rounded-xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
+  "min-h-13 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg transition-colors placeholder:text-fg-faint/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/35";
 
 type LookupOrder = {
   code: string;
@@ -29,7 +30,33 @@ const STATUS_LABELS: Record<string, { text: string; cls: string }> = {
   REJECTED: { text: "En revisión", cls: "bg-brand-deep/40 text-error" },
 };
 
-export default function LookupForm({ whatsappNumber }: { whatsappNumber: string }) {
+/** Etiqueta de sección: punto fucsia encendido + título display en mayúsculas. */
+function TituloSeccion({ children }: { children: React.ReactNode }) {
+  return (
+    <h2 className="flex items-center gap-2.5 font-display text-base font-black uppercase tracking-wide text-fg">
+      <span
+        aria-hidden="true"
+        className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+      />
+      {children}
+    </h2>
+  );
+}
+
+type Props = {
+  /**
+   * Número de WhatsApp. Solo llega cuando la pantalla tiene permitido
+   * ofrecer WhatsApp; si está oculto, la página no lo envía.
+   */
+  whatsappNumber?: string;
+  /**
+   * true cuando ninguna rifa pública cierra por WhatsApp: el formulario
+   * oculta sus bloques de WhatsApp por completo, texto incluido.
+   */
+  hideWhatsApp?: boolean;
+};
+
+export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
   const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,6 +65,10 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
     participant: { name: string };
     orders: LookupOrder[];
   } | null>(null);
+
+  // Solo se ofrece WhatsApp si la pantalla lo permite y hay número válido.
+  const numeroWa = (whatsappNumber ?? "").trim();
+  const puedeWhatsApp = !hideWhatsApp && numeroWa !== "";
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -69,9 +100,13 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
         onSubmit={onSubmit}
         className="neon-card flex flex-col gap-4 rounded-3xl bg-card p-5 sm:p-6"
       >
+        <TituloSeccion>Consulta tu código</TituloSeccion>
         <div>
-          <label htmlFor="lk-phone" className="mb-1.5 block text-sm font-semibold text-fg">
-            Tu WhatsApp
+          <label
+            htmlFor="lk-phone"
+            className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
+          >
+            Tu teléfono
           </label>
           <input
             id="lk-phone"
@@ -87,7 +122,10 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
           />
         </div>
         <div>
-          <label htmlFor="lk-code" className="mb-1.5 block text-sm font-semibold text-fg">
+          <label
+            htmlFor="lk-code"
+            className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
+          >
             Código de participación
           </label>
           <input
@@ -95,12 +133,19 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
             type="text"
             required
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8))}
-            className={`${inputCls} font-display text-lg font-bold tracking-[0.3em]`}
+            onChange={(e) =>
+              setCode(
+                e.target.value
+                  .toUpperCase()
+                  .replace(/[^A-Z0-9]/g, "")
+                  .slice(0, 8)
+              )
+            }
+            className={`${inputCls} text-center font-display text-lg font-black tracking-[0.3em] text-brand-light`}
             placeholder="ABC12345"
             maxLength={8}
           />
-          <p className="mt-1 text-xs text-fg-faint">
+          <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
             Aparece en tu comprobante de participación (8 letras y números).
           </p>
         </div>
@@ -112,32 +157,41 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
         <button
           type="submit"
           disabled={loading}
-          className="glow-red-sm inline-flex min-h-13 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
+          className="glow-brand inline-flex min-h-13 items-center justify-center gap-2 rounded-2xl bg-brand px-5 font-display text-sm font-black uppercase tracking-[0.12em] text-white transition-colors hover:bg-brand-dark disabled:opacity-60"
         >
           <IconTicket width={18} height={18} />
           {loading ? "Consultando…" : "Consultar mis boletas"}
         </button>
-        <p className="text-center text-xs leading-relaxed text-fg-faint">
-          ¿No tienes tu código?{" "}
-          <a
-            href={waLink(
-              whatsappNumber,
-              "Hola, quiero consultar mis boletas pero no tengo mi código de participación."
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="font-semibold text-fg-soft underline-offset-2 hover:underline"
-          >
-            Escríbenos por WhatsApp
-          </a>
-        </p>
+        {puedeWhatsApp ? (
+          <p className="text-center text-xs leading-relaxed text-fg-faint">
+            ¿No tienes tu código?{" "}
+            <a
+              href={waLink(
+                numeroWa,
+                "Hola, quiero consultar mis boletas pero no tengo mi código de participación."
+              )}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-semibold text-fg-soft underline-offset-2 hover:underline"
+            >
+              Escríbenos por WhatsApp
+            </a>
+          </p>
+        ) : (
+          /* Sin WhatsApp: redacción neutra, sin sugerir ningún canal. */
+          <p className="text-center text-xs leading-relaxed text-fg-faint">
+            ¿No tienes tu código? Está en el comprobante que se generó al
+            confirmar tu participación.
+          </p>
+        )}
       </form>
 
       {result ? (
         <div className="flex flex-col gap-3">
+          <TituloSeccion>Tus participaciones</TituloSeccion>
           <p className="text-sm text-fg-soft">
             Hola <strong className="text-fg">{result.participant.name}</strong>,
-            estas son tus participaciones:
+            toca una participación para ver el detalle.
           </p>
           {result.orders.map((o) => {
             const meta = STATUS_LABELS[o.status] ?? STATUS_LABELS.PENDING;
@@ -181,18 +235,17 @@ export default function LookupForm({ whatsappNumber }: { whatsappNumber: string 
               </Link>
             );
           })}
-          <a
-            href={waLink(
-              whatsappNumber,
-              "Hola, tengo una consulta sobre mis boletas."
-            )}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line-strong px-5 text-sm font-bold uppercase tracking-wide text-fg-soft hover:border-brand hover:text-fg"
-          >
-            <IconWhatsApp width={17} height={17} />
-            ¿Dudas? Escríbenos
-          </a>
+          {puedeWhatsApp ? (
+            <a
+              href={waLink(numeroWa, "Hola, tengo una consulta sobre mis boletas.")}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line-strong px-5 text-sm font-bold uppercase tracking-wide text-fg-soft hover:border-brand hover:text-fg"
+            >
+              <IconWhatsApp width={17} height={17} />
+              ¿Dudas? Escríbenos
+            </a>
+          ) : null}
         </div>
       ) : null}
     </div>

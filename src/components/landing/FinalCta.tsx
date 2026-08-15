@@ -1,4 +1,4 @@
-import Reveal from "./Reveal";
+﻿import Reveal from "./Reveal";
 import { waGeneral } from "@/lib/whatsapp";
 import { IconWhatsApp } from "@/components/icons";
 
@@ -28,7 +28,7 @@ export default function FinalCta({ whatsappNumber }: Props) {
               href={waGeneral(whatsappNumber)}
               target="_blank"
               rel="noopener noreferrer"
-              className="glow-red mt-5 inline-flex min-h-13 items-center justify-center gap-2.5 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+              className="glow-brand mt-5 inline-flex min-h-13 items-center justify-center gap-2.5 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
             >
               <IconWhatsApp width={20} height={20} />
               Quiero participar

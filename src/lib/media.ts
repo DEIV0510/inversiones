@@ -3,8 +3,8 @@ import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 /**
- * Almacenamiento de imÃ¡genes con dos backends:
- * - Vercel Blob cuando existe BLOB_READ_WRITE_TOKEN (producciÃ³n en Vercel).
+ * Almacenamiento de imágenes con dos backends:
+ * - Vercel Blob cuando existe BLOB_READ_WRITE_TOKEN (producción en Vercel).
  * - Disco local en public/uploads como respaldo (desarrollo/VPS).
  */
 function usaBlob(): boolean {
@@ -23,7 +23,7 @@ export function isBlobUrl(url: string): boolean {
   }
 }
 
-/** Guarda una imagen ya optimizada (webp) y devuelve su URL pÃºblica. */
+/** Guarda una imagen ya optimizada (webp) y devuelve su URL pública. */
 export async function saveImage(buffer: Buffer): Promise<string> {
   const fileName = `up-${Date.now()}-${randomBytes(4).toString("hex")}.webp`;
 
@@ -42,7 +42,7 @@ export async function saveImage(buffer: Buffer): Promise<string> {
   return `/uploads/${fileName}`;
 }
 
-/** Elimina una imagen subida (Blob o disco). Nunca lanza: no es crÃ­tico. */
+/** Elimina una imagen subida (Blob o disco). Nunca lanza: no es crítico. */
 export async function deleteImage(url: string | null): Promise<void> {
   if (!url) return;
   try {

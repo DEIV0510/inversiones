@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { Metadata } from "next";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -53,7 +53,7 @@ export default async function AdminRafflesPage() {
         {canManage ? (
           <Link
             href="/admin/rifas/nueva"
-            className="glow-red-sm inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
+            className="glow-brand-sm inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
           >
             <IconPlus width={18} height={18} />
             Nueva

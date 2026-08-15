@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -183,7 +183,7 @@ export default function RaffleListV2({
                   </button>
                   <Link
                     href={`/admin/rifas/${raffle.id}`}
-                    className="glow-red-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+                    className="glow-brand-sm inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
                   >
                     <IconPencil width={15} height={15} />
                     Editar

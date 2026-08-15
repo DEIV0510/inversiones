@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { waConsult, waGeneral } from "@/lib/whatsapp";
@@ -121,7 +121,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                   {featured.status === "ACTIVE" ? (
                     <Link
                       href={`/sorteo/${featured.slug}`}
-                      className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+                      className="glow-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
                     >
                       Quiero participar
                       <IconArrowRight width={19} height={19} />
@@ -131,7 +131,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       href={waConsult(whatsappNumber, featured.title)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+                      className="glow-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
                     >
                       <IconWhatsApp width={20} height={20} />
                       Consultar sorteo
@@ -141,7 +141,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                       href={waGeneral(whatsappNumber)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="glow-red inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
+                      className="glow-brand inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
                     >
                       <IconWhatsApp width={20} height={20} />
                       Hablar por WhatsApp
@@ -176,7 +176,7 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                 href={waGeneral(whatsappNumber)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="glow-red mt-6 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark"
+                className="glow-brand mt-6 inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-brand px-8 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark"
               >
                 <IconWhatsApp width={20} height={20} />
                 Hablar por WhatsApp

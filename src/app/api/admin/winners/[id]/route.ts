@@ -35,7 +35,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "El ganador no existe" }, { status: 404 });
   }
 
-  const { numberInput: _ignored, ...data } = parsed.data;
+  const { numberInput, ...data } = parsed.data;
+  void numberInput;
   const winner = await prisma.winner.update({ where: { id }, data });
 
   if (

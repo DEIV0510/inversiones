@@ -7,7 +7,6 @@ import type { AdminRole } from "@prisma/client";
 import { can, type Permission, ROLE_LABELS } from "@/lib/rbac";
 import {
   IconCalendar,
-  IconChevronDown,
   IconHome,
   IconLogOut,
   IconMenu,
@@ -77,6 +76,34 @@ const MOBILE_MAIN: NavItem[] = [
   { href: "/admin/pedidos", label: "Pedidos", icon: IconCalendar, permission: "orders.view" },
 ];
 
+/* Lenguaje visual del cajón: pastilla muy redondeada; la activa se enciende
+   en fucsia translúcido con borde y resplandor de marca. */
+const navItemCls =
+  "flex min-h-11 items-center gap-3 rounded-2xl border px-3.5 text-sm font-semibold transition-colors";
+const navItemActiveCls = "glow-brand-sm border-brand/60 bg-brand/15 text-brand";
+const navItemIdleCls =
+  "border-transparent text-fg-soft hover:border-line hover:bg-well hover:text-fg";
+/* Epígrafe de grupo: mayúsculas diminutas, violeta claro y muy espaciadas. */
+const groupTitleCls =
+  "px-3.5 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet";
+/* Botón redondeado oscuro de la barra superior. */
+const barBtnCls =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-line bg-well/60 text-xs font-bold uppercase tracking-[0.12em] text-fg-soft transition-colors hover:border-brand/60 hover:text-fg";
+
+/** Identidad del cajón, como en la referencia: título degradado + bajada. */
+function PanelBrand() {
+  return (
+    <div>
+      <p className="brand-gradient font-display text-lg font-extrabold uppercase tracking-[0.12em]">
+        Admin Panel
+      </p>
+      <p className="mt-1 text-[13px] font-semibold text-brand-violet/80">
+        Panel de Control
+      </p>
+    </div>
+  );
+}
+
 export default function AdminShell({
   children,
   role,
@@ -113,40 +140,42 @@ export default function AdminShell({
 
   return (
     <div className="min-h-dvh bg-bg">
-      {/* Barra superior */}
+      {/* Barra superior: marca a la izquierda, botones redondeados oscuros a la derecha */}
       <header className="fixed inset-x-0 top-0 z-40 border-b border-line bg-bg2/95 backdrop-blur">
-        <div className="flex h-14 items-center justify-between gap-3 px-4 lg:px-6">
-          <Link href="/admin" className="flex items-center gap-2.5">
+        <div className="flex h-14 items-center justify-between gap-2 px-4 lg:px-6">
+          <Link href="/admin" className="flex min-w-0 items-center gap-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/img/logo-mark.webp"
               alt=""
               width={32}
               height={32}
-              className="h-8 w-8 rounded-full object-cover ring-1 ring-line"
+              className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-line"
             />
-            <span className="font-display text-sm font-extrabold uppercase tracking-wide text-fg">
-              Admin <span className="text-brand">Panel</span>
+            {/* Nombre de la marca en dos líneas con degradado, como la landing. */}
+            <span className="brand-gradient flex min-w-0 flex-col font-display text-[11px] font-extrabold uppercase leading-[1.1] tracking-[0.06em] sm:text-sm">
+              <span>Inversiones</span>
+              <span>D y S</span>
             </span>
           </Link>
-          <div className="flex items-center gap-1">
-            <span className="hidden rounded-full bg-well px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-fg-soft sm:inline">
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden rounded-full border border-line bg-well/60 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-fg-soft sm:inline">
               {userName} · {ROLE_LABELS[role]}
             </span>
-            <a
+            <Link
               href="/"
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs font-bold uppercase tracking-wide text-fg-soft transition-colors hover:bg-well hover:text-fg"
+              className={`${barBtnCls} px-3.5`}
             >
               Ver sitio
-            </a>
+            </Link>
             <button
               type="button"
               onClick={logout}
               disabled={loggingOut}
               aria-label="Cerrar sesión"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:bg-well hover:text-fg disabled:opacity-50"
+              className={`${barBtnCls} h-11 w-11 disabled:opacity-50`}
             >
               <IconLogOut width={18} height={18} />
             </button>
@@ -154,18 +183,20 @@ export default function AdminShell({
         </div>
       </header>
 
-      {/* Sidebar escritorio */}
+      {/* Cajón lateral de escritorio */}
       <aside
         aria-label="Menú del panel"
-        className="fixed bottom-0 left-0 top-14 z-30 hidden w-60 overflow-y-auto border-r border-line bg-bg2 px-3 py-6 lg:block"
+        className="fixed bottom-0 left-0 top-14 z-30 hidden w-60 overflow-y-auto border-r border-line bg-bg2 px-3 pb-8 pt-6 lg:block"
       >
-        <nav className="flex flex-col gap-5">
+        <div className="px-3.5">
+          <PanelBrand />
+        </div>
+        <div className="mx-3.5 mt-5 border-t border-line" />
+        <nav className="mt-6 flex flex-col gap-6">
           {groups.map((group) => (
             <div key={group.title}>
-              <p className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-fg-faint">
-                {group.title}
-              </p>
-              <div className="mt-1.5 flex flex-col gap-1">
+              <p className={groupTitleCls}>{group.title}</p>
+              <div className="mt-2 flex flex-col gap-1">
                 {group.items.map((item) => {
                   const active = isActive(item.href, item.exact);
                   return (
@@ -173,14 +204,12 @@ export default function AdminShell({
                       key={item.href}
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      className={`flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-semibold transition-colors ${
-                        active
-                          ? "glow-red-sm bg-brand text-white"
-                          : "text-fg-soft hover:bg-well hover:text-fg"
+                      className={`${navItemCls} ${
+                        active ? navItemActiveCls : navItemIdleCls
                       }`}
                     >
-                      <item.icon width={17} height={17} />
-                      {item.label}
+                      <item.icon width={17} height={17} className="shrink-0" />
+                      <span className="truncate">{item.label}</span>
                     </Link>
                   );
                 })}
@@ -190,8 +219,12 @@ export default function AdminShell({
         </nav>
       </aside>
 
-      <main className="mx-auto w-full max-w-4xl px-4 pb-28 pt-20 lg:ml-60 lg:px-8 lg:pb-16 lg:pt-24 xl:mx-auto">
-        {children}
+      {/* El relleno izquierdo reserva el cajón: así la columna nunca queda
+          debajo de él al centrarse en pantallas anchas. */}
+      <main className="lg:pl-60">
+        <div className="mx-auto w-full max-w-4xl px-4 pb-28 pt-20 lg:px-8 lg:pb-16 lg:pt-24">
+          {children}
+        </div>
       </main>
 
       {/* Navegación inferior móvil: 3 accesos + Más */}
@@ -208,7 +241,7 @@ export default function AdminShell({
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold ${
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
                   active ? "text-brand" : "text-fg-soft"
                 }`}
               >
@@ -221,7 +254,9 @@ export default function AdminShell({
             type="button"
             onClick={() => setMoreOpen(true)}
             aria-expanded={moreOpen}
-            className="flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold text-fg-soft"
+            className={`flex min-h-14 flex-col items-center justify-center gap-1 text-[11px] font-bold uppercase tracking-[0.08em] transition-colors ${
+              moreOpen ? "text-brand" : "text-fg-soft"
+            }`}
           >
             <IconMenu width={21} height={21} />
             Más
@@ -229,7 +264,7 @@ export default function AdminShell({
         </div>
       </nav>
 
-      {/* Menú completo móvil */}
+      {/* Menú completo móvil: mismo lenguaje que el cajón de escritorio */}
       {moreOpen ? (
         <div
           className="fixed inset-0 z-50 flex items-end bg-black/70 backdrop-blur-sm lg:hidden"
@@ -239,52 +274,62 @@ export default function AdminShell({
           onClick={() => setMoreOpen(false)}
         >
           <div
-            className="modal-in max-h-[80dvh] w-full overflow-y-auto rounded-t-3xl border-t border-line bg-bg2 p-5"
+            className="modal-in max-h-[80dvh] w-full overflow-y-auto rounded-t-3xl border-t border-line-strong bg-bg2 p-5"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-bold uppercase tracking-[0.2em] text-fg-faint">
-                {userName} · {ROLE_LABELS[role]}
-              </p>
+            <span
+              aria-hidden="true"
+              className="mx-auto mb-4 block h-1 w-10 rounded-full bg-line-strong"
+            />
+            <div className="flex items-start justify-between gap-3">
+              <PanelBrand />
               <button
                 type="button"
                 onClick={() => setMoreOpen(false)}
                 aria-label="Cerrar menú"
-                className="flex h-11 w-11 items-center justify-center rounded-xl bg-well text-fg-soft"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-line bg-well/60 text-fg-soft"
               >
                 <IconX width={18} height={18} />
               </button>
             </div>
+            <p className="mt-3 inline-flex rounded-full border border-line bg-well/60 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.12em] text-fg-faint">
+              {userName} · {ROLE_LABELS[role]}
+            </p>
             {groups.map((group) => (
-              <div key={group.title} className="mt-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-fg-faint">
+              <div key={group.title} className="mt-5">
+                <p className="px-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-violet">
                   {group.title}
                 </p>
-                <div className="mt-1.5 grid grid-cols-2 gap-2">
-                  {group.items.map((item) => (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setMoreOpen(false)}
-                      className={`flex min-h-12 items-center gap-2.5 rounded-xl border px-3 text-sm font-semibold ${
-                        isActive(item.href, item.exact)
-                          ? "border-brand/50 bg-brand/10 text-fg"
-                          : "border-line bg-card text-fg-soft"
-                      }`}
-                    >
-                      <item.icon width={16} height={16} className="shrink-0 text-brand" />
-                      {item.label}
-                    </Link>
-                  ))}
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {group.items.map((item) => {
+                    const active = isActive(item.href, item.exact);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMoreOpen(false)}
+                        aria-current={active ? "page" : undefined}
+                        className={`flex min-h-12 items-center gap-2.5 rounded-2xl border px-3 text-sm font-semibold ${
+                          active
+                            ? "glow-brand-sm border-brand/60 bg-brand/15 text-brand"
+                            : "border-line bg-card text-fg-soft"
+                        }`}
+                      >
+                        <item.icon
+                          width={16}
+                          height={16}
+                          className={`shrink-0 ${active ? "" : "text-brand-violet"}`}
+                        />
+                        <span className="truncate">{item.label}</span>
+                      </Link>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
         </div>
       ) : null}
-      <span className="sr-only" aria-hidden="true">
-        <IconChevronDown width={1} height={1} />
-      </span>
     </div>
   );
 }

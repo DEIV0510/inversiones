@@ -1,4 +1,4 @@
-import type { PublicRaffle } from "@/lib/public";
+﻿import type { PublicRaffle } from "@/lib/public";
 import { waGeneral } from "@/lib/whatsapp";
 import RaffleCard from "./RaffleCard";
 import Reveal from "./Reveal";
@@ -47,7 +47,7 @@ export default function RafflesSection({ raffles, whatsappNumber }: Props) {
                 href={waGeneral(whatsappNumber)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="glow-red-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
+                className="glow-brand-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
               >
                 <IconWhatsApp width={18} height={18} />
                 Hablar por WhatsApp

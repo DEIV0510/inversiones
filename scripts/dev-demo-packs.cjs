@@ -7,7 +7,8 @@ const p = new PrismaClient();
   const efectivo = await p.raffle.update({
     where: { slug: "demo-dos-millones-en-efectivo" },
     data: {
-      selectionMode: "RANDOM",
+      // Ambas formas de comprar, apiladas (sin pestañas).
+      selectionMode: "BOTH",
       whatsappCheckout: true,
       maxNumbersPerOrder: 600,
       ticketPacksJson: JSON.stringify([16, 20, 27, 40, 80, 160, 300, 600]),

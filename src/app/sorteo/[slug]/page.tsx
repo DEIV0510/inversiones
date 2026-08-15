@@ -99,7 +99,8 @@ export default async function SorteoPage({
             </div>
           ) : null}
 
-          <h1 className="mt-5 font-display text-3xl font-black uppercase leading-[1.06] text-fg sm:text-4xl">
+          {/* Titular blanco que se funde en violeta, como la referencia */}
+          <h1 className="title-gradient mt-5 font-display text-3xl font-black uppercase leading-[1.06] sm:text-4xl">
             {raffle.title}
           </h1>
           {raffle.description ? (
@@ -107,6 +108,9 @@ export default async function SorteoPage({
               {raffle.description}
             </p>
           ) : null}
+
+          {/* Avance: va justo debajo del titular, como en la referencia */}
+          <ProgressBar pct={raffle.progressPct} className="mt-5" />
 
           {/* Info */}
           <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
@@ -124,7 +128,7 @@ export default async function SorteoPage({
                 <IconTicket width={16} height={16} className="text-brand" />
                 Precio por número
               </span>
-              <span className="text-right font-display text-sm font-extrabold tabular-nums text-fg">
+              <span className="text-right font-display text-sm font-extrabold tabular-nums text-brand-light">
                 {formatCop(raffle.pricePerNumber)}
               </span>
             </div>
@@ -141,44 +145,49 @@ export default async function SorteoPage({
 
           {/* Lista de premios configurada para este sorteo */}
           {raffle.prizes.length > 0 ? (
-            <section className="mt-5" aria-labelledby="premios-sorteo">
+            <section className="mt-6" aria-labelledby="premios-sorteo">
+              {/* Título de sección: punto fucsia + mayúsculas, como la referencia */}
               <h2
                 id="premios-sorteo"
-                className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint"
+                className="flex items-center gap-2.5 font-display text-sm font-black uppercase tracking-[0.12em] text-fg"
               >
+                <span
+                  aria-hidden="true"
+                  className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+                />
                 Premios de este sorteo
               </h2>
-              <div className="mt-2.5 flex flex-col gap-2.5">
+              <div className="mt-3 flex flex-col gap-2.5">
                 {raffle.prizes.map((prize, i) => {
                   const Icon = i === 0 ? IconTrophy : IconGift;
                   return (
                     <div
                       key={`${i}-${prize.title}`}
-                      className={`flex items-start gap-3 rounded-2xl bg-card p-4 ${
+                      className={`flex items-start gap-3.5 rounded-2xl bg-card p-4 ${
                         i === 0 ? "neon-card" : "border border-line"
                       }`}
                     >
                       <span
-                        className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${
+                        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ring-1 ${
                           i === 0
-                            ? "bg-brand/15 text-brand"
-                            : "bg-well text-fg-soft"
+                            ? "bg-brand/15 text-brand ring-brand/30"
+                            : "bg-well text-brand-violet ring-line"
                         }`}
                       >
                         <Icon width={20} height={20} />
                       </span>
                       <div className="min-w-0 flex-1">
                         {prize.label ? (
-                          <p className="text-[10px] font-bold uppercase leading-tight tracking-[0.16em] text-fg-faint">
+                          <p className="text-[10px] font-bold uppercase leading-tight tracking-[0.16em] text-brand-violet">
                             {prize.label}
                           </p>
                         ) : null}
                         {prize.amount ? (
-                          <p className="mt-1 break-words font-display text-2xl font-black leading-none tabular-nums text-fg sm:text-3xl">
+                          <p className="mt-1.5 break-words font-display text-2xl font-black leading-none tabular-nums text-brand sm:text-3xl">
                             {prize.amount}
                           </p>
                         ) : null}
-                        <p className="mt-1 break-words text-sm font-semibold leading-snug text-fg">
+                        <p className="mt-1.5 break-words text-sm font-semibold leading-snug text-fg">
                           {prize.title}
                         </p>
                         {prize.note ? (
@@ -194,8 +203,6 @@ export default async function SorteoPage({
             </section>
           ) : null}
 
-          <ProgressBar pct={raffle.progressPct} className="mt-4" />
-
           {/* Números premiados: se publican para que la gente los busque. */}
           {prizedGroups.length > 0 ? (
             <section className="mt-6 flex flex-col gap-4">
@@ -204,22 +211,29 @@ export default async function SorteoPage({
                   key={grupo.prize}
                   className="rounded-2xl border border-line bg-card p-4"
                 >
-                  <h2 className="text-center font-display text-base font-black uppercase leading-tight text-fg sm:text-lg">
-                    {grupo.numbers.length}{" "}
-                    {grupo.numbers.length === 1 ? "número premiado" : "números premiados"}{" "}
-                    con {grupo.prize}
+                  {/* Mismo título de sección con punto fucsia */}
+                  <h2 className="flex items-start gap-2.5 font-display text-sm font-black uppercase leading-tight tracking-[0.12em] text-fg sm:text-base">
+                    <span
+                      aria-hidden="true"
+                      className="glow-brand-sm mt-1.5 h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+                    />
+                    <span className="min-w-0">
+                      {grupo.numbers.length}{" "}
+                      {grupo.numbers.length === 1 ? "número premiado" : "números premiados"}{" "}
+                      con {grupo.prize}
+                    </span>
                   </h2>
-                  <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                  <div className="mt-3 flex flex-wrap gap-1.5">
                     {grupo.numbers.map((n) => (
                       <span
                         key={n}
-                        className="rounded-md bg-well px-2.5 py-1.5 font-display text-sm font-bold tracking-wider text-brand ring-1 ring-brand/30"
+                        className="rounded-lg bg-well px-2.5 py-1.5 font-display text-sm font-bold tabular-nums tracking-wider text-brand-light ring-1 ring-brand/30"
                       >
                         {n}
                       </span>
                     ))}
                   </div>
-                  <p className="mt-2.5 text-center text-xs text-fg-soft">
+                  <p className="mt-3 text-xs leading-relaxed text-fg-soft">
                     Si compras uno de estos números, el premio es tuyo al
                     instante.
                   </p>
@@ -245,7 +259,7 @@ export default async function SorteoPage({
                   href={waConsult(settings.whatsapp_number, raffle.title)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="glow-red-sm mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+                  className="glow-wa mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-wa px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-wa-dark"
                 >
                   <IconWhatsApp width={18} height={18} />
                   Consultar por WhatsApp

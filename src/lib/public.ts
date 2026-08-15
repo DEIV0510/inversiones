@@ -133,6 +133,30 @@ export async function getPublicRaffleBySlug(
 }
 
 /**
+ * ¿Existe al menos una rifa visible al público que cierre la compra por
+ * WhatsApp?
+ *
+ * Sirve para las pantallas transversales que no pertenecen a una rifa
+ * concreta (por ejemplo "Mis boletas", a la que se llega desde la cabecera de
+ * cualquier sorteo). Si NINGUNA rifa pública usa WhatsApp, esa pantalla no
+ * puede ofrecerlo por ningún lado —ni siquiera como texto—, porque el
+ * comprador vendría de una rifa que lo tiene apagado.
+ *
+ * Consulta deliberadamente barata: findFirst con select del id. Nunca carga
+ * filas de números ni cuenta nada.
+ */
+export async function hayRifasConWhatsApp(): Promise<boolean> {
+  const rifa = await prisma.raffle.findFirst({
+    where: {
+      status: { in: [...PUBLIC_STATUSES] },
+      whatsappCheckout: true,
+    },
+    select: { id: true },
+  });
+  return rifa !== null;
+}
+
+/**
  * Números premiados de una rifa, agrupados por premio para mostrarlos como
  * en las plataformas de referencia ("50 números premiados con 1 millón").
  */

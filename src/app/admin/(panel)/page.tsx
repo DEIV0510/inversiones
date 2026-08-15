@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { formatCop } from "@/lib/format";
@@ -134,7 +134,7 @@ export default async function AdminDashboard() {
             key={s.label}
             className={`rounded-2xl p-4 ${
               s.accent
-                ? "glow-red-sm bg-brand text-white"
+                ? "glow-brand-sm bg-brand text-white"
                 : "border border-line bg-card"
             }`}
           >
@@ -159,7 +159,7 @@ export default async function AdminDashboard() {
         {can(session.role, "raffles.manage") ? (
           <Link
             href="/admin/rifas/nueva"
-            className="glow-red-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+            className="glow-brand-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
           >
             <IconPlus width={17} height={17} />
             Crear rifa
