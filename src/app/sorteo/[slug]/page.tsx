@@ -165,9 +165,11 @@ export default async function SorteoPage({
           {/* Avance: va justo debajo del titular, como en la referencia */}
           <ProgressBar pct={raffle.progressPct} className="mt-5" />
 
-          {/* Info: el precio va siempre; el premio y la fecha solo si el dueño
-              los enciende, porque normalmente ya los dice el titular. Las filas
-              que no se pintan no dejan hueco: divide-y solo pone la línea entre
+          {/* Info: el precio va siempre y la fecha también mientras el dueño no
+              la apague (showDrawDate nace encendida); si todavía no hay texto de
+              fecha se lee “Por anunciar”. El premio solo si el dueño lo
+              enciende, porque normalmente ya lo dice el titular. Las filas que
+              no se pintan no dejan hueco: divide-y solo pone la línea entre
               hermanos, así que con una sola fila la tarjeta queda limpia. */}
           <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
             {raffle.showPrize ? (
@@ -294,8 +296,8 @@ export default async function SorteoPage({
                     ))}
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-fg-soft">
-                    Si compras uno de estos números, el premio es tuyo al
-                    instante.
+                    Si te sale uno de estos números entre lo que compraste,
+                    ganas ese premio al instante.
                   </p>
                 </div>
               ))}

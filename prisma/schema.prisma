@@ -53,6 +53,9 @@ model Raffle {
   manualProgressPct  Int          @default(0)
   paidCount          Int          @default(0) // contador atómico de números pagados
   reservationMinutes Int          @default(10)
+  // Compra mínima: por debajo de esto el sistema rechaza el pedido. Suele
+  // coincidir con el paquete más pequeño que ofrece la rifa.
+  minNumbersPerOrder Int          @default(1)
   maxNumbersPerOrder Int          @default(20)
   terms              String       @default("")
   displayOrder       Int          @default(0)
@@ -67,11 +70,11 @@ model Raffle {
   // Premios adicionales de la rifa (mayor, anticipados por día...).
   // [{ label, title, amount, note }]
   prizesJson String @default("[]")
-  // Filas opcionales de la ficha del sorteo. El dueño ya escribe el premio y
-  // la fecha dentro del título, así que por defecto la ficha muestra solo el
-  // precio por número y estas dos se encienden a voluntad.
+  // Filas opcionales de la ficha del sorteo. El premio nace apagado porque el
+  // dueño ya lo escribe dentro del título; la fecha nace encendida y cuando no
+  // hay texto se lee "Por anunciar".
   showPrize    Boolean @default(false)
-  showDrawDate Boolean @default(false)
+  showDrawDate Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

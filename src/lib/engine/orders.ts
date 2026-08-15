@@ -84,6 +84,22 @@ export async function createOrder(input: CreateOrderInput): Promise<{
     );
   }
 
+  // Compra mínima del sorteo. Se comprueba aquí, en el servidor, porque la
+  // interfaz se puede saltar con una petición directa. La cantidad pedida son
+  // los aleatorios o los números DISTINTOS elegidos a mano: los repetidos se
+  // descartan más abajo, así que no sirven para llegar al mínimo.
+  const cantidadPedida = wantsRandom
+    ? randomCount
+    : new Set(input.numbers ?? []).size;
+  if (cantidadPedida < raffle.minNumbersPerOrder) {
+    const minimo = raffle.minNumbersPerOrder;
+    throw new OrderError(
+      `La compra mínima de este sorteo es de ${minimo} ${
+        minimo === 1 ? "número" : "números"
+      }.`
+    );
+  }
+
   // Hasta 3 intentos: en aleatorios, un choque de concurrencia se reintenta
   // con candidatos frescos; en selección manual el conflicto se informa.
   let lastConflict: number[] = [];

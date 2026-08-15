@@ -63,14 +63,49 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const verCompraRapida = !onlyManual;
   const verElegirNumero = !onlyRandom;
 
-  // Paquetes definidos por el dueño: sin repetidos, ordenados y sin superar
-  // el máximo por pedido. Si no hay paquetes, solo quedan los botones +/−.
+  // Compra mínima del sorteo: la fija el dueño al crear la rifa. Se acota
+  // contra el máximo por si quedaran mal configurados uno contra otro, y
+  // nunca baja de 1. Es una condición de compra, no inventario: al comprador
+  // SÍ se le dice cuál es (lo que jamás se le enseña son los vendidos).
+  const minPorPedido = Math.max(
+    1,
+    Math.min(
+      Number.isFinite(raffle.minNumbersPerOrder)
+        ? raffle.minNumbersPerOrder
+        : 1,
+      raffle.maxNumbersPerOrder
+    )
+  );
+  // Solo se habla del mínimo cuando de verdad limita algo.
+  const hayMinimo = minPorPedido > 1;
+
+  // Paquetes definidos por el dueño: sin repetidos, ordenados, sin superar el
+  // máximo por pedido y —igual de importante— sin quedar por debajo de la
+  // compra mínima: un paquete más pequeño que el mínimo el servidor lo
+  // rechazaría, así que ni se ofrece. Si no hay paquetes, solo quedan los
+  // botones +/−.
   const packs = [...new Set(raffle.ticketPacks)]
     .filter(
-      (n) => Number.isFinite(n) && n >= 1 && n <= raffle.maxNumbersPerOrder
+      (n) =>
+        Number.isFinite(n) &&
+        n >= minPorPedido &&
+        n <= raffle.maxNumbersPerOrder
     )
     .sort((a, b) => a - b)
     .slice(0, 12);
+
+  // Relleno de la última tarjeta: cuando los paquetes no llenan la última
+  // fila, la de cierre se estira para tapar el hueco que quedaba a su derecha
+  // (móvil de 2 columnas, escritorio de 3). Misma altura y mismo aire, solo
+  // más ancha.
+  const spanUltimoPack = [
+    packs.length % 2 === 1 ? "col-span-2" : "",
+    packs.length % 3 === 1
+      ? "sm:col-span-3"
+      : packs.length % 3 === 2
+        ? "sm:col-span-2"
+        : "sm:col-span-1",
+  ].join(" ");
 
   const [selected, setSelected] = useState<Map<number, string>>(new Map());
   // Cantidad de la compra rápida. 0 = todavía no ha elegido paquete.
@@ -100,7 +135,17 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const usaNumerosElegidos = selected.size > 0;
   const quantity = usaNumerosElegidos ? selected.size : randomQty;
   const total = quantity * raffle.pricePerNumber;
-  const canContinue = quantity > 0 && quantity <= raffle.maxNumbersPerOrder;
+  const hayPedido = quantity > 0;
+  // Cuántos números le faltan para llegar a la compra mínima. En la práctica
+  // solo pasa eligiendo a mano: los paquetes y el contador ya salen del
+  // mínimo. Con 0 no hay pedido todavía, así que no falta nada.
+  const faltanParaMinimo = hayPedido
+    ? Math.max(0, minPorPedido - quantity)
+    : 0;
+  const canContinue =
+    hayPedido &&
+    faltanParaMinimo === 0 &&
+    quantity <= raffle.maxNumbersPerOrder;
 
   const loadSuggestions = useCallback(async () => {
     // En modo "solo al azar" nunca se muestran sugerencias: no se pide nada.
@@ -148,11 +193,32 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
     setRandomQty(0);
   }
 
-  /** Elegir una cantidad rápida cancela los números escogidos a mano. */
+  /**
+   * Elegir una cantidad rápida cancela los números escogidos a mano.
+   * La cantidad nunca se queda entre 1 y el mínimo: o es 0 (todavía no quiere
+   * nada) o es al menos la compra mínima del sorteo.
+   */
   function elegirCantidad(n: number) {
-    const q = Math.max(0, Math.min(raffle.maxNumbersPerOrder, n));
+    const acotada = Math.max(0, Math.min(raffle.maxNumbersPerOrder, n));
+    const q = acotada > 0 ? Math.max(minPorPedido, acotada) : 0;
     setRandomQty(q);
     if (q > 0 && selected.size > 0) setSelected(new Map());
+  }
+
+  /**
+   * "+" de la fila de cantidad libre: desde 0 salta directo a la compra
+   * mínima (el salto lo hace elegirCantidad) y de ahí sube de uno en uno.
+   */
+  function subirCantidad() {
+    elegirCantidad(randomQty + 1);
+  }
+
+  /**
+   * "−" de la fila de cantidad libre: no puede bajar del mínimo, así que
+   * desde ahí el único paso es volver a 0, que significa "no quiero nada".
+   */
+  function bajarCantidad() {
+    elegirCantidad(randomQty <= minPorPedido ? 0 : randomQty - 1);
   }
 
   async function searchNumber(e: React.FormEvent) {
@@ -235,6 +301,9 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           );
           return;
         }
+        // Cualquier otro rechazo del servidor (por ejemplo el 422 de compra
+        // mínima) se muestra tal cual en el modal: el mensaje ya viene
+        // redactado para el comprador.
         setFormError(data.error || "No fue posible crear tu pedido");
         return;
       }
@@ -296,15 +365,17 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
 
           {packs.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {packs.map((n) => {
+              {packs.map((n, i) => {
                 const activo = randomQty === n;
+                // La última tarjeta se estira si la fila queda a medias.
+                const relleno = i === packs.length - 1 ? spanUltimoPack : "";
                 return (
                   <button
                     key={n}
                     type="button"
                     onClick={() => elegirCantidad(n)}
                     aria-pressed={activo}
-                    className={`flex min-h-36 flex-col items-center justify-center gap-1 rounded-3xl border bg-card px-3 py-5 text-center transition-all active:scale-[0.99] sm:min-h-40 ${
+                    className={`flex min-h-36 flex-col items-center justify-center gap-1 rounded-3xl border bg-card px-3 py-5 text-center transition-all active:scale-[0.99] sm:min-h-40 ${relleno} ${
                       activo
                         ? "glow-brand border-brand"
                         : "border-line hover:border-brand/60"
@@ -326,34 +397,40 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           ) : null}
 
           {/* Cantidad libre, por si quiere una distinta a los paquetes. */}
-          <div
-            className={`flex items-center justify-between gap-3 rounded-3xl border border-line bg-card px-4 py-3 ${
-              packs.length > 0 ? "mt-3" : ""
-            }`}
-          >
-            <span className={labelCls}>Otra cantidad</span>
-            <span className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => elegirCantidad(randomQty - 1)}
-                disabled={randomQty === 0}
-                aria-label="Menos boletas"
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-strong text-xl font-black text-fg transition-colors hover:border-brand disabled:opacity-40"
-              >
-                −
-              </button>
-              <span className="min-w-10 text-center font-display text-2xl font-black tabular-nums text-brand">
-                {randomQty}
+          <div className={packs.length > 0 ? "mt-3" : ""}>
+            <div className="flex items-center justify-between gap-3 rounded-3xl border border-line bg-card px-4 py-3">
+              <span className={labelCls}>Otra cantidad</span>
+              <span className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={bajarCantidad}
+                  disabled={randomQty === 0}
+                  aria-label="Menos boletas"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-strong text-xl font-black text-fg transition-colors hover:border-brand disabled:opacity-40"
+                >
+                  −
+                </button>
+                <span className="min-w-10 text-center font-display text-2xl font-black tabular-nums text-brand">
+                  {randomQty}
+                </span>
+                <button
+                  type="button"
+                  onClick={subirCantidad}
+                  disabled={randomQty >= raffle.maxNumbersPerOrder}
+                  aria-label="Más boletas"
+                  className="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-strong text-xl font-black text-fg transition-colors hover:border-brand disabled:opacity-40"
+                >
+                  +
+                </button>
               </span>
-              <button
-                type="button"
-                onClick={() => elegirCantidad(randomQty + 1)}
-                aria-label="Más boletas"
-                className="flex h-11 w-11 items-center justify-center rounded-2xl border border-line-strong text-xl font-black text-fg transition-colors hover:border-brand"
-              >
-                +
-              </button>
-            </span>
+            </div>
+            {/* La condición de compra se dice de frente, antes de que la
+                intente: el primer toque en "+" ya salta al mínimo. */}
+            {hayMinimo ? (
+              <p className="mt-2 px-1 text-xs leading-relaxed text-fg-faint">
+                La compra mínima de este sorteo es de {minPorPedido} números.
+              </p>
+            ) : null}
           </div>
         </div>
       ) : null}
@@ -495,8 +572,12 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               ))}
             </div>
 
+            {/* Límites del pedido: solo condiciones de compra, nunca
+                cantidades vendidas ni disponibles. */}
             <p className="mt-3 text-center text-xs text-fg-faint">
-              Máximo {raffle.maxNumbersPerOrder} números por pedido.
+              {hayMinimo
+                ? `Entre ${minPorPedido} y ${raffle.maxNumbersPerOrder} números por pedido.`
+                : `Máximo ${raffle.maxNumbersPerOrder} números por pedido.`}
             </p>
           </div>
 
@@ -523,38 +604,60 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         </div>
       ) : null}
 
-      {/* Barra de resumen: refleja siempre lo que se va a comprar. Se apoya
-          encima de la navegación inferior y del aviso de demostración para que
+      {/* Barra de resumen: refleja siempre lo que se va a comprar. Aparece en
+          cuanto hay algo elegido —aunque todavía no llegue a la compra
+          mínima— para poder decirle cuánto le falta. Se apoya encima de la
+          navegación inferior y del aviso de demostración para que
           "Continuar" quede siempre destapado y se pueda pulsar. */}
       <div
         style={{ bottom: "calc(var(--barra-inferior-h) + var(--aviso-demo-h))" }}
         className={`fixed inset-x-0 z-30 transition-all duration-300 ${
-          canContinue
+          hayPedido
             ? "translate-y-0 opacity-100"
             : "pointer-events-none translate-y-full opacity-0"
         }`}
       >
         <div className="mx-auto w-full max-w-3xl px-4 pb-3">
-          <div className="neon-card flex items-center justify-between gap-3 rounded-3xl bg-card px-4 py-3">
-            <div className="min-w-0">
-              <p className={labelCls}>
-                {quantity} {quantity === 1 ? "número" : "números"}
-              </p>
-              <p className="font-display text-xl font-black tabular-nums text-brand">
-                {formatCop(total)}
-              </p>
+          <div className="neon-card rounded-3xl bg-card px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className={labelCls}>
+                  {quantity} {quantity === 1 ? "número" : "números"}
+                </p>
+                <p className="font-display text-xl font-black tabular-nums text-brand">
+                  {formatCop(total)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setFormError("");
+                  setCheckoutOpen(true);
+                }}
+                disabled={!canContinue}
+                aria-describedby={
+                  faltanParaMinimo > 0 ? "aviso-compra-minima" : undefined
+                }
+                className="glow-brand-sm inline-flex min-h-12 shrink-0 items-center gap-2 rounded-2xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50 disabled:hover:bg-brand disabled:active:scale-100"
+              >
+                <IconTicket width={17} height={17} />
+                Continuar
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setFormError("");
-                setCheckoutOpen(true);
-              }}
-              className="glow-brand-sm inline-flex min-h-12 shrink-0 items-center gap-2 rounded-2xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98]"
-            >
-              <IconTicket width={17} height={17} />
-              Continuar
-            </button>
+            {/* Le falta para el mínimo: en ámbar, no en rojo. No se equivocó
+                él, es una condición del sorteo. */}
+            {faltanParaMinimo > 0 ? (
+              <p
+                id="aviso-compra-minima"
+                role="status"
+                className="mt-2.5 border-t border-line pt-2.5 text-xs font-semibold leading-relaxed text-warn"
+              >
+                Te {faltanParaMinimo === 1 ? "falta" : "faltan"}{" "}
+                {faltanParaMinimo}{" "}
+                {faltanParaMinimo === 1 ? "número" : "números"} para llegar a la
+                compra mínima de {minPorPedido}.
+              </p>
+            ) : null}
           </div>
         </div>
       </div>

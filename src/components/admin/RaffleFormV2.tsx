@@ -42,6 +42,7 @@ export type RaffleFormInitial = {
   progressMode: string;
   manualProgressPct: number;
   reservationMinutes: number;
+  minNumbersPerOrder: number;
   maxNumbersPerOrder: number;
   terms: string;
   displayOrder: number;
@@ -53,6 +54,9 @@ const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
 /* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
 const alertCls =
   "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Aviso ámbar: no impide guardar, solo advierte de algo que quedaría raro. */
+const warnCls =
+  "rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn";
 /* Etiqueta menuda de campo secundario dentro de una fila repetida. */
 const subLabelCls =
   "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-fg-faint";
@@ -321,11 +325,13 @@ export default function RaffleFormV2({
   const [whatsappCheckout, setWhatsappCheckout] = useState(
     initial?.whatsappCheckout ?? true
   );
-  // Filas opcionales de la ficha del sorteo. Nacen apagadas: el titular ya
-  // dice el premio y la fecha, y repetirlos abajo recarga la tarjeta.
+  // Filas opcionales de la ficha del sorteo. El premio nace apagado porque el
+  // titular ya lo dice y repetirlo abajo recarga la tarjeta; la fecha nace
+  // encendida porque el comprador siempre quiere saber cuándo se juega, y si
+  // todavía no hay día en firme la ficha le muestra "Por anunciar".
   const [showPrize, setShowPrize] = useState(initial?.showPrize ?? false);
   const [showDrawDate, setShowDrawDate] = useState(
-    initial?.showDrawDate ?? false
+    initial?.showDrawDate ?? true
   );
   const [ticketPacks, setTicketPacks] = useState<number[]>(() =>
     initial?.ticketPacks?.length ? [...initial.ticketPacks] : [...DEFAULT_PACKS]
@@ -359,6 +365,9 @@ export default function RaffleFormV2({
   const [reservationMinutes, setReservationMinutes] = useState(
     String(initial?.reservationMinutes ?? 10)
   );
+  const [minPerOrder, setMinPerOrder] = useState(
+    String(initial?.minNumbersPerOrder ?? 1)
+  );
   const [maxPerOrder, setMaxPerOrder] = useState(
     String(initial?.maxNumbersPerOrder ?? 20)
   );
@@ -375,11 +384,28 @@ export default function RaffleFormV2({
   const capacity = Math.pow(10, digits);
   const numbersLocked = mode === "edit" && !!initial?.hasOrders;
   const maxPorPedido = parseInt(maxPerOrder || "0", 10) || 0;
+  const minPorPedido = parseInt(minPerOrder || "0", 10) || 0;
   // Paquetes que el comprador NO llegaría a ver: la página del sorteo esconde
   // los que pasan del máximo por pedido, así que aquí se avisa antes.
   const packsOcultos = ticketPacks.filter(
     (q) => maxPorPedido > 0 && q > maxPorPedido
   );
+  /* El paquete más pequeño manda: lo normal es que la compra mínima sea
+     exactamente esa cantidad, para que el primer botón siga sirviendo. */
+  const paqueteMinimo = ticketPacks.length > 0 ? Math.min(...ticketPacks) : 0;
+  /* Se avisa cuando la compra mínima y el paquete más pequeño no coinciden:
+     por arriba el paquete deja de poderse ofrecer, por abajo el mínimo no
+     hace nada porque ningún botón baja hasta ahí. */
+  const minDesencajado =
+    paqueteMinimo > 0 && minPorPedido > 0 && minPorPedido !== paqueteMinimo;
+  /* La ayuda del campo cambia con lo escrito: con 1 no hay exigencia ninguna,
+     y de 2 en adelante se dice qué le pasa al comprador que pide menos. */
+  const ayudaCompraMinima =
+    minPorPedido === 1
+      ? "Compra mínima: con 1 no exiges nada, el comprador puede llevarse un solo número."
+      : minPorPedido > 1
+        ? `Compra mínima: si el comprador pide menos de ${minPorPedido.toLocaleString("es-CO")} números, el sistema le rechaza la compra y le avisa ahí mismo.`
+        : "Compra mínima: por debajo de esa cantidad el sistema le rechaza la compra al comprador y le avisa ahí mismo.";
 
   /* Apartados de números premiados, revisados en cada render (sin estado
      duplicado): de aquí salen la vista previa, los avisos y lo que se guarda. */
@@ -537,6 +563,7 @@ export default function RaffleFormV2({
       progressMode: progressMode as "AUTO" | "MANUAL",
       manualProgressPct: manualPct,
       reservationMinutes: parseInt(reservationMinutes || "10", 10) || 10,
+      minNumbersPerOrder: minPorPedido || 1,
       maxNumbersPerOrder: parseInt(maxPerOrder || "20", 10) || 20,
       terms: terms.trim(),
       displayOrder: parseInt(displayOrder || "0", 10) || 0,
@@ -549,6 +576,20 @@ export default function RaffleFormV2({
        servidor sería mucho más seco que el nuestro. */
     if (prizedError) {
       setError(prizedError);
+      return;
+    }
+    /* La compra mínima se revisa aquí para que el dueño no llegue a la red con
+       una condición imposible (pedir mínimo 30 cuando el tope son 20). */
+    if (minPorPedido < 1) {
+      setError(
+        "Escribe la compra mínima: es de al menos 1 número. Ponla igual a tu paquete más pequeño."
+      );
+      return;
+    }
+    if (minPorPedido > maxPorPedido) {
+      setError(
+        `La compra mínima es de ${minPorPedido.toLocaleString("es-CO")} números y el máximo por pedido es de ${maxPorPedido.toLocaleString("es-CO")}: nadie podría comprar. Sube el máximo o baja la compra mínima.`
+      );
       return;
     }
     setSaving(true);
@@ -760,8 +801,10 @@ export default function RaffleFormV2({
           }
           help={
             showDrawDate
-              ? "En la página del sorteo aparecerá la fila «Fecha» con este texto."
-              : "Apagado: la ficha no muestra la fecha. Déjalo así cuando la fecha ya va en el nombre del sorteo o todavía no es firme. El dato sigue guardado."
+              ? drawDateText.trim()
+                ? "En la página del sorteo aparece la fila «Fecha» con este texto."
+                : "En la página del sorteo aparece la fila «Fecha». Como todavía no escribiste ninguna, el comprador lee «Por anunciar»."
+              : "Apagado: la ficha no muestra la fecha por ningún lado. Lo normal es dejarlo encendido, porque sin fecha escrita el comprador lee «Por anunciar»."
           }
         />
       </div>
@@ -831,16 +874,59 @@ export default function RaffleFormV2({
               : ""}
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="rf-reserva" className={labelCls}>Minutos de reserva</label>
-            <input id="rf-reserva" type="text" inputMode="numeric" value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
-            <p className={helpCls}>Tiempo para pagar antes de liberar.</p>
+        {/* Cuánto puede comprar de una sola vez: el mínimo que exige la rifa y
+            el tope por pedido, juntos porque uno depende del otro. */}
+        <div>
+          <div className="grid grid-cols-2 items-end gap-3">
+            <div>
+              <label htmlFor="rf-min" className={labelCls}>
+                Compra mínima{" "}
+                <span className="text-[10px] text-warn">Obligatorio</span>
+              </label>
+              <input
+                id="rf-min"
+                type="text"
+                inputMode="numeric"
+                required
+                value={minPerOrder}
+                onChange={(e) =>
+                  setMinPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))
+                }
+                aria-describedby="rf-min-ayuda"
+                className={`${inputCls} tabular-nums`}
+              />
+            </div>
+            <div>
+              <label htmlFor="rf-max" className={labelCls}>Máx. números por pedido</label>
+              <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
+            </div>
           </div>
-          <div>
-            <label htmlFor="rf-max" className={labelCls}>Máx. números por pedido</label>
-            <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
-          </div>
+          <p id="rf-min-ayuda" className={helpCls}>
+            {ayudaCompraMinima} Lo normal es ponerla igual a tu paquete más
+            pequeño.
+          </p>
+          {minDesencajado ? (
+            <div role="status" className={`mt-2 ${warnCls}`}>
+              <p>
+                {minPorPedido > paqueteMinimo
+                  ? `Tu paquete más pequeño es de ${paqueteMinimo.toLocaleString("es-CO")} números. Con una compra mínima de ${minPorPedido.toLocaleString("es-CO")} ese paquete no se le podrá ofrecer al comprador.`
+                  : `Tu paquete más pequeño es de ${paqueteMinimo.toLocaleString("es-CO")} números y la compra mínima está en ${minPorPedido.toLocaleString("es-CO")}: ningún botón baja hasta ahí, así que ese mínimo no le cambia nada al comprador.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setMinPerOrder(String(paqueteMinimo))}
+                aria-label={`Poner la compra mínima en ${paqueteMinimo} números`}
+                className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full border border-warn/50 bg-warn/10 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-warn transition-colors hover:bg-warn/20"
+              >
+                Usar {paqueteMinimo.toLocaleString("es-CO")}
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <div>
+          <label htmlFor="rf-reserva" className={labelCls}>Minutos de reserva</label>
+          <input id="rf-reserva" type="text" inputMode="numeric" value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
+          <p className={helpCls}>Tiempo para pagar antes de liberar.</p>
         </div>
       </div>
 
@@ -959,10 +1045,7 @@ export default function RaffleFormV2({
             boletas)
           </p>
           {packsOcultos.length > 0 ? (
-            <p
-              role="status"
-              className="mt-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn"
-            >
+            <p role="status" className={`mt-2 ${warnCls}`}>
               {packsOcultos.length === 1
                 ? `El paquete de ${packsOcultos[0].toLocaleString("es-CO")} no le aparecerá al comprador: pasa del máximo`
                 : `Los paquetes de ${packsOcultos
@@ -1261,10 +1344,7 @@ export default function RaffleFormV2({
         ) : null}
 
         {prizedSinVenta.length > 0 ? (
-          <p
-            role="status"
-            className="rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn"
-          >
+          <p role="status" className={warnCls}>
             {prizedSinVenta.length === 1
               ? `El número ${prizedSinVenta[0]} no se vende en esta rifa`
               : `Estos números no se venden en esta rifa: ${prizedSinVenta

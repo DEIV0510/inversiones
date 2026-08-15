@@ -101,6 +101,7 @@ export default async function EditarRifaPage({
           progressMode: raffle.progressMode,
           manualProgressPct: raffle.manualProgressPct,
           reservationMinutes: raffle.reservationMinutes,
+          minNumbersPerOrder: raffle.minNumbersPerOrder,
           maxNumbersPerOrder: raffle.maxNumbersPerOrder,
           terms: raffle.terms,
           displayOrder: raffle.displayOrder,

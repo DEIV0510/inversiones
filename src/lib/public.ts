@@ -36,6 +36,12 @@ export type PublicRaffle = {
   progressPct: number;
   digits: number;
   totalNumbers: number;
+  /**
+   * Compra mínima por pedido. Es público a propósito: no es inventario, es
+   * una condición de compra que el comprador tiene que conocer antes de
+   * elegir cantidad.
+   */
+  minNumbersPerOrder: number;
   maxNumbersPerOrder: number;
   reservationMinutes: number;
   terms: string;
@@ -104,6 +110,7 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     progressPct: progressPctOf(raffle),
     digits: raffle.digits,
     totalNumbers: raffle.totalNumbers,
+    minNumbersPerOrder: raffle.minNumbersPerOrder,
     maxNumbersPerOrder: raffle.maxNumbersPerOrder,
     reservationMinutes: raffle.reservationMinutes,
     terms: raffle.terms,

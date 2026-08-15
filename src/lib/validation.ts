@@ -28,7 +28,10 @@ export const RAFFLE_STATUS_VALUES = [
   "CANCELLED",
 ] as const;
 
-export const raffleSchema = z.object({
+// Campos de la rifa SIN comprobaciones cruzadas. Se guardan aparte porque el
+// PATCH necesita .partial() y zod no deja partir un objeto que ya lleva
+// refinamientos; la coherencia mínimo/máximo se añade justo debajo.
+const raffleFields = z.object({
   title: z.string().trim().min(3, "El título es muy corto").max(120),
   slug: z
     .string()
@@ -92,12 +95,49 @@ export const raffleSchema = z.object({
   progressMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
   manualProgressPct: z.number().int().min(0).max(100).default(0),
   reservationMinutes: z.number().int().min(3).max(1440).default(10),
+  // Compra mínima por pedido: condición de venta que fija el dueño del sorteo
+  // ("mínimo 25 números"). Por defecto 1, que equivale a no exigir mínimo.
+  minNumbersPerOrder: z
+    .number()
+    .int()
+    .min(1, "La compra mínima es de al menos 1 número")
+    .max(5000, "La compra mínima no puede pasar de 5000 números")
+    .default(1),
   maxNumbersPerOrder: z.number().int().min(1).max(5000).default(20),
   terms: z.string().trim().max(5000).default(""),
   displayOrder: z.number().int().min(0).max(9999).default(0),
 });
 
-export const rafflePatchSchema = raffleSchema.partial();
+/** Un solo mensaje para que el panel diga siempre lo mismo. */
+const MSG_MINIMO_MAYOR_QUE_MAXIMO =
+  "La compra mínima no puede ser mayor que el máximo por pedido";
+
+export const raffleSchema = raffleFields.superRefine((v, ctx) => {
+  if (v.minNumbersPerOrder > v.maxNumbersPerOrder) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["minNumbersPerOrder"],
+      message: MSG_MINIMO_MAYOR_QUE_MAXIMO,
+    });
+  }
+});
+
+export const rafflePatchSchema = raffleFields.partial().superRefine((v, ctx) => {
+  // El PATCH es parcial, pero las dos cifras llevan valor por defecto, así que
+  // en la práctica siempre llegan (1 y 20 si el panel no las manda). La
+  // comprobación de nulos es solo por si eso dejara de ser así.
+  if (
+    v.minNumbersPerOrder != null &&
+    v.maxNumbersPerOrder != null &&
+    v.minNumbersPerOrder > v.maxNumbersPerOrder
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["minNumbersPerOrder"],
+      message: MSG_MINIMO_MAYOR_QUE_MAXIMO,
+    });
+  }
+});
 
 // ============================================================
 // ÓRDENES (público)
