@@ -16,7 +16,32 @@ const inter = Inter({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:5236";
+const SITIO_POR_DEFECTO = "http://localhost:5236";
+
+/**
+ * URL pública del sitio, tolerante a una variable mal escrita.
+ *
+ * `metadataBase` se evalúa al construir, así que un valor con espacios, un
+ * salto de línea o sin protocolo tumbaba el build entero con "Invalid URL".
+ * Aquí se limpia, se le pone https:// si falta y, si aun así no es una URL
+ * válida, se cae al valor por defecto en vez de romper el despliegue.
+ */
+function urlDelSitio(): URL {
+  const crudo = (process.env.NEXT_PUBLIC_SITE_URL ?? "").trim();
+  if (crudo) {
+    const conProtocolo = /^https?:\/\//i.test(crudo) ? crudo : `https://${crudo}`;
+    try {
+      return new URL(conProtocolo);
+    } catch {
+      console.warn(
+        `NEXT_PUBLIC_SITE_URL no es una URL válida ("${crudo}"); se usa ${SITIO_POR_DEFECTO}.`
+      );
+    }
+  }
+  return new URL(SITIO_POR_DEFECTO);
+}
+
+const siteUrl = urlDelSitio().origin;
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
