@@ -9,6 +9,11 @@ const SENTENCIAS = [
   // porque el dueño ya escribe ambas cosas dentro del título.
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "showPrize" BOOLEAN NOT NULL DEFAULT false`,
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "showDrawDate" BOOLEAN NOT NULL DEFAULT false`,
+  // Compra mínima por rifa: por debajo de esto el pedido se rechaza.
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "minNumbersPerOrder" INTEGER NOT NULL DEFAULT 1`,
+  // La fecha vuelve a mostrarse por defecto ("Por anunciar" si está vacía).
+  `ALTER TABLE "Raffle" ALTER COLUMN "showDrawDate" SET DEFAULT true`,
+  `UPDATE "Raffle" SET "showDrawDate" = true WHERE "showDrawDate" = false`,
   `CREATE INDEX IF NOT EXISTS "Order_status_paidAt_idx" ON "Order"("status", "paidAt")`,
   `CREATE INDEX IF NOT EXISTS "PrizedNumber_raffleId_claimedAt_idx" ON "PrizedNumber"("raffleId", "claimedAt")`,
 ];
