@@ -113,7 +113,7 @@ export default async function HomePage() {
       </main>
       <Footer settings={settings} />
       <WhatsAppFloat whatsappNumber={settings.whatsapp_number} />
-      <BottomBar whatsappNumber={settings.whatsapp_number} />
+      <BottomBar whatsappNumber={settings.whatsapp_number} activa="inicio" />
       {/* JSON-LD siempre con jsonLdSeguro: lleva datos de Configuración y un
           "</script>" ahí dentro rompería la etiqueta y ejecutaría código. */}
       <script

@@ -65,6 +65,7 @@ export default async function BoletasPage() {
       <BottomBar
         whatsappNumber={settings.whatsapp_number}
         hideWhatsApp={ocultarWhatsApp}
+        activa="boletas"
       />
     </>
   );

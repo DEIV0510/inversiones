@@ -349,6 +349,7 @@ export default async function SorteoPage({
       <BottomBar
         whatsappNumber={settings.whatsapp_number}
         hideWhatsApp={!raffle.whatsappCheckout}
+        activa="sorteos"
       />
     </>
   );
