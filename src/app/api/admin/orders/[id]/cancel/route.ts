@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { cancelOrder, OrderError } from "@/lib/engine/orders";
@@ -23,6 +24,13 @@ export async function POST(
       entityId: id,
       detail: { estado: order.status },
     });
+
+    // Cancelar un pedido pagado devuelve sus números al bombo y baja el
+    // PORCENTAJE de la portada cacheada. Se regenera con la transacción del
+    // motor ya cerrada; si cancelOrder hubiera lanzado, no se llega aquí.
+    revalidatePath("/");
+    revalidatePath("/sorteo/[slug]", "page");
+
     return NextResponse.json({ ok: true, order });
   } catch (err) {
     if (err instanceof OrderError) {

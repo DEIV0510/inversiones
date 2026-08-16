@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -78,6 +79,10 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     entityId: id,
   });
 
+  // Publicar, despublicar, reordenar o cambiarle la foto a un ganador cambia
+  // la sección de ganadores de la portada cacheada.
+  revalidatePath("/");
+
   return NextResponse.json({ winner });
 }
 
@@ -101,6 +106,9 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     entityId: id,
     detail: { rifa: existing.raffleTitle },
   });
+
+  // El ganador borrado tiene que desaparecer de la portada cacheada.
+  revalidatePath("/");
 
   return NextResponse.json({ ok: true });
 }

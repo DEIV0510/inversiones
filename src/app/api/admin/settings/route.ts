@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -80,6 +81,11 @@ export async function PATCH(req: NextRequest) {
     entity: "Setting",
     detail: Object.keys(data),
   });
+
+  // La Configuración se ve por toda la portada cacheada: nombre, WhatsApp,
+  // ciudad, redes y el aviso de demostración. Se regenera con los ajustes ya
+  // guardados.
+  revalidatePath("/");
 
   return NextResponse.json({ ok: true });
 }

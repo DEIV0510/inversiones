@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -90,6 +91,12 @@ export async function POST(req: NextRequest) {
     entityId: raffle.id,
     detail: { title: raffle.title, totalNumbers: raffle.totalNumbers },
   });
+
+  // La portada está cacheada: se marca para regenerar ahora que la rifa ya
+  // existe de verdad. Va aquí, después de la escritura y fuera de cualquier
+  // transacción; si se llamara antes, la portada se regeneraría con los datos
+  // viejos y el cambio no se vería.
+  revalidatePath("/");
 
   return NextResponse.json({ raffle }, { status: 201 });
 }

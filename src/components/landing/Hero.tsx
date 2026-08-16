@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+﻿import Image from "next/image";
+import Link from "next/link";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { waConsult, waGeneral } from "@/lib/whatsapp";
@@ -43,12 +44,23 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
                 aria-label={`Ver el sorteo ${featured.title}`}
               >
                 {featured.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  // Es la primera imagen que se ve, así que carga con
+                  // prioridad. En el móvil ocupa el ancho de la pantalla y en
+                  // escritorio la mitad de la rejilla (unos 520 px dentro del
+                  // max-w-6xl), que es lo que declara `sizes` para que el
+                  // navegador no pida una versión más grande de la necesaria.
+                  // Los SVG de demostración pasan sin optimizar: ya son
+                  // vectoriales y ligeros, y el optimizador los rechaza por
+                  // seguridad (podrían llevar scripts dentro).
+                  <Image
                     src={featured.imageUrl}
                     alt={`Imagen del sorteo destacado: ${featured.title}`}
+                    width={1200}
+                    height={900}
+                    sizes="(min-width: 1024px) 520px, 100vw"
+                    priority
+                    unoptimized={featured.imageUrl.toLowerCase().endsWith(".svg")}
                     className="aspect-[4/3] w-full object-cover"
-                    decoding="async"
                   />
                 ) : (
                   <span className="flex aspect-[4/3] w-full items-center justify-center text-fg-faint">

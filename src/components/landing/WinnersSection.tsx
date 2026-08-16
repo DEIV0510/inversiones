@@ -1,3 +1,4 @@
+import Image from "next/image";
 import type { Winner } from "@prisma/client";
 import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
@@ -26,12 +27,21 @@ export default function WinnersSection({ winners }: Props) {
                     </span>
                   ) : null}
                   {winner.photoUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    // Misma rejilla que los sorteos: ancho completo en el
+                    // móvil, la mitad desde 640 px y un tercio (unos 352 px)
+                    // desde 1024 px. Va en diferido porque la sección de
+                    // ganadores queda muy por debajo del primer pantallazo.
+                    // Aquí no se usa `fill` a propósito: el <article> es el
+                    // elemento posicionado y la foto solo ocupa su parte de
+                    // arriba, no la tarjeta entera.
+                    <Image
                       src={winner.photoUrl}
                       alt={`Ganador: ${winner.participantName}`}
+                      width={1200}
+                      height={900}
+                      sizes="(min-width: 1024px) 352px, (min-width: 640px) 50vw, 100vw"
                       loading="lazy"
-                      decoding="async"
+                      unoptimized={winner.photoUrl.toLowerCase().endsWith(".svg")}
                       className="aspect-[4/3] w-full object-cover"
                     />
                   ) : (

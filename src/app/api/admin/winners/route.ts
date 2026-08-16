@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -90,6 +91,9 @@ export async function POST(req: NextRequest) {
     entityId: winner.id,
     detail: { rifa: winner.raffleTitle, numero: winner.numberFormatted },
   });
+
+  // La portada cacheada lleva la sección de ganadores publicados.
+  revalidatePath("/");
 
   return NextResponse.json({ winner }, { status: 201 });
 }

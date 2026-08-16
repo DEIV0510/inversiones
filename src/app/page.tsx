@@ -16,9 +16,31 @@ import { getPublicRaffles, getPublishedWinners } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { getFaqItems } from "@/lib/faq";
 
-// La portada consulta el estado real de las rifas (porcentaje automático):
-// se sirve dinámica para reflejar ventas al instante.
-export const dynamic = "force-dynamic";
+/**
+ * La portada se sirve desde caché y se regenera como mucho cada 60 segundos.
+ *
+ * Antes era `force-dynamic`, así que CADA visita ejecutaba tres consultas
+ * contra la base remota; cuando la base llevaba un rato dormida había que
+ * despertarla y la portada llegaba a tardar casi 8 segundos. Con la caché el
+ * visitante recibe HTML ya hecho y no espera a ninguna consulta.
+ *
+ * Es seguro porque:
+ *  - Al público NUNCA se le enseñan cantidades de números, solo el PORCENTAJE
+ *    de avance. Un porcentaje no necesita ser exacto al segundo: que se vea
+ *    "63 %" durante un minuto en vez de "64 %" no engaña a nadie ni permite
+ *    deducir cuántas boletas quedan.
+ *  - Y sobre todo, los cambios del panel NO esperan a ese minuto: cada
+ *    endpoint que toca algo visible aquí (crear, editar, borrar o duplicar una
+ *    rifa; guardar la configuración; crear, editar o borrar un ganador; y
+ *    confirmar o cancelar un pedido, que mueve el porcentaje) llama a
+ *    revalidatePath("/") al terminar bien, así que la portada se regenera en
+ *    la siguiente visita.
+ *
+ * Ojo: esto vale para la portada, que es idéntica para todo el mundo. La
+ * página /sorteo/[slug] sigue siendo dinámica a propósito y NO puede cachearse
+ * (le enseña los borradores en vista previa a quien tiene sesión).
+ */
+export const revalidate = 60;
 
 export default async function HomePage() {
   const [raffles, winners, settings] = await Promise.all([

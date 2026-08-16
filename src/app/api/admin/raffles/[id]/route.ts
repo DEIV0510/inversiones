@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -180,6 +181,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     detail: sensitive,
   });
 
+  // Editar una rifa cambia lo que se ve en la portada cacheada: estado,
+  // título, foto, precio, orden o porcentaje manual. Se marca para regenerar
+  // con la rifa ya guardada, nunca antes.
+  revalidatePath("/");
+  // Y la página del sorteo. Se usa la forma de segmento porque cubre de una
+  // vez la dirección nueva y la antigua cuando el dueño cambia el slug.
+  revalidatePath("/sorteo/[slug]", "page");
+
   return NextResponse.json({ raffle });
 }
 
@@ -219,6 +228,10 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     entityId: id,
     detail: { title: existing.title },
   });
+
+  // La rifa borrada tiene que desaparecer de la portada cacheada de inmediato.
+  revalidatePath("/");
+  revalidatePath("/sorteo/[slug]", "page");
 
   return NextResponse.json({ ok: true });
 }

@@ -25,7 +25,36 @@ const CABECERAS_SEGURIDAD = [
   },
 ];
 
+/**
+ * Optimización de imágenes.
+ *
+ * Las fotos de los sorteos se suben a Vercel Blob ya reducidas a 1400 px de
+ * lado mayor, pero se servían tal cual: WebP de 933×1400 y 244 KB para una
+ * tarjeta que en el móvil mide unos 360 px. Al pasar por /_next/image, Next
+ * las reescala al ancho que de verdad se pinta y las reencoda.
+ *
+ * El subdominio del almacén (hoy `urzcbx8e9b0webxj`) cambia si el Blob se
+ * vuelve a crear, así que se autoriza cualquier subdominio en lugar de
+ * escribir el identificador a pelo. Protocolo, puerto, ruta y cadena de
+ * consulta se declaran a propósito: si se omiten, Next da por bueno un `**`
+ * y aceptaría optimizar URLs que no son nuestras.
+ */
+const IMAGENES: NextConfig["images"] = {
+  // AVIF primero (pesa menos) y WebP para los navegadores que no lo entienden.
+  formats: ["image/avif", "image/webp"],
+  remotePatterns: [
+    {
+      protocol: "https",
+      hostname: "**.public.blob.vercel-storage.com",
+      port: "",
+      pathname: "/**",
+      search: "",
+    },
+  ],
+};
+
 const nextConfig: NextConfig = {
+  images: IMAGENES,
   async headers() {
     return [{ source: "/:path*", headers: CABECERAS_SEGURIDAD }];
   },

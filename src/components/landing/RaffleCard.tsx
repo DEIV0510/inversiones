@@ -1,4 +1,5 @@
-﻿import Link from "next/link";
+﻿import Image from "next/image";
+import Link from "next/link";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
 import { waConsult } from "@/lib/whatsapp";
@@ -33,13 +34,21 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
         aria-label={`Ver el sorteo ${raffle.title}`}
       >
         {raffle.imageUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
+          // El enlace ya es la caja 4/3, así que la imagen la rellena con
+          // `fill`. La tarjeta ocupa el ancho de la pantalla en el móvil, la
+          // mitad desde 640 px y un tercio (unos 352 px) desde 1024 px: con
+          // eso el móvil pide una versión pequeña en vez del original.
+          // Los SVG de demostración pasan sin optimizar: ya son vectoriales y
+          // ligeros, y el optimizador los rechaza por seguridad (podrían
+          // llevar scripts dentro).
+          <Image
             src={raffle.imageUrl}
             alt={`Imagen del sorteo: ${raffle.title}`}
+            fill
+            sizes="(min-width: 1024px) 352px, (min-width: 640px) 50vw, 100vw"
             loading="lazy"
-            decoding="async"
-            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+            unoptimized={raffle.imageUrl.toLowerCase().endsWith(".svg")}
+            className="object-cover transition-transform duration-500 group-hover:scale-[1.03]"
           />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-fg-faint">

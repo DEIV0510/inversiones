@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { confirmOrderPayment } from "@/lib/engine/orders";
@@ -31,5 +32,12 @@ export async function POST(
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: 409 });
   }
+
+  // Confirmar un pago sube los números vendidos y con ellos el PORCENTAJE de
+  // avance que sale en la portada cacheada. Se regenera aquí, con la
+  // transacción del motor ya cerrada y solo si el pago se confirmó de verdad.
+  revalidatePath("/");
+  revalidatePath("/sorteo/[slug]", "page");
+
   return NextResponse.json({ ok: true, order: result.order });
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
@@ -77,6 +78,11 @@ export async function POST(
     entityId: copy.id,
     detail: { desde: original.id, titulo: copy.title },
   });
+
+  // La copia nace en borrador, así que hoy no sale en la portada; se marca
+  // igualmente para regenerar porque la portada está cacheada y así el listado
+  // público nunca depende de en qué estado nazca la copia.
+  revalidatePath("/");
 
   return NextResponse.json({ raffle: copy }, { status: 201 });
 }
