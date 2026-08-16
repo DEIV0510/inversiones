@@ -14,6 +14,8 @@ const NAV_LINKS = [
   { href: "/#sorteos", label: "Sorteos" },
   { href: "/#premios", label: "Premios" },
   { href: "/#como-participar", label: "Cómo participar" },
+  // El día del sorteo: se escribe el número que salió y se ve quién ganó.
+  { href: "/ganador", label: "Consultar número ganador" },
   { href: "/#faq", label: "Preguntas frecuentes" },
   { href: "/#contacto", label: "Contacto" },
 ];

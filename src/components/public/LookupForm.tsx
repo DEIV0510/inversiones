@@ -57,8 +57,9 @@ type Props = {
 };
 
 export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
+  // Un solo campo: el comprador escribe lo que tenga a mano (celular, correo,
+  // cédula o código de compra) y el servidor deduce qué es.
+  const [dato, setDato] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{
@@ -79,7 +80,7 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
       const res = await fetch("/api/public/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone, code }),
+        body: JSON.stringify({ query: dato }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -100,53 +101,40 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
         onSubmit={onSubmit}
         className="neon-card flex flex-col gap-4 rounded-3xl bg-card p-5 sm:p-6"
       >
-        <TituloSeccion>Consulta tu código</TituloSeccion>
+        <TituloSeccion>Consulta tus boletas</TituloSeccion>
         <div>
           <label
-            htmlFor="lk-phone"
+            htmlFor="lk-dato"
             className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
           >
-            Tu teléfono
+            Tu celular, tu correo, tu cédula o el código de tu compra
           </label>
           <input
-            id="lk-phone"
-            type="tel"
-            inputMode="numeric"
+            id="lk-dato"
+            type="text"
+            /* Texto libre: puede llegar un correo, una cédula o un código, así
+               que ni teclado numérico ni autocorrección ni mayúscula inicial. */
             required
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            value={dato}
+            onChange={(e) => setDato(e.target.value)}
             className={inputCls}
             placeholder="Ej: 3001234567"
-            maxLength={15}
-            autoComplete="tel"
+            maxLength={120}
+            autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            aria-describedby="lk-dato-ayuda"
           />
-        </div>
-        <div>
-          <label
-            htmlFor="lk-code"
-            className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
+          <p
+            id="lk-dato-ayuda"
+            className="mt-1.5 text-xs leading-relaxed text-fg-faint"
           >
-            Código de participación
-          </label>
-          <input
-            id="lk-code"
-            type="text"
-            required
-            value={code}
-            onChange={(e) =>
-              setCode(
-                e.target.value
-                  .toUpperCase()
-                  .replace(/[^A-Z0-9]/g, "")
-                  .slice(0, 8)
-              )
-            }
-            className={`${inputCls} text-center font-display text-lg font-black tracking-[0.3em] text-brand-light`}
-            placeholder="ABC12345"
-            maxLength={8}
-          />
-          <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
-            Aparece en tu comprobante de participación (8 letras y números).
+            Con uno solo basta. Por ejemplo:{" "}
+            <span className="text-fg-soft">3001234567</span> (celular),{" "}
+            <span className="break-all text-fg-soft">correo@ejemplo.com</span>,{" "}
+            <span className="text-fg-soft">1098765432</span> (cédula) o{" "}
+            <span className="text-fg-soft">ABC12345</span> (código de tu compra).
           </p>
         </div>
         {error ? (
@@ -164,11 +152,11 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
         </button>
         {puedeWhatsApp ? (
           <p className="text-center text-xs leading-relaxed text-fg-faint">
-            ¿No tienes tu código?{" "}
+            ¿No aparecen tus boletas?{" "}
             <a
               href={waLink(
                 numeroWa,
-                "Hola, quiero consultar mis boletas pero no tengo mi código de participación."
+                "Hola, no encuentro mis boletas en la consulta de la página."
               )}
               target="_blank"
               rel="noopener noreferrer"
@@ -180,8 +168,8 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
         ) : (
           /* Sin WhatsApp: redacción neutra, sin sugerir ningún canal. */
           <p className="text-center text-xs leading-relaxed text-fg-faint">
-            ¿No tienes tu código? Está en el comprobante que se generó al
-            confirmar tu participación.
+            ¿No aparecen tus boletas? Prueba con el mismo dato que usaste al
+            comprar, o con el código de tu comprobante.
           </p>
         )}
       </form>

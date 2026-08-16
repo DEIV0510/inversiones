@@ -143,10 +143,16 @@ model Participant {
   phone     String   @unique // normalizado 57XXXXXXXXXX
   name      String
   email     String?
+  // Cédula: opcional al comprar, sirve para que el comprador encuentre sus
+  // boletas si no recuerda el código ni con qué teléfono compró.
+  idNumber  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   orders Order[]
+
+  @@index([email])
+  @@index([idNumber])
 }
 
 enum OrderStatus {

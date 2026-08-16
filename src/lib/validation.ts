@@ -181,6 +181,20 @@ export const createOrderSchema = z
     email: z
       .union([z.literal(""), z.string().trim().email("Correo no válido").max(200)])
       .optional(),
+    // Cédula opcional: sirve para que después el comprador encuentre sus
+    // boletas con ese solo dato. Se aceptan "12.345.678" o "12 345 678"
+    // porque así la escribe la gente; los separadores se limpian aquí y a la
+    // base solo llegan dígitos.
+    idNumber: z
+      .string()
+      .trim()
+      .max(30, "La cédula es demasiado larga")
+      .transform((v) => v.replace(/[\s.]/g, ""))
+      .refine(
+        (v) => v === "" || /^\d{5,15}$/.test(v),
+        "La cédula debe tener entre 5 y 15 dígitos"
+      )
+      .optional(),
     // El tope real lo impone maxNumbersPerOrder de cada rifa; aquí solo
     // ponemos el techo absoluto para no aceptar cargas absurdas.
     numbers: z.array(z.number().int().min(0).max(9_999_999)).max(5000).optional(),
@@ -191,13 +205,21 @@ export const createOrderSchema = z
     { message: "Elige números o indica cuántos aleatorios quieres" }
   );
 
+/**
+ * "Mis boletas" con UN SOLO dato: el comprador escribe lo que tenga a mano
+ * (celular, correo, cédula o código de compra) y el servidor deduce qué es.
+ * Aquí solo se comprueba el largo; interpretar el texto es tarea del endpoint,
+ * que además responde igual cuando no encuentra nada.
+ *
+ * El mínimo de 5 es el dato más corto que puede existir (una cédula de 5
+ * dígitos); el máximo de 120 cubre el correo más largo que aceptamos.
+ */
 export const lookupSchema = z.object({
-  phone: z.string().trim().min(10).max(20),
-  code: z
+  query: z
     .string()
     .trim()
-    .toUpperCase()
-    .regex(/^[A-Z0-9]{8}$/, "El código tiene 8 letras y números"),
+    .min(5, "Escribe al menos 5 caracteres")
+    .max(120, "El dato es demasiado largo"),
 });
 
 // ============================================================

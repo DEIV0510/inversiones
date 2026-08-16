@@ -146,6 +146,23 @@ body {
     inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 
+/* Ficha del número PREMIADO: verde de la casa para que salte a la vista
+   entre las fichas fucsia. El texto va oscuro (9.6:1 sobre el verde) y la
+   ficha lleva además la palabra "PREMIADO", porque el color nunca puede ser
+   la única señal para quien no distingue bien los tonos. */
+.ticket-chip-win {
+  background-image: linear-gradient(
+    150deg,
+    var(--color-wa) 0%,
+    color-mix(in srgb, var(--color-wa) 82%, #ffffff) 55%,
+    color-mix(in srgb, var(--color-wa) 62%, #ffffff) 100%
+  );
+  box-shadow:
+    0 0 0 2px rgb(10 7 20 / 0.55),
+    0 0 26px -3px rgb(37 211 102 / 0.85),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+}
+
 /* ---- Scroll reveal ----
    El estado oculto solo aplica cuando hay JavaScript (html.js), para que
    sin JS o ante cualquier fallo el contenido siempre sea visible. */

@@ -49,7 +49,7 @@ function TituloSeccion({
  * Selección de números escalable: nunca se carga el universo completo.
  * Las dos formas de comprar van APILADAS en la misma pantalla (sin pestañas):
  * primero la compra rápida por paquetes y debajo la elección del número.
- * La disponibilidad SIEMPRE la decide el backend al reservar.
+ * La disponibilidad SIEMPRE la decide el backend al cerrar la compra.
  * La forma de elegir (manual / azar / ambas) y los paquetes de boletas
  * vienen configurados en cada rifa desde el panel.
  */
@@ -124,6 +124,9 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
+  // Cédula: dato OPCIONAL. Solo sirve para que después pueda encontrar sus
+  // boletas sin el código, así que nunca bloquea la compra.
+  const [idNumber, setIdNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -299,18 +302,21 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       );
       return;
     }
+    // La cédula es opcional: solo se revisa si escribió algo, y entonces se
+    // le dice de una vez, porque una cédula a medias no le serviría luego
+    // para encontrar sus boletas.
+    if (idNumber.length > 0 && idNumber.length < 5) {
+      setFormError("La cédula debe tener al menos 5 dígitos, o déjala vacía");
+      return;
+    }
     setSubmitting(true);
     setFormError("");
     try {
+      // Datos del comprador comunes a las dos formas de compra.
+      const datos = { raffleSlug: raffle.slug, name, phone, email, idNumber };
       const body = usaNumerosElegidos
-        ? {
-            raffleSlug: raffle.slug,
-            name,
-            phone,
-            email,
-            numbers: [...selected.keys()],
-          }
-        : { raffleSlug: raffle.slug, name, phone, email, randomCount: randomQty };
+        ? { ...datos, numbers: [...selected.keys()] }
+        : { ...datos, randomCount: randomQty };
       const res = await fetch("/api/public/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -363,9 +369,11 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   }
 
   // Colores de estado igual que la leyenda: pendiente = ámbar, pagado = fucsia.
+  // Un número que otra persona está pagando se nombra "Pendiente de pago", no
+  // "Reservado": aquí no se aparta nada, se compra.
   const statusChip: Record<SearchResult["status"], { text: string; cls: string }> = {
     DISPONIBLE: { text: "Disponible", cls: "bg-wa/15 text-wa" },
-    RESERVADO: { text: "Reservado", cls: "bg-warn/15 text-warn" },
+    RESERVADO: { text: "Pendiente de pago", cls: "bg-warn/15 text-warn" },
     VENDIDO: { text: "Vendido", cls: "bg-brand/20 text-brand-light" },
     BLOQUEADO: { text: "No disponible", cls: "bg-well text-fg-faint" },
   };
@@ -650,7 +658,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           cuanto hay algo elegido —aunque todavía no llegue a la compra
           mínima— para poder decirle cuánto le falta. Se apoya encima de la
           navegación inferior y del aviso de demostración para que
-          "Continuar" quede siempre destapado y se pueda pulsar. */}
+          "Comprar" quede siempre destapado y se pueda pulsar. */}
       <div
         style={{ bottom: "calc(var(--barra-inferior-h) + var(--aviso-demo-h))" }}
         className={`fixed inset-x-0 z-30 transition-all duration-300 ${
@@ -683,7 +691,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 className="glow-brand-sm inline-flex min-h-12 shrink-0 items-center gap-2 rounded-2xl bg-brand px-6 text-sm font-bold uppercase tracking-wide text-white transition-all hover:bg-brand-dark active:scale-[0.98] disabled:opacity-50 disabled:hover:bg-brand disabled:active:scale-100"
               >
                 <IconTicket width={17} height={17} />
-                Continuar
+                Comprar
               </button>
             </div>
             {/* Le falta para el mínimo: en ámbar, no en rojo. No se equivocó
@@ -801,6 +809,27 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                   autoComplete="email"
                 />
               </div>
+              <div>
+                <label htmlFor="co-id" className="mb-1.5 block text-sm font-semibold text-fg">
+                  Cédula <span className="font-normal text-fg-faint">(opcional)</span>
+                </label>
+                <input
+                  id="co-id"
+                  type="text"
+                  inputMode="numeric"
+                  value={idNumber}
+                  onChange={(e) =>
+                    setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 15))
+                  }
+                  className={inputCls}
+                  placeholder="Ej: 1012345678"
+                  maxLength={15}
+                  autoComplete="off"
+                />
+                <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
+                  Así puedes encontrar tus boletas aunque pierdas el código.
+                </p>
+              </div>
 
               {formError ? (
                 <p role="alert" className="text-sm font-semibold text-error">
@@ -809,7 +838,8 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               ) : null}
 
               {/* Botón de cierre a lo ancho: verde WhatsApp solo si la rifa
-                  cierra por WhatsApp; si no, fucsia y sin rastro de WhatsApp. */}
+                  cierra por WhatsApp; si no, fucsia y sin rastro de WhatsApp.
+                  Aquí se remata la COMPRA, no una reserva: el texto lo dice. */}
               <button
                 type="button"
                 onClick={submitOrder}
@@ -821,22 +851,25 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 }`}
               >
                 {submitting ? (
-                  "Reservando…"
+                  "Procesando…"
                 ) : raffle.whatsappCheckout ? (
                   <>
                     <IconWhatsApp width={19} height={19} />
-                    Pagar por WhatsApp
+                    Finalizar compra
                   </>
                 ) : (
                   <>
                     <IconCheck width={18} height={18} />
-                    Reservar mis números
+                    Pagar mis números
                   </>
                 )}
               </button>
+              {/* Se dice la verdad sin hablar de "reservar": los números se
+                  guardan mientras paga, y por eso hay un tiempo límite. */}
               <p className="text-center text-xs leading-relaxed text-fg-faint">
-                Tus números quedan reservados {raffle.reservationMinutes} minutos
-                mientras completas el pago.
+                {raffle.whatsappCheckout
+                  ? `Seguimos por WhatsApp para completar el pago. Te guardamos tus números ${raffle.reservationMinutes} minutos mientras tanto.`
+                  : `Te guardamos tus números ${raffle.reservationMinutes} minutos mientras completas el pago.`}
               </p>
             </div>
           </div>

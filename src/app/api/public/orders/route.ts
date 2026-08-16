@@ -42,6 +42,9 @@ export async function POST(req: NextRequest) {
       name: parsed.data.name,
       phone: parsed.data.phone,
       email: parsed.data.email || undefined,
+      // Cédula: campo opcional del modal de compra. Ya viene validada y sin
+      // separadores; una cédula vacía se manda como "no hay dato".
+      idNumber: parsed.data.idNumber || undefined,
       numbers: parsed.data.numbers,
       randomCount: parsed.data.randomCount,
     });

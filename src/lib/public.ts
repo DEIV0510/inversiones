@@ -216,3 +216,102 @@ export async function getPublishedWinners() {
     take: 12,
   });
 }
+
+// ============================================================
+// CONSULTA "¿QUIÉN GANÓ?" — dueño de un número
+// ============================================================
+
+/**
+ * Nombre abreviado para mostrar en público: "Wilson Andrés Torres" →
+ * "Wilson A. T.".
+ *
+ * El día del sorteo cualquiera puede teclear el número que salió en la
+ * lotería, así que el nombre completo NO se publica: solo lo suficiente para
+ * que el ganador se reconozca a sí mismo (y para que el dueño lo confirme
+ * en el panel, que ahí sí están los datos completos).
+ */
+export function abreviarNombre(nombre: string): string {
+  const partes = nombre.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return "Participante";
+  const [primero, ...resto] = partes;
+  // Solo la inicial del resto, en mayúscula y con punto.
+  const iniciales = resto
+    .map((p) => `${p[0].toUpperCase()}.`)
+    .slice(0, 3)
+    .join(" ");
+  return iniciales ? `${primero} ${iniciales}` : primero;
+}
+
+/**
+ * Teléfono enmascarado: "573106930187" → "310 *** 0187".
+ *
+ * Se dejan visibles el prefijo del operador y los últimos cuatro dígitos:
+ * el dueño del número lo reconoce, pero no alcanza para llamarlo ni para
+ * armar una lista de compradores. Nunca se publican correo ni cédula.
+ */
+export function enmascararTelefono(telefono: string): string {
+  let digitos = telefono.replace(/\D/g, "");
+  // Los teléfonos se guardan en formato internacional (57XXXXXXXXXX): se
+  // recorta el indicativo para mostrar el celular como se lee en Colombia.
+  if (digitos.length === 12 && digitos.startsWith("57")) digitos = digitos.slice(2);
+  if (digitos.length < 7) return "***";
+  return `${digitos.slice(0, 3)} *** ${digitos.slice(-4)}`;
+}
+
+/** Lo que se puede publicar del dueño de un número: nunca correo ni cédula. */
+export type DuenoDeNumero = {
+  /** Nombre abreviado, ej. "Wilson A. T.". */
+  nombre: string;
+  /** Teléfono enmascarado, ej. "310 *** 0187". */
+  telefono: string;
+};
+
+/**
+ * ¿A quién le pertenece este número?
+ *
+ * Solo responde por números VENDIDOS (fila PAID). Si el número está libre,
+ * apartado o bloqueado devuelve null sin distinguir entre esos casos: eso es
+ * inventario del sorteo y al público jamás se le informa.
+ *
+ * Consulta O(1) por el índice único (raffleId, number).
+ */
+export async function buscarDuenoDeNumero(
+  raffleId: string,
+  numero: number
+): Promise<DuenoDeNumero | null> {
+  const fila = await prisma.raffleNumber.findUnique({
+    where: { raffleId_number: { raffleId, number: numero } },
+    select: {
+      status: true,
+      order: {
+        select: {
+          status: true,
+          participant: { select: { name: true, phone: true } },
+        },
+      },
+    },
+  });
+  if (!fila || fila.status !== "PAID") return null;
+  // Sin orden (se borró) o con la orden ya anulada: no hay dueño que anunciar.
+  if (!fila.order || fila.order.status !== "PAID") return null;
+  return {
+    nombre: abreviarNombre(fila.order.participant.name),
+    telefono: enmascararTelefono(fila.order.participant.phone),
+  };
+}
+
+/**
+ * Premio instantáneo asociado a un número, si la rifa lo tiene configurado.
+ * Los números premiados ya son públicos en la página del sorteo, así que
+ * repetirlos aquí no revela nada nuevo.
+ */
+export async function buscarPremioDeNumero(
+  raffleId: string,
+  numero: number
+): Promise<string | null> {
+  const fila = await prisma.prizedNumber.findUnique({
+    where: { raffleId_number: { raffleId, number: numero } },
+    select: { prize: true },
+  });
+  return fila?.prize ?? null;
+}

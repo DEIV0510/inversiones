@@ -26,7 +26,7 @@ export function getFaqItems(settings: SiteSettings): FaqItem[] {
     },
     {
       question: "¿Dónde consulto mis números?",
-      answer: `En la sección "Mis boletas", con tu WhatsApp y el código de participación que aparece en tu comprobante. También puedes escribirnos al ${settings.whatsapp_display}.`,
+      answer: `En la sección "Mis boletas" basta con un dato: tu celular, tu correo, tu cédula o el código de participación de tu compra. También puedes escribirnos al ${settings.whatsapp_display}.`,
     },
     {
       question: "¿Cuándo se realiza el sorteo?",

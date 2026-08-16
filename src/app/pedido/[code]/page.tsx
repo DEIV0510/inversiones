@@ -81,13 +81,18 @@ export default async function PedidoPage({
     JSON.parse(order.numbersJson),
     order.raffle.digits
   );
-  // Premios instantáneos ganados (ticket premiado).
+  // Premios instantáneos ganados (ticket premiado). Solo cuenta lo que ganó
+  // ESTE pedido y ya está pagado; además se cruza con los números de la
+  // boleta para poder pintar en verde la ficha exacta que resultó premiada.
+  const numerosDelPedido = new Set(numbers);
   const prizesWon =
     order.status === "PAID"
-      ? (await getPrizesWon(order.id)).map((p) => ({
-          number: formatNumber(p.number, order.raffle.digits),
-          prize: p.prize,
-        }))
+      ? (await getPrizesWon(order.id))
+          .map((p) => ({
+            number: formatNumber(p.number, order.raffle.digits),
+            prize: p.prize,
+          }))
+          .filter((p) => numerosDelPedido.has(p.number))
       : [];
 
   const whatsappUrl = orderWhatsAppMessage({

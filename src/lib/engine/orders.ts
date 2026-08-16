@@ -43,9 +43,21 @@ export type CreateOrderInput = {
   name: string;
   phone: string;
   email?: string;
+  /** Cédula del comprador: opcional, para reencontrar sus boletas después. */
+  idNumber?: string;
   numbers?: number[];
   randomCount?: number;
 };
+
+/**
+ * Cédula del comprador: dato OPCIONAL. Se guarda solo con dígitos para que la
+ * búsqueda posterior no dependa de puntos ni espacios. Si viene vacía o
+ * demasiado corta se ignora: nunca puede estorbar una compra.
+ */
+function normalizarCedula(valor?: string): string | undefined {
+  const digitos = (valor ?? "").replace(/\D/g, "").slice(0, 15);
+  return digitos.length >= 5 ? digitos : undefined;
+}
 
 /** ¿La orden PENDING sigue viva o ya expiró su reserva? */
 export function isOrderExpired(order: {
@@ -72,9 +84,12 @@ export async function createOrder(input: CreateOrderInput): Promise<{
   }
 
   const phone = normalizeWhatsApp(input.phone);
-  if (!phone) throw new OrderError("El número de WhatsApp no es válido");
+  // El mensaje no nombra WhatsApp: hay rifas que no cierran por ahí y este
+  // texto se le muestra tal cual al comprador.
+  if (!phone) throw new OrderError("El número de teléfono no es válido");
   const name = input.name.trim();
   if (name.length < 2) throw new OrderError("Escribe tu nombre completo");
+  const cedula = normalizarCedula(input.idNumber);
 
   const wantsRandom = !input.numbers || input.numbers.length === 0;
   const randomCount = Math.floor(input.randomCount ?? 0);
@@ -129,10 +144,22 @@ export async function createOrder(input: CreateOrderInput): Promise<{
 
     try {
       const order = await prisma.$transaction(async (tx) => {
+        // `undefined` en el update deja el valor que ya hubiera: una compra
+        // sin cédula (o sin correo) nunca borra el dato que el comprador dio
+        // en una compra anterior.
         const participant = await tx.participant.upsert({
           where: { phone },
-          update: { name, email: input.email?.trim() || undefined },
-          create: { phone, name, email: input.email?.trim() || null },
+          update: {
+            name,
+            email: input.email?.trim() || undefined,
+            idNumber: cedula,
+          },
+          create: {
+            phone,
+            name,
+            email: input.email?.trim() || null,
+            idNumber: cedula ?? null,
+          },
         });
 
         const created = await tx.order.create({
@@ -171,7 +198,7 @@ export async function createOrder(input: CreateOrderInput): Promise<{
   }
 
   throw new OrderError(
-    "No fue posible reservar los números, intenta de nuevo",
+    "No fue posible completar tu compra, intenta de nuevo",
     409,
     lastConflict
   );

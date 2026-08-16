@@ -72,6 +72,8 @@ const PALETA = {
   brandLight: "#e879f9", // brand-light
   brandViolet: "#a855f7", // brand-violet
   wa: "#25d366", // wa
+  waDark: "#1da851", // wa-dark
+  waLight: "#7fe6a8", // wa aclarado (mismo verde, solo más claro)
   blanco: "#ffffff",
 };
 
@@ -83,6 +85,8 @@ type DatosBoleta = {
   codigo: string;
   empresa: string;
   fuente: string;
+  /** Números de ESTE pedido que resultaron premiados (van en verde). */
+  premiados: { number: string; prize: string }[];
 };
 
 /** Rectángulo redondeado dibujado a mano (no depende de ctx.roundRect). */
@@ -295,10 +299,15 @@ function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
   textoEspaciado(ctx, "TUS NÚMEROS", IMG_W / 2, y, 4.5, "center");
 
   // ---- Fichas con los números ----
+  // Mapa número → premio: solo lo que de verdad ganó este pedido.
+  const premios = new Map(datos.premiados.map((p) => [p.number, p.prize]));
+  const hayPremio = premios.size > 0;
+
   const contenidoX = 72;
   const contenidoW = IMG_W - 144;
   const gridArriba = y + 28;
-  const gridAbajo = 782;
+  // Cuando hay premio, la rejilla cede espacio para la felicitación.
+  const gridAbajo = hayPremio ? 700 : 782;
   const total = datos.numeros.length;
   const separacion = 16;
   const alturaGrid = gridAbajo - gridArriba;
@@ -336,7 +345,15 @@ function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
     restantes = Math.max(0, total - capacidad);
   }
 
-  const visibles = datos.numeros.slice(0, capacidad);
+  let visibles = datos.numeros.slice(0, capacidad);
+  if (restantes > 0 && hayPremio) {
+    // Si hubo que recortar la rejilla, un número premiado nunca se queda
+    // fuera de la boleta: se adelanta al principio.
+    const fuera = datos.numeros.filter(
+      (n) => premios.has(n) && !visibles.includes(n)
+    );
+    if (fuera.length > 0) visibles = [...fuera, ...visibles].slice(0, capacidad);
+  }
 
   // Con pocos números la rejilla se equilibra un poco en vertical para que la
   // boleta no quede con un hueco enorme antes del pie.
@@ -355,17 +372,58 @@ function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
     const sangria = ((columnas - enEstaFila) * (anchoFicha + separacion)) / 2;
     const fx = contenidoX + sangria + col * (anchoFicha + separacion);
     const fy = gridArriba + desplazamiento + fila * (altoFicha + separacion);
+    const premiado = premios.has(numero);
     const degradado = ctx.createLinearGradient(fx, fy, fx + anchoFicha, fy + altoFicha);
-    degradado.addColorStop(0, PALETA.brandViolet);
-    degradado.addColorStop(0.55, PALETA.brand);
-    degradado.addColorStop(1, PALETA.brandLight);
+    if (premiado) {
+      // Ficha ganadora: verde de la casa, texto oscuro y borde marcado.
+      degradado.addColorStop(0, PALETA.waDark);
+      degradado.addColorStop(0.55, PALETA.wa);
+      degradado.addColorStop(1, PALETA.waLight);
+    } else {
+      degradado.addColorStop(0, PALETA.brandViolet);
+      degradado.addColorStop(0.55, PALETA.brand);
+      degradado.addColorStop(1, PALETA.brandLight);
+    }
     rectRedondeado(ctx, fx, fy, anchoFicha, altoFicha, 20);
     ctx.fillStyle = degradado;
     ctx.fill();
+    if (premiado) {
+      ctx.strokeStyle = PALETA.blanco;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+    }
+    // En la ficha premiada el número sube un poco para dejarle sitio a la
+    // palabra "PREMIADO": el color nunca va solo.
+    const subeNumero = premiado ? (altoFicha >= 78 ? 11 : 7) : 0;
     ctx.font = `800 ${tamFicha}px ${fuente}`;
-    ctx.fillStyle = PALETA.blanco;
+    ctx.fillStyle = premiado ? PALETA.bg : PALETA.blanco;
     const etiquetaNumero = recortarTexto(ctx, numero, anchoFicha - 16);
-    textoEspaciado(ctx, etiquetaNumero, fx + anchoFicha / 2, fy + altoFicha / 2 + 1, 3, "center");
+    textoEspaciado(
+      ctx,
+      etiquetaNumero,
+      fx + anchoFicha / 2,
+      fy + altoFicha / 2 + 1 - subeNumero,
+      3,
+      "center"
+    );
+    if (premiado) {
+      const tamSello = altoFicha >= 78 ? 13 : 10;
+      ctx.font = `800 ${tamSello}px ${fuente}`;
+      ctx.fillStyle = PALETA.bg;
+      // Si la ficha quedó muy angosta, se deja solo la estrella.
+      const sello =
+        anchoEspaciado(ctx, "★ PREMIADO", 1.5) <= anchoFicha - 12
+          ? "★ PREMIADO"
+          : "★";
+      textoEspaciado(
+        ctx,
+        sello,
+        fx + anchoFicha / 2,
+        fy + altoFicha / 2 + (altoFicha >= 78 ? 22 : 15),
+        1.5,
+        "center"
+      );
+    }
   });
   ctx.textBaseline = "alphabetic";
 
@@ -381,6 +439,45 @@ function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
         gridAbajo + 18
       )
     );
+  }
+
+  // ---- Felicitación por los números premiados ----
+  if (hayPremio) {
+    let yFel = gridAbajo + 30;
+    ctx.textAlign = "center";
+    ctx.font = `800 22px ${fuente}`;
+    ctx.fillStyle = PALETA.wa;
+    textoEspaciado(ctx, "¡FELICITACIONES!", IMG_W / 2, yFel, 2.5, "center");
+    yFel += 26;
+    ctx.fillStyle = PALETA.fg;
+    const visiblesPremio = datos.premiados.slice(0, 2);
+    const anchoFel = IMG_W - 180;
+    for (const p of visiblesPremio) {
+      const frase = `Te ganaste ${p.prize} con el número ${p.number}`;
+      // El nombre del premio lo escribe el dueño y puede ser largo: antes se
+      // recortaba con puntos suspensivos y se perdía justo el número premiado.
+      // Ahora la frase encoge hasta caber; solo si ni al tamaño más pequeño
+      // entra se recorta.
+      let tamFrase = 17;
+      for (const tam of [17, 15, 13]) {
+        tamFrase = tam;
+        ctx.font = `600 ${tam}px ${fuente}`;
+        if (ctx.measureText(frase).width <= anchoFel) break;
+      }
+      ctx.font = `600 ${tamFrase}px ${fuente}`;
+      ctx.fillText(recortarTexto(ctx, frase, anchoFel), IMG_W / 2, yFel);
+      yFel += 23;
+    }
+    const restoPremios = datos.premiados.length - visiblesPremio.length;
+    if (restoPremios > 0) {
+      ctx.font = `700 15px ${fuente}`;
+      ctx.fillStyle = PALETA.fgSoft;
+      ctx.fillText(
+        restoPremios === 1 ? "y 1 premio más" : `y ${restoPremios} premios más`,
+        IMG_W / 2,
+        yFel
+      );
+    }
   }
 
   // ---- Pie: fecha, estado y código ----
@@ -467,9 +564,16 @@ function Countdown({ until, onExpired }: { until: string; onExpired: () => void 
   const totalSec = Math.floor(remaining / 1000);
   const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
   const ss = String(totalSec % 60).padStart(2, "0");
+  // El reloj se calcula con la hora del dispositivo, así que el segundo que
+  // pinta el servidor y el que pinta el navegador casi nunca coinciden. Se
+  // avisa a React de que esa diferencia es esperada: si no, la hidratación
+  // fallaba y dejaba un error en la consola del comprador.
   return (
-    <span className="font-display text-3xl font-black tabular-nums text-brand">
-      {mm}:{ss}
+    <span
+      suppressHydrationWarning
+      className="font-display text-3xl font-black tabular-nums text-brand"
+    >
+      {`${mm}:${ss}`}
     </span>
   );
 }
@@ -499,6 +603,7 @@ function BoletaCard({
   fecha,
   tono,
   nota,
+  premios,
 }: {
   title: string;
   numbers: string[];
@@ -506,9 +611,15 @@ function BoletaCard({
   fecha: string;
   tono: "pagada" | "espera" | "inactiva";
   nota?: string;
+  /** Números de este pedido que ganaron premio: van en verde. */
+  premios?: { number: string; prize: string }[];
 }) {
   const pagada = tono === "pagada";
   const inactiva = tono === "inactiva";
+  // Mapa número → premio para pintar la ficha ganadora sin recorrer la lista
+  // en cada número.
+  const ganadores = inactiva ? [] : (premios ?? []);
+  const mapaGanadores = new Map(ganadores.map((p) => [p.number, p.prize]));
   return (
     <div
       className={`relative overflow-hidden rounded-3xl bg-card px-4 py-6 sm:px-6 ${
@@ -554,19 +665,62 @@ function BoletaCard({
           Tus números
         </p>
         <ul className="mt-3 grid grid-cols-2 gap-2.5">
-          {numbers.map((n) => (
-            <li
-              key={n}
-              className={`flex min-h-14 items-center justify-center rounded-2xl px-1 font-display text-xl font-black tabular-nums tracking-[0.12em] sm:text-2xl ${
-                inactiva
-                  ? "border border-line bg-well text-fg-soft"
-                  : "ticket-chip text-white"
-              }`}
-            >
-              {n}
-            </li>
-          ))}
+          {numbers.map((n) => {
+            // El número premiado va en verde Y con la palabra "Premiado":
+            // el color por sí solo no basta para distinguirlo.
+            const premio = mapaGanadores.get(n);
+            if (premio) {
+              return (
+                <li
+                  key={n}
+                  className="ticket-chip-win flex min-h-14 flex-col items-center justify-center rounded-2xl px-1 py-1.5"
+                >
+                  <span className="font-display text-xl font-black tabular-nums tracking-[0.12em] text-bg sm:text-2xl">
+                    {n}
+                  </span>
+                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-bg">
+                    <span aria-hidden>★ </span>Premiado
+                  </span>
+                  <span className="sr-only">: te ganaste {premio}</span>
+                </li>
+              );
+            }
+            return (
+              <li
+                key={n}
+                className={`flex min-h-14 items-center justify-center rounded-2xl px-1 font-display text-xl font-black tabular-nums tracking-[0.12em] sm:text-2xl ${
+                  inactiva
+                    ? "border border-line bg-well text-fg-soft"
+                    : "ticket-chip text-white"
+                }`}
+              >
+                {n}
+              </li>
+            );
+          })}
         </ul>
+
+        {/* La felicitación viaja dentro de la boleta: es lo que el comprador
+            guarda como captura o descarga como imagen. */}
+        {ganadores.length > 0 ? (
+          <div className="mt-4 rounded-2xl border border-wa/50 bg-well px-3 py-3 text-center">
+            <p className="font-display text-sm font-black uppercase tracking-wide text-wa">
+              <span aria-hidden>★ </span>¡Felicitaciones!
+            </p>
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {ganadores.map((p) => (
+                <li key={p.number} className="text-[13px] leading-relaxed text-fg">
+                  Te ganaste{" "}
+                  <strong className="font-black text-wa">{p.prize}</strong> con el
+                  número{" "}
+                  <strong className="font-black tabular-nums tracking-wider text-wa">
+                    {p.number}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <div className="mt-5 flex items-center justify-between gap-3">
           <span className="flex items-center gap-1.5 text-[11px] font-semibold text-fg-soft">
@@ -622,6 +776,10 @@ export default function OrderView({
   const [descargando, setDescargando] = useState(false);
   const [errorDescarga, setErrorDescarga] = useState(false);
 
+  // Números premiados de ESTE pedido (la página solo los envía si el pedido
+  // está pagado y el premio quedó a su nombre).
+  const premiados = order.prizesWon ?? [];
+
   async function verifyPayment() {
     setVerifying(true);
     setVerifyMsg("");
@@ -673,6 +831,7 @@ export default function OrderView({
         codigo: order.code,
         empresa: order.companyName,
         fuente,
+        premiados,
       });
       if (!dibujada) throw new Error("sin-canvas");
 
@@ -752,34 +911,44 @@ export default function OrderView({
           </p>
         </div>
 
-        {/* Ticket premiado */}
-        {order.prizesWon && order.prizesWon.length > 0 ? (
-          <div className="neon-card rounded-2xl bg-card p-5 text-center">
-            <span className="glow-brand-sm mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white">
-              <IconTrophy width={24} height={24} />
+        {/* Ticket premiado: la mejor noticia del pedido, arriba de todo y en
+            el verde de la casa (el mismo de la ficha ganadora). */}
+        {premiados.length > 0 ? (
+          <div className="glow-wa rounded-2xl border border-wa/50 bg-card p-5 text-center">
+            <span className="glow-wa mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-wa text-bg">
+              <IconTrophy width={28} height={28} />
             </span>
-            <p className="mt-3 font-display text-lg font-black uppercase text-fg">
-              ¡Te ganaste un premio!
+            <p className="mt-3 font-display text-2xl font-black uppercase leading-tight text-wa sm:text-3xl">
+              ¡Felicitaciones!
             </p>
-            <div className="mt-3 flex flex-col gap-2">
-              {order.prizesWon.map((p) => (
-                <div
+            <ul className="mt-3 flex flex-col gap-2">
+              {premiados.map((p) => (
+                <li
                   key={p.number}
-                  className="flex items-center justify-between gap-3 rounded-xl bg-well px-4 py-3 text-left"
+                  className="rounded-xl bg-well px-4 py-3 text-sm leading-relaxed text-fg"
                 >
-                  <span className="font-display text-base font-bold tracking-wider text-brand">
+                  Te ganaste{" "}
+                  <strong className="font-display text-base font-black text-wa">
+                    {p.prize}
+                  </strong>{" "}
+                  con el número{" "}
+                  <strong className="font-display text-base font-black tabular-nums tracking-wider text-wa">
                     {p.number}
-                  </span>
-                  <span className="text-sm font-semibold text-fg">{p.prize}</span>
-                </div>
+                  </strong>
+                </li>
               ))}
-            </div>
+            </ul>
+            <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+              {premiados.length === 1
+                ? "Tu número premiado sale en verde y marcado con ★ en la boleta."
+                : "Tus números premiados salen en verde y marcados con ★ en la boleta."}
+            </p>
             {whatsappUrl ? (
-              <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+              <p className="mt-1.5 text-xs leading-relaxed text-fg-soft">
                 Escríbenos por WhatsApp con tu código para reclamarlo.
               </p>
             ) : (
-              <p className="mt-3 text-xs leading-relaxed text-fg-soft">
+              <p className="mt-1.5 text-xs leading-relaxed text-fg-soft">
                 Guarda tu código: es la credencial para reclamarlo.
               </p>
             )}
@@ -794,6 +963,7 @@ export default function OrderView({
           fecha={fechaPago}
           tono="pagada"
           nota="Guarda esta imagen como comprobante"
+          premios={premiados}
         />
 
         {/* Descarga del comprobante como PNG (se dibuja en el navegador) */}
@@ -898,9 +1068,11 @@ export default function OrderView({
 
         {order.reservedUntil ? (
           <div className="neon-card flex items-center justify-between gap-3 rounded-2xl bg-card px-5 py-4">
+            {/* El reloj se nombra por lo que de verdad hace: guardar los
+                números mientras el comprador paga. Nada de "reserva". */}
             <span className="flex items-center gap-2.5 text-sm font-semibold text-fg-soft">
               <IconClock width={20} height={20} className="text-brand" />
-              Reserva activa
+              Te guardamos tus números
             </span>
             <Countdown
               until={order.reservedUntil}
