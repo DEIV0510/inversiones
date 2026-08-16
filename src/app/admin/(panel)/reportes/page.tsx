@@ -25,6 +25,7 @@ export default async function AdminReportsPage() {
   const [
     incomeAgg,
     ordersByStatus,
+    pendientesVencidas,
     participantCount,
     soldAgg,
     raffles,
@@ -33,6 +34,11 @@ export default async function AdminReportsPage() {
   ] = await Promise.all([
     prisma.order.aggregate({ where: { status: "PAID" }, _sum: { total: true } }),
     prisma.order.groupBy({ by: ["status"], _count: { _all: true } }),
+    // Pendientes con la reserva ya vencida: Pedidos y el CSV las llaman
+    // expiradas, así que este reporte tiene que contarlas del mismo lado.
+    prisma.order.count({
+      where: { status: "PENDING", reservedUntil: { lt: now } },
+    }),
     prisma.participant.count(),
     // Vendidos: contador denormalizado de las rifas (O(1)) en vez de contar
     // la tabla de números, que con rifas de 1.000.000 sería un recorrido
@@ -55,8 +61,14 @@ export default async function AdminReportsPage() {
 
   const income = incomeAgg._sum.total ?? 0;
   const ordersTotal = ordersByStatus.reduce((s, g) => s + g._count._all, 0);
-  const ordersOf = (status: string) =>
+  const crudoDe = (status: string) =>
     ordersByStatus.find((g) => g.status === status)?._count._all ?? 0;
+  // Las pendientes vencidas se mueven de la fila "Pendientes" a "Expirados".
+  const ordersOf = (status: string) => {
+    if (status === "PENDING") return crudoDe("PENDING") - pendientesVencidas;
+    if (status === "EXPIRED") return crudoDe("EXPIRED") + pendientesVencidas;
+    return crudoDe(status);
+  };
   const soldTotal = soldAgg._sum.paidCount ?? 0;
   const soldOf = (raffleId: string) =>
     raffles.find((r) => r.id === raffleId)?.paidCount ?? 0;

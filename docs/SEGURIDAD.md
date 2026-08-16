@@ -42,12 +42,28 @@
   teléfono y email opcional (minimización).
 - SQL injection: Prisma parametriza todo; el único `$queryRaw` usa
   parámetros tipados.
-- XSS: React escapa por defecto; no hay `dangerouslySetInnerHTML` con datos
-  de usuarios (solo JSON-LD generado por el servidor).
+- XSS: React escapa por defecto. El único `dangerouslySetInnerHTML` con datos
+  editables es el JSON-LD de la portada, y pasa por `jsonLdSeguro`
+  (`src/lib/jsonld.ts`), que convierte `< > &` en secuencias `\uXXXX`: sin
+  eso, un `</script>` escrito en Configuración cerraría la etiqueta y
+  ejecutaría código en la web pública.
 - Imágenes subidas: re-procesadas SIEMPRE con sharp (nunca se sirve el
   archivo original), límite 10 MB verificado antes de bufferizar.
 - CSRF: mutaciones con JSON + SameSite Lax; sin formularios cross-site.
 - Secretos solo en variables de entorno (nunca en el repo ni en el cliente).
+
+## Cabeceras HTTP
+
+Definidas en `next.config.ts` para todas las rutas:
+
+- `X-Frame-Options: DENY` + `Content-Security-Policy: frame-ancestors 'none'`:
+  nadie puede meter el panel en un iframe y hacer que el administrador pulse
+  sin querer "confirmar pago" o "eliminar rifa" (clickjacking).
+- `X-Content-Type-Options: nosniff`: el navegador no adivina el tipo de un
+  archivo servido.
+- `Referrer-Policy: strict-origin-when-cross-origin`: el código del pedido va
+  en la URL de `/pedido/[code]` y no debe viajar en el Referer a terceros.
+- `Permissions-Policy`: cámara, micrófono y ubicación apagados.
 
 ## Auditoría
 
@@ -61,4 +77,7 @@ SUPER_ADMIN/ADMIN. No hay modificaciones silenciosas.
 
 - Rate limiting distribuido (Upstash Redis) si el tráfico crece.
 - 2FA para el panel (TOTP).
-- CSP estricta vía headers en next.config.
+- CSP completa (`script-src` con nonce), no solo `frame-ancestors`.
+- Cerrar las sesiones abiertas al cambiar la contraseña de un usuario (hoy el
+  token anterior sigue siendo válido hasta que caduca o se desactiva la
+  cuenta).

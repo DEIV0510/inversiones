@@ -1,4 +1,4 @@
-﻿// Borra la orden de prueba del paquete de 600 y libera sus nÃºmeros.
+﻿// Borra la orden de prueba del paquete de 600 y libera sus números.
 const { PrismaClient } = require("@prisma/client");
 const p = new PrismaClient();
 
@@ -13,6 +13,6 @@ const p = new PrismaClient();
     await p.order.delete({ where: { id: o.id } });
     console.log("orden de prueba eliminada:", o.code);
   }
-  if (orders.length === 0) console.log("no habÃ­a Ã³rdenes de prueba");
+  if (orders.length === 0) console.log("no había órdenes de prueba");
   await p.$disconnect();
 })();

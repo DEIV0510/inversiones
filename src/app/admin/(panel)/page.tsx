@@ -1,17 +1,35 @@
 ﻿import Link from "next/link";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { isOrderExpired } from "@/lib/engine/orders";
 import { formatCop } from "@/lib/format";
 import { can } from "@/lib/rbac";
 import { IconPlus, IconTicket, IconUsers } from "@/components/icons";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Esta página se arma en el servidor y en producción el servidor corre en UTC:
+ * sin fijar la zona, las horas salían cinco adelantadas respecto a las que
+ * muestra Pedidos (que las pinta en el navegador del dueño). Colombia no
+ * cambia de hora, así que se fija de una vez.
+ */
+const ZONA = "America/Bogota";
+
 const dateFmt = new Intl.DateTimeFormat("es-CO", {
   day: "numeric",
   month: "short",
   hour: "numeric",
   minute: "2-digit",
+  timeZone: ZONA,
+});
+
+/** Día calendario colombiano (AAAA-MM-DD) de un instante cualquiera. */
+const diaFmt = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: ZONA,
 });
 
 const STATUS_LABEL: Record<string, string> = {
@@ -60,8 +78,12 @@ export default async function AdminDashboard() {
       },
     }),
     // Ingresos por día agregados en SQL: devuelve como máximo 14 filas.
+    // Se agrupa por el día COLOMBIANO (las fechas se guardan en UTC): si no,
+    // lo vendido después de las 7 de la tarde caía en la barra del día
+    // siguiente y no cuadraba con la etiqueta.
     prisma.$queryRaw<{ dia: Date; total: bigint }[]>`
-      SELECT date_trunc('day', "paidAt") AS dia, SUM("total")::bigint AS total
+      SELECT date_trunc('day', ("paidAt" AT TIME ZONE 'UTC') AT TIME ZONE ${ZONA}) AS dia,
+             SUM("total")::bigint AS total
       FROM "Order"
       WHERE "status" = 'PAID' AND "paidAt" >= ${since14}
       GROUP BY 1
@@ -71,20 +93,26 @@ export default async function AdminDashboard() {
 
   const soldNumbers = soldAgg._sum.paidCount ?? 0;
 
-  // Ingresos por día (últimos 14 días) para la gráfica.
+  // Ingresos por día (últimos 14 días) para la gráfica. La consulta ya
+  // devolvió la medianoche colombiana como fecha sin zona, así que su día
+  // calendario se lee tal cual; el de cada barra se calcula en la misma zona
+  // para que etiqueta y cifra hablen del mismo día.
   const byDay = new Map<string, number>();
   for (const row of dailyRows) {
     byDay.set(new Date(row.dia).toISOString().slice(0, 10), Number(row.total));
   }
   const days: { label: string; total: number }[] = [];
   for (let i = 13; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 86_400_000);
+    const clave = diaFmt.format(new Date(now.getTime() - i * 86_400_000));
     days.push({
-      label: `${d.getDate()}`,
-      total: byDay.get(d.toISOString().slice(0, 10)) ?? 0,
+      label: String(Number(clave.slice(8, 10))),
+      total: byDay.get(clave) ?? 0,
     });
   }
   const maxDay = Math.max(1, ...days.map((d) => d.total));
+
+  // El dinero es dato de Reportes: Soporte no entra ahí y tampoco lo ve aquí.
+  const verDinero = can(session.role, "reports.view");
 
   const stats = [
     { label: "Rifas activas", value: String(activeRaffles), accent: true },
@@ -106,26 +134,29 @@ export default async function AdminDashboard() {
         </p>
       </div>
 
-      {/* Ingresos */}
-      <div className="neon-card rounded-2xl bg-card p-5">
-        <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-          Ingresos confirmados
-        </p>
-        <p className="mt-1 font-display text-3xl font-black tabular-nums text-fg">
-          {formatCop(revenueAgg._sum.total ?? 0)}
-        </p>
-        <div className="mt-4 flex h-20 items-end gap-1" aria-label="Ingresos últimos 14 días">
-          {days.map((d, i) => (
-            <div
-              key={i}
-              className="group relative flex-1 rounded-t-sm bg-brand/70 transition-colors hover:bg-brand"
-              style={{ height: `${Math.max(3, (d.total / maxDay) * 100)}%` }}
-              title={`Día ${d.label}: ${formatCop(d.total)}`}
-            />
-          ))}
+      {/* Ingresos. Solo para quien tiene acceso a Reportes: a Soporte se le
+          niega esa pantalla, así que tampoco puede ver aquí el dinero. */}
+      {verDinero ? (
+        <div className="neon-card rounded-2xl bg-card p-5">
+          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+            Ingresos confirmados
+          </p>
+          <p className="mt-1 font-display text-3xl font-black tabular-nums text-fg">
+            {formatCop(revenueAgg._sum.total ?? 0)}
+          </p>
+          <div className="mt-4 flex h-20 items-end gap-1" aria-label="Ingresos últimos 14 días">
+            {days.map((d, i) => (
+              <div
+                key={i}
+                className="group relative flex-1 rounded-t-sm bg-brand/70 transition-colors hover:bg-brand"
+                style={{ height: `${Math.max(3, (d.total / maxDay) * 100)}%` }}
+                title={`Día ${d.label}: ${formatCop(d.total)}`}
+              />
+            ))}
+          </div>
+          <p className="mt-1 text-[10px] text-fg-faint">Últimos 14 días</p>
         </div>
-        <p className="mt-1 text-[10px] text-fg-faint">Últimos 14 días</p>
-      </div>
+      ) : null}
 
       {/* Métricas */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -220,7 +251,11 @@ export default async function AdminDashboard() {
                       o.status === "PAID" ? "text-wa" : "text-fg-faint"
                     }`}
                   >
-                    {STATUS_LABEL[o.status] ?? o.status}
+                    {/* Una pendiente con la reserva vencida ya es expirada:
+                        se nombra igual que en Pedidos y en el CSV. */}
+                    {isOrderExpired(o)
+                      ? STATUS_LABEL.EXPIRED
+                      : (STATUS_LABEL[o.status] ?? o.status)}
                   </p>
                 </div>
               </Link>

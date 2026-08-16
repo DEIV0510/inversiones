@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PublicRaffle } from "@/lib/public";
 import { formatCop } from "@/lib/format";
+import { formatNumber } from "@/lib/numbers";
 import { useModalA11y } from "@/components/useModalA11y";
 import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
 
@@ -128,6 +129,22 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   const [notice, setNotice] = useState("");
   const panelRef = useModalA11y(checkoutOpen, () => setCheckoutOpen(false));
   const abortRef = useRef<AbortController | null>(null);
+  const noticeRef = useRef<HTMLDivElement | null>(null);
+
+  // El aviso vive arriba del bloque de selección, pero se dispara cuando el
+  // comprador está abajo (en el modal o en la cuadrícula). Si queda fuera de
+  // la vista se acerca solo: si no, el modal se cerraría y para él no habría
+  // pasado nada. Ya visible, no se le da ningún tirón a la página.
+  useEffect(() => {
+    if (!notice) return;
+    const nodo = noticeRef.current;
+    if (!nodo) return;
+    const caja = nodo.getBoundingClientRect();
+    // 96px = alto de la cabecera fija más un respiro.
+    if (caja.top < 96 || caja.bottom > window.innerHeight) {
+      nodo.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [notice]);
 
   // Regla derivada (sustituye a las pestañas): si el comprador escogió
   // números a mano, el pedido lleva ESOS números; si no escogió ninguno pero
@@ -181,11 +198,19 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
 
   /** Elegir un número a mano cancela la cantidad de la compra rápida. */
   function toggle(value: number, label: string) {
+    // Tope del pedido: antes se ignoraba el toque en silencio y el comprador
+    // creía que la ficha no respondía. Ahora se le dice por qué.
+    if (!selected.has(value) && selected.size >= raffle.maxNumbersPerOrder) {
+      setNotice(
+        `Este sorteo permite máximo ${raffle.maxNumbersPerOrder} números por pedido. Quita alguno para elegir otro.`
+      );
+      return;
+    }
     setSelected((prev) => {
       const next = new Map(prev);
       if (next.has(value)) {
         next.delete(value);
-      } else if (next.size < raffle.maxNumbersPerOrder) {
+      } else {
         next.set(value, label);
       }
       return next;
@@ -240,7 +265,18 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         setSearchError(data.error || "No fue posible consultar");
         return;
       }
-      setSearchResult(data);
+      // La etiqueta se arma aquí a partir del valor y de las cifras de la
+      // rifa: así el número buscado se ve siempre, sin depender de cómo se
+      // llame el campo en la respuesta.
+      if (typeof data.value !== "number") {
+        setSearchError("No fue posible consultar");
+        return;
+      }
+      setSearchResult({
+        value: data.value,
+        label: formatNumber(data.value, raffle.digits),
+        status: data.status,
+      });
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         setSearchError("Error de conexión. Intenta de nuevo.");
@@ -256,7 +292,11 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       return;
     }
     if (phone.replace(/\D/g, "").length < 10) {
-      setFormError("Escribe tu número de WhatsApp");
+      setFormError(
+        raffle.whatsappCheckout
+          ? "Escribe tu número de WhatsApp"
+          : "Escribe tu número de teléfono"
+      );
       return;
     }
     setSubmitting(true);
@@ -279,14 +319,15 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 409 && Array.isArray(data.conflicting) && data.conflicting.length > 0) {
-          const perdidos: string[] = [];
+          // Los números perdidos se nombran ANTES de tocar el estado: el
+          // actualizador de React no corre en el acto, así que leerlos desde
+          // dentro dejaba la lista vacía y el aviso salía siempre genérico.
+          const perdidos = (data.conflicting as number[])
+            .map((n) => selected.get(n))
+            .filter((label): label is string => Boolean(label));
           setSelected((prev) => {
             const next = new Map(prev);
-            for (const n of data.conflicting) {
-              const label = next.get(n);
-              if (label) perdidos.push(label);
-              next.delete(n);
-            }
+            for (const n of data.conflicting) next.delete(n);
             return next;
           });
           setCheckoutOpen(false);
@@ -341,6 +382,7 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
     <section id="elegir" className="mt-6 flex flex-col gap-7">
       {notice ? (
         <div
+          ref={noticeRef}
           role="alert"
           className="flex items-start justify-between gap-3 rounded-2xl border border-brand/50 bg-brand/10 px-4 py-3"
         >
@@ -728,7 +770,9 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               </div>
               <div>
                 <label htmlFor="co-phone" className="mb-1.5 block text-sm font-semibold text-fg">
-                  Tu WhatsApp
+                  {/* Si esta rifa no cierra por WhatsApp, aquí tampoco se
+                      nombra: se le pide el teléfono y ya. */}
+                  {raffle.whatsappCheckout ? "Tu WhatsApp" : "Tu teléfono"}
                 </label>
                 <input
                   id="co-phone"

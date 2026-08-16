@@ -61,7 +61,12 @@ export async function getSession(): Promise<AdminSession | null> {
   const token = store.get(COOKIE_NAME)?.value;
   if (!token) return null;
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    // Se fija el algoritmo permitido: aceptar "el que diga la cabecera del
+    // token" es la vía clásica de confusión de algoritmos. Solo vale el que
+    // usamos al firmar.
+    const { payload } = await jwtVerify(token, getSecret(), {
+      algorithms: ["HS256"],
+    });
     if (!payload.sub || !payload.role) return null;
     return {
       userId: payload.sub,

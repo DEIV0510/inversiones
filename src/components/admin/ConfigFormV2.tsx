@@ -238,7 +238,9 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
                 : "Activar modo demostración"
             }
             onClick={() => setDemoMode((v) => !v)}
-            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+            /* El interruptor mide 28px de alto: el ::before le agrega el área
+               táctil que falta para pulsarlo cómodo desde el celular. */
+            className={`relative h-7 w-12 shrink-0 rounded-full transition-colors before:absolute before:-inset-2.5 before:content-[''] ${
               demoMode ? "bg-brand" : "bg-line"
             }`}
           >

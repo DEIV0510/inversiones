@@ -10,6 +10,18 @@ export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** Rutas de la galería guardadas como JSON; si está corrupta, lista vacía. */
+function galeriaDe(galleryJson: string): string[] {
+  try {
+    const parsed = JSON.parse(galleryJson);
+    return Array.isArray(parsed)
+      ? parsed.filter((g): g is string => typeof g === "string" && g.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(_req: NextRequest, { params }: Ctx) {
   const auth = await requireAdminApi("numbers.view");
   if (auth instanceof Response) return auth;
@@ -193,7 +205,12 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   }
 
   await prisma.raffle.delete({ where: { id } });
+  // La portada y TODA la galería: si no, las fotos de la galería quedan
+  // huérfanas en el almacenamiento y se siguen pagando.
   await deleteImage(existing.imageUrl);
+  for (const url of galeriaDe(existing.galleryJson)) {
+    await deleteImage(url);
+  }
   await logAudit({
     actorEmail: auth.email,
     actorRole: auth.role,

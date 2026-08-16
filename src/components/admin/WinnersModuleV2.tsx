@@ -362,17 +362,21 @@ export default function WinnersModuleV2() {
                 <p className="mt-0.5 truncate text-sm text-fg-soft">
                   {w.prize}
                 </p>
+                {/* El número va en su propio renglón: en un móvil de 360px la
+                    foto se come el ancho y, todo en una línea truncada, el
+                    dato más importante de la ficha se perdía en los puntos
+                    suspensivos del título. */}
                 <p className="mt-0.5 truncate text-xs text-fg-faint">
                   {w.raffleTitle}
-                  {w.numberFormatted ? (
-                    <>
-                      {" · Número "}
-                      <span className="font-mono font-bold tracking-[0.06em] tabular-nums text-brand-light">
-                        {w.numberFormatted}
-                      </span>
-                    </>
-                  ) : null}
                 </p>
+                {w.numberFormatted ? (
+                  <p className="mt-0.5 text-xs text-fg-faint">
+                    Número{" "}
+                    <span className="font-mono font-bold tracking-[0.06em] tabular-nums text-brand-light">
+                      {w.numberFormatted}
+                    </span>
+                  </p>
+                ) : null}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
                   {w.isDemo ? <Tag tone="warn">Demo</Tag> : null}
                   {w.isPublished ? (

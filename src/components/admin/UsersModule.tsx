@@ -263,24 +263,28 @@ export default function UsersModule({ selfId }: { selfId: string }) {
             </div>
 
             <div className="mt-3 flex flex-wrap items-center justify-end gap-2 border-t border-line pt-3">
-              <button
-                type="button"
-                onClick={() => toggleActive(u)}
-                disabled={busyId === u.id}
-                className={btnOutline}
-              >
-                {u.isActive ? "Desactivar" : "Activar"}
-              </button>
+              {/* Nadie puede desactivarse ni borrarse a sí mismo: el servidor
+                  lo rechaza, así que esos botones ni se pintan en tu ficha. */}
               {u.id !== selfId ? (
-                <button
-                  type="button"
-                  onClick={() => remove(u)}
-                  disabled={busyId === u.id}
-                  className={btnOutline}
-                >
-                  <IconTrash width={15} height={15} />
-                  Eliminar
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => toggleActive(u)}
+                    disabled={busyId === u.id}
+                    className={btnOutline}
+                  >
+                    {u.isActive ? "Desactivar" : "Activar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => remove(u)}
+                    disabled={busyId === u.id}
+                    className={btnOutline}
+                  >
+                    <IconTrash width={15} height={15} />
+                    Eliminar
+                  </button>
+                </>
               ) : null}
               <button
                 type="button"

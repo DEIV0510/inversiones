@@ -53,6 +53,7 @@ export async function POST(
       progressMode: original.progressMode,
       manualProgressPct: original.manualProgressPct,
       reservationMinutes: original.reservationMinutes,
+      minNumbersPerOrder: original.minNumbersPerOrder,
       maxNumbersPerOrder: original.maxNumbersPerOrder,
       terms: original.terms,
       displayOrder: original.displayOrder + 1,

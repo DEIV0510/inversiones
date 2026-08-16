@@ -93,6 +93,17 @@ function providerLabel(provider: string): string {
   return provider;
 }
 
+/**
+ * Los pagos confirmados a mano no tienen transacción de pasarela: el sistema
+ * les inventa un identificador interno "manual-<id del pedido>" solo para no
+ * duplicarlos. Ese código no le dice nada a nadie, así que no se muestra.
+ */
+function txVisible(payment: PaymentRow): string | null {
+  if (!payment.providerTxId) return null;
+  if (payment.providerTxId.startsWith("manual-")) return null;
+  return payment.providerTxId;
+}
+
 export default function PaymentsModule() {
   const [page, setPage] = useState(1);
   const [provider, setProvider] = useState("");
@@ -211,6 +222,7 @@ export default function PaymentsModule() {
               text: payment.status,
               tone: "warn" as const,
             };
+            const tx = txVisible(payment);
             return (
               <article key={payment.id} className={cardCls}>
                 {/* Importe grande en fucsia y estado a la derecha */}
@@ -242,11 +254,11 @@ export default function PaymentsModule() {
                   {payment.raffleTitle}
                 </p>
 
-                {payment.reference || payment.providerTxId ? (
+                {payment.reference || tx ? (
                   <p className="mt-2 break-all rounded-xl border border-line bg-well px-3 py-2 font-mono text-[11px] leading-relaxed text-fg-faint">
                     {payment.reference ? `Ref: ${payment.reference}` : ""}
-                    {payment.reference && payment.providerTxId ? " · " : ""}
-                    {payment.providerTxId ? `Tx: ${payment.providerTxId}` : ""}
+                    {payment.reference && tx ? " · " : ""}
+                    {tx ? `Tx: ${tx}` : ""}
                   </p>
                 ) : null}
 

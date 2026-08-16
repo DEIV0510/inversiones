@@ -11,6 +11,7 @@ import FinalCta from "@/components/landing/FinalCta";
 import Footer from "@/components/landing/Footer";
 import WhatsAppFloat from "@/components/landing/WhatsAppFloat";
 import BottomBar from "@/components/landing/BottomBar";
+import { jsonLdSeguro } from "@/lib/jsonld";
 import { getPublicRaffles, getPublishedWinners } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { getFaqItems } from "@/lib/faq";
@@ -91,13 +92,15 @@ export default async function HomePage() {
       <Footer settings={settings} />
       <WhatsAppFloat whatsappNumber={settings.whatsapp_number} />
       <BottomBar whatsappNumber={settings.whatsapp_number} />
+      {/* JSON-LD siempre con jsonLdSeguro: lleva datos de Configuración y un
+          "</script>" ahí dentro rompería la etiqueta y ejecutaría código. */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(organizationJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSeguro(organizationJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(faqJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdSeguro(faqJsonLd) }}
       />
     </>
   );

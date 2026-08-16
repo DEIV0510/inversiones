@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { IconX } from "@/components/icons";
 import {
   EmptyState,
   LoadingRows,
@@ -35,14 +36,22 @@ const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
 /* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
 const alertCls =
   "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
+/* Acción destructiva: pastilla rosa, la misma de Pedidos. */
+const btnDanger =
+  "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-error/45 bg-error/10 px-4 text-xs font-bold uppercase tracking-[0.1em] text-error transition-colors hover:bg-error/20 disabled:opacity-50";
 
 export default function ReservationsModule() {
   const [page, setPage] = useState(1);
   const [raffleId, setRaffleId] = useState("");
   const [raffles, setRaffles] = useState<RaffleOption[]>([]);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
+  const [version, setVersion] = useState(0);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  // Si el servidor contesta 403 se ocultan los botones: este rol solo mira.
+  const [puedeLiberar, setPuedeLiberar] = useState(true);
 
-  const requestKey = `${page}|${raffleId}`;
+  const requestKey = `${page}|${raffleId}|${version}`;
 
   useEffect(() => {
     let alive = true;
@@ -105,6 +114,59 @@ export default function ReservationsModule() {
 
   const current = loaded && loaded.key === requestKey ? loaded : null;
   const loading = !current;
+  const errorMsg = actionError || current?.error || "";
+
+  /**
+   * Libera una reserva. Un número reservado pertenece siempre a un pedido, así
+   * que liberarlo es cancelar ese pedido completo: se avisa en el aviso previo
+   * para que nadie suelte por error los demás números del mismo comprador.
+   * Se reutiliza el mismo endpoint de cancelación que usa Pedidos, buscando
+   * antes el pedido por su código.
+   */
+  async function liberar(row: ReservationRow) {
+    const codigo = row.orderCode;
+    if (!codigo) return;
+    if (
+      !window.confirm(
+        `¿Liberar el número ${row.number}? Se cancela el pedido ${codigo} completo y todos sus números vuelven a quedar libres.`
+      )
+    ) {
+      return;
+    }
+    setBusyId(row.id);
+    setActionError("");
+    try {
+      const busqueda = await fetch(
+        `/api/admin/orders?q=${encodeURIComponent(codigo)}&perPage=10`
+      );
+      const datos = await busqueda.json().catch(() => ({}));
+      if (!busqueda.ok) {
+        setActionError(datos.error || "No fue posible encontrar el pedido");
+        return;
+      }
+      const pedido = (datos.items ?? []).find(
+        (o: { id: string; code: string }) => o.code === codigo
+      );
+      if (!pedido) {
+        setActionError(`No se encontró el pedido ${codigo}`);
+        return;
+      }
+      const res = await fetch(`/api/admin/orders/${pedido.id}/cancel`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 403) setPuedeLiberar(false);
+        setActionError(data.error || "No fue posible liberar la reserva");
+        return;
+      }
+      setVersion((v) => v + 1);
+    } catch {
+      setActionError("Error de conexión");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -116,6 +178,7 @@ export default function ReservationsModule() {
           id="rv-raffle"
           value={raffleId}
           onChange={(e) => {
+            setActionError("");
             setRaffleId(e.target.value);
             setPage(1);
           }}
@@ -131,9 +194,9 @@ export default function ReservationsModule() {
         </select>
       </div>
 
-      {current?.error ? (
+      {errorMsg ? (
         <p role="alert" className={alertCls}>
-          {current.error}
+          {errorMsg}
         </p>
       ) : null}
 
@@ -181,6 +244,19 @@ export default function ReservationsModule() {
                   </p>
                 </div>
               </div>
+              {puedeLiberar && row.orderCode ? (
+                <div className="mt-3 flex justify-end border-t border-line pt-3">
+                  <button
+                    type="button"
+                    onClick={() => liberar(row)}
+                    disabled={busyId === row.id}
+                    className={btnDanger}
+                  >
+                    <IconX width={15} height={15} />
+                    Liberar
+                  </button>
+                </div>
+              ) : null}
             </article>
           ))}
         </div>
@@ -191,7 +267,10 @@ export default function ReservationsModule() {
           page={page}
           total={current.total}
           perPage={current.perPage}
-          onPage={setPage}
+          onPage={(p) => {
+            setActionError("");
+            setPage(p);
+          }}
         />
       ) : null}
     </div>

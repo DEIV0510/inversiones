@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { formatCop } from "@/lib/format";
-import { IconWhatsApp } from "@/components/icons";
+import { IconTicket, IconWhatsApp } from "@/components/icons";
 import {
   EmptyState,
   LoadingRows,
   Pager,
+  btnOutline,
   btnPrimary,
   formatDate,
   inputCls,
@@ -176,6 +178,27 @@ export default function ParticipantsModule() {
                   </p>
                   <p className={statLabelCls}>Total gastado</p>
                 </div>
+              </div>
+
+              {/* Abrir el participante = ver su historial. Pedidos ya sabe
+                  buscar por teléfono, así que se le pasa el del comprador y
+                  la pantalla queda filtrada solo con sus pedidos. */}
+              <div className="mt-3 flex items-center justify-end border-t border-line pt-3">
+                {p.ordersCount === 0 ? (
+                  <p className="text-xs text-fg-faint">
+                    Todavía no ha hecho ningún pedido.
+                  </p>
+                ) : (
+                  <Link
+                    href={`/admin/pedidos?q=${encodeURIComponent(p.phone)}`}
+                    className={btnOutline}
+                  >
+                    <IconTicket width={15} height={15} />
+                    {p.ordersCount === 1
+                      ? "Ver su pedido"
+                      : `Ver sus ${p.ordersCount} pedidos`}
+                  </Link>
+                )}
               </div>
             </article>
           ))}

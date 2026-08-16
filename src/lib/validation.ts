@@ -66,7 +66,13 @@ const raffleFields = z.object({
   showPrize: z.boolean().default(false),
   showDrawDate: z.boolean().default(false),
   ticketPacks: z
-    .array(z.number().int().min(1).max(5000))
+    .array(
+      z
+        .number()
+        .int()
+        .min(1, "Un paquete debe traer al menos 1 número")
+        .max(5000, "Un paquete no puede pasar de 5000 números")
+    )
     .max(12, "Máximo 12 paquetes")
     .default([1, 2, 5, 10]),
   prizes: z
@@ -83,7 +89,11 @@ const raffleFields = z.object({
   prizedNumbers: z
     .array(
       z.object({
-        number: z.number().int().min(0).max(9_999_999),
+        number: z
+          .number()
+          .int()
+          .min(0, "Un número premiado no puede ser negativo")
+          .max(9_999_999, "Un número premiado no puede pasar de 7 cifras"),
         prize: z.string().trim().min(1, "Escribe el premio").max(120),
       })
     )
@@ -93,8 +103,18 @@ const raffleFields = z.object({
   drawsAt: z.string().datetime().nullable().optional(),
   status: z.enum(RAFFLE_STATUS_VALUES),
   progressMode: z.enum(["AUTO", "MANUAL"]).default("AUTO"),
-  manualProgressPct: z.number().int().min(0).max(100).default(0),
-  reservationMinutes: z.number().int().min(3).max(1440).default(10),
+  manualProgressPct: z
+    .number()
+    .int()
+    .min(0, "El avance no puede ser menor que 0%")
+    .max(100, "El avance no puede pasar de 100%")
+    .default(0),
+  reservationMinutes: z
+    .number()
+    .int()
+    .min(3, "La reserva debe durar al menos 3 minutos")
+    .max(1440, "La reserva no puede pasar de 1440 minutos (24 horas)")
+    .default(10),
   // Compra mínima por pedido: condición de venta que fija el dueño del sorteo
   // ("mínimo 25 números"). Por defecto 1, que equivale a no exigir mínimo.
   minNumbersPerOrder: z
@@ -103,9 +123,19 @@ const raffleFields = z.object({
     .min(1, "La compra mínima es de al menos 1 número")
     .max(5000, "La compra mínima no puede pasar de 5000 números")
     .default(1),
-  maxNumbersPerOrder: z.number().int().min(1).max(5000).default(20),
+  maxNumbersPerOrder: z
+    .number()
+    .int()
+    .min(1, "El máximo por pedido es de al menos 1 número")
+    .max(5000, "El máximo por pedido no puede pasar de 5000 números")
+    .default(20),
   terms: z.string().trim().max(5000).default(""),
-  displayOrder: z.number().int().min(0).max(9999).default(0),
+  displayOrder: z
+    .number()
+    .int()
+    .min(0, "El orden no puede ser negativo")
+    .max(9999, "El orden no puede pasar de 9999")
+    .default(0),
 });
 
 /** Un solo mensaje para que el panel diga siempre lo mismo. */

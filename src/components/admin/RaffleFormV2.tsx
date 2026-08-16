@@ -145,6 +145,29 @@ const MAX_PRIZES = 12;
 /* Tope del servidor: 200 números premiados sumando todos los apartados. */
 const MAX_PRIZED_NUMBERS = 200;
 const MAX_PRIZED_GROUPS = 10;
+/* Minutos de reserva que acepta el servidor. Si se sale de aquí, el mensaje
+   que devuelve zod viene en inglés y de técnico: se avisa antes, en cristiano. */
+const MIN_RESERVA = 3;
+const MAX_RESERVA = 1440;
+
+/** "1 número" / "25 números": los avisos no pueden decir "1 números". */
+function cantidadNumeros(n: number): string {
+  return n === 1 ? "1 número" : `${n.toLocaleString("es-CO")} números`;
+}
+
+/**
+ * Estados en los que la página del sorteo ya es pública (misma lista que
+ * PUBLIC_STATUSES de src/lib/public.ts y que la del listado; se repite aquí
+ * porque ese módulo habla con Prisma y no puede entrar en un componente de
+ * cliente). En los demás, ese botón abre una VISTA PREVIA que solo ve quien
+ * tiene sesión de panel.
+ */
+const ESTADOS_PUBLICOS = new Set([
+  "COMING_SOON",
+  "ACTIVE",
+  "SOLD_OUT",
+  "FINISHED",
+]);
 
 const SELECTION_MODES = [
   { value: "MANUAL", label: "Solo manual" },
@@ -383,6 +406,9 @@ export default function RaffleFormV2({
   const totalInt = parseInt(totalNumbers || "0", 10) || 0;
   const capacity = Math.pow(10, digits);
   const numbersLocked = mode === "edit" && !!initial?.hasOrders;
+  /* Con el estado GUARDADO (no el del desplegable, que todavía no se ha
+     enviado) se decide si el botón abre la página pública o la vista previa. */
+  const yaEsPublica = ESTADOS_PUBLICOS.has(initial?.status ?? "");
   const maxPorPedido = parseInt(maxPerOrder || "0", 10) || 0;
   const minPorPedido = parseInt(minPerOrder || "0", 10) || 0;
   // Paquetes que el comprador NO llegaría a ver: la página del sorteo esconde
@@ -404,8 +430,26 @@ export default function RaffleFormV2({
     minPorPedido === 1
       ? "Compra mínima: con 1 no exiges nada, el comprador puede llevarse un solo número."
       : minPorPedido > 1
-        ? `Compra mínima: si el comprador pide menos de ${minPorPedido.toLocaleString("es-CO")} números, el sistema le rechaza la compra y le avisa ahí mismo.`
+        ? `Compra mínima: si el comprador pide menos de ${cantidadNumeros(minPorPedido)}, el sistema le rechaza la compra y le avisa ahí mismo.`
         : "Compra mínima: por debajo de esa cantidad el sistema le rechaza la compra al comprador y le avisa ahí mismo.";
+  const minutosReserva = parseInt(reservationMinutes || "0", 10) || 0;
+  /**
+   * Lo que impide guardar y NO depende de escribir texto libre: las tres
+   * cantidades que se pisan entre sí. Se revisa en cada render (no con
+   * `setError`) para que el aviso se apague solo en cuanto el dueño arregla el
+   * campo; si se guardara en estado, quedaría en pantalla un mensaje con
+   * cifras viejas después de corregirlo.
+   */
+  const errorCantidades =
+    minPorPedido < 1
+      ? "Escribe la compra mínima: es de al menos 1 número. Ponla igual a tu paquete más pequeño."
+      : maxPorPedido < 1
+        ? "Escribe el máximo de números por pedido: es lo más que se puede llevar un comprador de una sola vez."
+        : minPorPedido > maxPorPedido
+          ? `La compra mínima es de ${cantidadNumeros(minPorPedido)} y el máximo por pedido es de ${cantidadNumeros(maxPorPedido)}: nadie podría comprar. Sube el máximo o baja la compra mínima.`
+          : minutosReserva < MIN_RESERVA || minutosReserva > MAX_RESERVA
+            ? `Los minutos de reserva van de ${MIN_RESERVA} a ${MAX_RESERVA} (un día entero). Escribe una cantidad dentro de ese rango.`
+            : "";
 
   /* Apartados de números premiados, revisados en cada render (sin estado
      duplicado): de aquí salen la vista previa, los avisos y lo que se guarda. */
@@ -428,6 +472,7 @@ export default function RaffleFormV2({
 
   function onTitleChange(value: string) {
     setTitle(value);
+    setError("");
     if (!slugTouched) setSlug(slugify(value));
   }
 
@@ -470,10 +515,12 @@ export default function RaffleFormV2({
   }
 
   function updatePrize(id: string, patch: Partial<PrizeRow>) {
+    setError("");
     setPrizes((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
   function updatePrizedGroup(id: string, patch: Partial<PrizedGroupRow>) {
+    setError("");
     setPrizedGroups((rows) =>
       rows.map((r) => (r.id === id ? { ...r, ...patch } : r))
     );
@@ -482,6 +529,7 @@ export default function RaffleFormV2({
   /** Quita un número suelto del apartado sin tocar lo demás que haya escrito. */
   function removeNumberFromGroup(id: string, value: string) {
     const objetivo = parseInt(value, 10);
+    setError("");
     setPrizedGroups((rows) =>
       rows.map((r) => {
         if (r.id !== id) return r;
@@ -572,23 +620,24 @@ export default function RaffleFormV2({
 
   async function save() {
     setError("");
+    /* Las cantidades ya se avisan solas debajo del botón: aquí solo se corta
+       el envío para no llegar a la red con una rifa que nadie podría comprar. */
+    if (errorCantidades) return;
     /* Los apartados se revisan antes de salir a la red: el mensaje del
        servidor sería mucho más seco que el nuestro. */
     if (prizedError) {
       setError(prizedError);
       return;
     }
-    /* La compra mínima se revisa aquí para que el dueño no llegue a la red con
-       una condición imposible (pedir mínimo 30 cuando el tope son 20). */
-    if (minPorPedido < 1) {
+    /* Un premio adicional a medio llenar: el servidor solo diría "Escribe el
+       premio", sin decir cuál de todas las filas es. */
+    const premioSinNombre = prizes.findIndex(
+      (p) =>
+        (p.label.trim() || p.amount.trim() || p.note.trim()) && !p.title.trim()
+    );
+    if (premioSinNombre !== -1) {
       setError(
-        "Escribe la compra mínima: es de al menos 1 número. Ponla igual a tu paquete más pequeño."
-      );
-      return;
-    }
-    if (minPorPedido > maxPorPedido) {
-      setError(
-        `La compra mínima es de ${minPorPedido.toLocaleString("es-CO")} números y el máximo por pedido es de ${maxPorPedido.toLocaleString("es-CO")}: nadie podría comprar. Sube el máximo o baja la compra mínima.`
+        `Al premio ${premioSinNombre + 1} le falta el nombre: escríbelo en «Premio» o borra esa fila.`
       );
       return;
     }
@@ -746,6 +795,7 @@ export default function RaffleFormV2({
             value={slug}
             onChange={(e) => {
               setSlugTouched(true);
+              setError("");
               setSlug(slugify(e.target.value));
             }}
             className={`${inputCls} font-mono text-sm`}
@@ -897,8 +947,11 @@ export default function RaffleFormV2({
               />
             </div>
             <div>
-              <label htmlFor="rf-max" className={labelCls}>Máx. números por pedido</label>
-              <input id="rf-max" type="text" inputMode="numeric" value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
+              <label htmlFor="rf-max" className={labelCls}>
+                Máx. por pedido{" "}
+                <span className="text-[10px] text-warn">Obligatorio</span>
+              </label>
+              <input id="rf-max" type="text" inputMode="numeric" required value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
             </div>
           </div>
           <p id="rf-min-ayuda" className={helpCls}>
@@ -909,13 +962,13 @@ export default function RaffleFormV2({
             <div role="status" className={`mt-2 ${warnCls}`}>
               <p>
                 {minPorPedido > paqueteMinimo
-                  ? `Tu paquete más pequeño es de ${paqueteMinimo.toLocaleString("es-CO")} números. Con una compra mínima de ${minPorPedido.toLocaleString("es-CO")} ese paquete no se le podrá ofrecer al comprador.`
-                  : `Tu paquete más pequeño es de ${paqueteMinimo.toLocaleString("es-CO")} números y la compra mínima está en ${minPorPedido.toLocaleString("es-CO")}: ningún botón baja hasta ahí, así que ese mínimo no le cambia nada al comprador.`}
+                  ? `Tu paquete más pequeño es de ${cantidadNumeros(paqueteMinimo)}. Con una compra mínima de ${minPorPedido.toLocaleString("es-CO")} ese paquete no se le podrá ofrecer al comprador.`
+                  : `Tu paquete más pequeño es de ${cantidadNumeros(paqueteMinimo)} y la compra mínima está en ${minPorPedido.toLocaleString("es-CO")}: ningún botón baja hasta ahí, así que ese mínimo no le cambia nada al comprador.`}
               </p>
               <button
                 type="button"
                 onClick={() => setMinPerOrder(String(paqueteMinimo))}
-                aria-label={`Poner la compra mínima en ${paqueteMinimo} números`}
+                aria-label={`Poner la compra mínima en ${cantidadNumeros(paqueteMinimo)}`}
                 className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full border border-warn/50 bg-warn/10 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-warn transition-colors hover:bg-warn/20"
               >
                 Usar {paqueteMinimo.toLocaleString("es-CO")}
@@ -925,8 +978,11 @@ export default function RaffleFormV2({
         </div>
         <div>
           <label htmlFor="rf-reserva" className={labelCls}>Minutos de reserva</label>
-          <input id="rf-reserva" type="text" inputMode="numeric" value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
-          <p className={helpCls}>Tiempo para pagar antes de liberar.</p>
+          <input id="rf-reserva" type="text" inputMode="numeric" required value={reservationMinutes} onChange={(e) => setReservationMinutes(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
+          <p className={helpCls}>
+            Tiempo para pagar antes de liberar. De {MIN_RESERVA} a{" "}
+            {MAX_RESERVA} minutos (un día entero).
+          </p>
         </div>
       </div>
 
@@ -1051,8 +1107,8 @@ export default function RaffleFormV2({
                 : `Los paquetes de ${packsOcultos
                     .map((q) => q.toLocaleString("es-CO"))
                     .join(", ")} no le aparecerán al comprador: pasan del máximo`}{" "}
-              de {maxPorPedido.toLocaleString("es-CO")} números por pedido. Sube
-              ese máximo o quita esos paquetes.
+              de {cantidadNumeros(maxPorPedido)} por pedido. Sube ese máximo o
+              quita esos paquetes.
             </p>
           ) : null}
         </div>
@@ -1079,9 +1135,10 @@ export default function RaffleFormV2({
               </span>
               <button
                 type="button"
-                onClick={() =>
-                  setPrizes((rows) => rows.filter((x) => x.id !== row.id))
-                }
+                onClick={() => {
+                  setError("");
+                  setPrizes((rows) => rows.filter((x) => x.id !== row.id));
+                }}
                 aria-label={`Quitar premio ${i + 1}`}
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
               >
@@ -1208,9 +1265,12 @@ export default function RaffleFormV2({
               </span>
               <button
                 type="button"
-                onClick={() =>
-                  setPrizedGroups((rows) => rows.filter((x) => x.id !== row.id))
-                }
+                onClick={() => {
+                  setError("");
+                  setPrizedGroups((rows) =>
+                    rows.filter((x) => x.id !== row.id)
+                  );
+                }}
                 aria-label={`Quitar el apartado ${i + 1} completo`}
                 className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
               >
@@ -1422,9 +1482,11 @@ export default function RaffleFormV2({
         </div>
       </div>
 
-      {error ? (
+      {/* Un solo aviso rojo junto al botón: primero lo que impide guardar y se
+          arregla solo (las cantidades) y después lo que contestó el servidor. */}
+      {errorCantidades || error ? (
         <p role="alert" className={alertCls}>
-          {error}
+          {errorCantidades || error}
         </p>
       ) : null}
 
@@ -1433,9 +1495,14 @@ export default function RaffleFormV2({
           <Link
             href={`/sorteo/${initial!.slug}`}
             target="_blank"
+            title={
+              yaEsPublica
+                ? "Abrir la página del sorteo en el sitio"
+                : "Solo tú puedes verla: el público todavía no"
+            }
             className={`${btnOutline} min-h-13 px-3 text-[11px] sm:text-xs`}
           >
-            Vista previa
+            {yaEsPublica ? "Ver en el sitio" : "Vista previa"}
           </Link>
         ) : (
           <Link

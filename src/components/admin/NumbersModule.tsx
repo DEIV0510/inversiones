@@ -149,6 +149,8 @@ export default function NumbersModule({
   const [blockBusy, setBlockBusy] = useState(false);
   const [blockError, setBlockError] = useState("");
   const [blockMsg, setBlockMsg] = useState("");
+  // Bloqueo desde la ficha de consulta puntual (un solo número).
+  const [singleBusy, setSingleBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -282,6 +284,65 @@ export default function NumbersModule({
     }
   }
 
+  /**
+   * Única llamada al endpoint de bloqueo. La comparten el rango de abajo y el
+   * botón de la ficha de consulta, para que las dos vías hagan exactamente lo
+   * mismo y solo cambie dónde se enseña el resultado.
+   */
+  async function enviarBloqueo(
+    action: "block" | "unblock",
+    from: number,
+    to?: number
+  ): Promise<
+    | { error: string }
+    | { data: { blocked?: number; skipped?: number; unblocked?: number } }
+  > {
+    try {
+      const res = await fetch("/api/admin/numbers/block", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          raffleId,
+          from,
+          ...(to !== undefined ? { to } : {}),
+          action,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { error: data.error || "No fue posible completar la operación" };
+      }
+      return { data };
+    } catch {
+      return { error: "Error de conexión" };
+    }
+  }
+
+  /**
+   * Bloquea o libera el número que se acaba de consultar, sin obligar al dueño
+   * a volver a teclearlo en el rango de abajo. La ficha se refresca sola, así
+   * que el propio chip de estado sirve de confirmación.
+   */
+  async function cambiarNumeroConsultado(action: "block" | "unblock") {
+    if (!single || singleBusy) return;
+    if (
+      action === "block" &&
+      !window.confirm(`¿Bloquear el número ${single.number} en esta rifa?`)
+    ) {
+      return;
+    }
+    setSingleBusy(true);
+    setLookupError("");
+    const resultado = await enviarBloqueo(action, single.value);
+    if ("error" in resultado) {
+      setLookupError(resultado.error);
+    } else {
+      await refreshSingle(single.value);
+      refreshList();
+    }
+    setSingleBusy(false);
+  }
+
   async function runBlock(action: "block" | "unblock") {
     if (!raffleId) return;
     const from = parseInt(blockFrom, 10);
@@ -312,39 +373,26 @@ export default function NumbersModule({
     setBlockBusy(true);
     setBlockError("");
     setBlockMsg("");
-    try {
-      const res = await fetch("/api/admin/numbers/block", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          raffleId,
-          from,
-          ...(to !== undefined ? { to } : {}),
-          action,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setBlockError(data.error || "No fue posible completar la operación");
-        return;
-      }
-      setBlockMsg(
-        action === "block"
-          ? `${data.blocked} bloqueados, ${data.skipped} omitidos por estar tomados`
-          : `${data.unblocked} desbloqueados`
-      );
-      refreshList();
-      // Si el número que muestra la ficha de arriba entra en el rango que
-      // acaba de cambiar, se refresca para que no quede mostrando lo viejo.
-      const afectado = to ?? from;
-      if (single && single.value >= from && single.value <= afectado) {
-        await refreshSingle(single.value);
-      }
-    } catch {
-      setBlockError("Error de conexión");
-    } finally {
+    const resultado = await enviarBloqueo(action, from, to);
+    if ("error" in resultado) {
+      setBlockError(resultado.error);
       setBlockBusy(false);
+      return;
     }
+    const data = resultado.data;
+    setBlockMsg(
+      action === "block"
+        ? `${data.blocked} bloqueados, ${data.skipped} omitidos por estar tomados`
+        : `${data.unblocked} desbloqueados`
+    );
+    refreshList();
+    // Si el número que muestra la ficha de arriba entra en el rango que
+    // acaba de cambiar, se refresca para que no quede mostrando lo viejo.
+    const afectado = to ?? from;
+    if (single && single.value >= from && single.value <= afectado) {
+      await refreshSingle(single.value);
+    }
+    setBlockBusy(false);
   }
 
   const singleChip = single ? STATUS_CHIP[single.status] : null;
@@ -434,6 +482,28 @@ export default function NumbersModule({
                   <p className="mt-1 text-xs text-fg-faint">
                     Reserva vence {formatDate(single.reservedUntil)}
                   </p>
+                ) : null}
+                {/* Bloquear o liberar aquí mismo: sin volver a teclear el
+                    número en el rango de abajo. */}
+                {canBlock && single.status === "AVAILABLE" ? (
+                  <button
+                    type="button"
+                    onClick={() => cambiarNumeroConsultado("block")}
+                    disabled={singleBusy}
+                    className={`${btnOutline} mt-3`}
+                  >
+                    Bloquear este número
+                  </button>
+                ) : null}
+                {canBlock && single.status === "BLOCKED" ? (
+                  <button
+                    type="button"
+                    onClick={() => cambiarNumeroConsultado("unblock")}
+                    disabled={singleBusy}
+                    className={`${btnOutline} mt-3`}
+                  >
+                    Desbloquear este número
+                  </button>
                 ) : null}
               </div>
             ) : null}

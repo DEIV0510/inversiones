@@ -10,6 +10,15 @@ export const runtime = "nodejs";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Hash de relleno con el mismo coste (12 rondas) que los reales. Si el correo
+ * no existe se compara contra este: así la respuesta tarda lo mismo exista o
+ * no la cuenta y nadie puede averiguar qué correos son administradores
+ * cronometrando los intentos. No corresponde a ninguna contraseña usable.
+ */
+const HASH_RELLENO =
+  "$2b$12$XeTPVFENLozOLtmqO.C8QOhOBCORIojo/btmzdSkKDW2DBtbsRJK.";
+
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
   if (
@@ -48,10 +57,15 @@ export async function POST(req: NextRequest) {
     where: { email: parsed.data.email },
   });
 
-  const valid =
-    user != null &&
-    user.isActive &&
-    (await bcrypt.compare(parsed.data.password, user.passwordHash));
+  // La comparación se hace SIEMPRE, aunque el correo no exista: contra el
+  // hash de relleno. Si solo se comparara cuando hay usuario, la respuesta
+  // sería ~300 ms más lenta para los correos que sí son administradores y
+  // bastaría un cronómetro para ir descubriéndolos uno a uno.
+  const coincide = await bcrypt.compare(
+    parsed.data.password,
+    user?.passwordHash ?? HASH_RELLENO
+  );
+  const valid = user != null && user.isActive && coincide;
 
   if (!user || !valid) {
     return NextResponse.json(

@@ -98,9 +98,10 @@ export default function Footer({ settings, hideWhatsApp }: Props) {
           <ul className="mt-4 grid gap-2.5">
             {NAV_LINKS.map((link) => (
               <li key={link.href}>
+                {/* min-h-11 = 44px: el dedo tiene dónde caer en el móvil. */}
                 <Link
                   href={link.href}
-                  className="text-sm transition-colors hover:text-fg"
+                  className="inline-flex min-h-11 items-center text-sm transition-colors hover:text-fg"
                 >
                   {link.label}
                 </Link>
@@ -116,9 +117,10 @@ export default function Footer({ settings, hideWhatsApp }: Props) {
           <ul className="mt-4 grid gap-2.5">
             {LEGAL_LINKS.map((link) => (
               <li key={link.href}>
+                {/* min-h-11 = 44px: el dedo tiene dónde caer en el móvil. */}
                 <Link
                   href={link.href}
-                  className="text-sm transition-colors hover:text-fg"
+                  className="inline-flex min-h-11 items-center text-sm transition-colors hover:text-fg"
                 >
                   {link.label}
                 </Link>
