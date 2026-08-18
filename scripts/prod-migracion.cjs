@@ -14,6 +14,8 @@ const SENTENCIAS = [
   // La fecha vuelve a mostrarse por defecto ("Por anunciar" si está vacía).
   `ALTER TABLE "Raffle" ALTER COLUMN "showDrawDate" SET DEFAULT true`,
   `UPDATE "Raffle" SET "showDrawDate" = true WHERE "showDrawDate" = false`,
+  // Proporcion de la foto del sorteo (4/3, 1/1 o 9/16).
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "imageAspect" TEXT NOT NULL DEFAULT '4/3'`,
   `CREATE INDEX IF NOT EXISTS "Order_status_paidAt_idx" ON "Order"("status", "paidAt")`,
   `CREATE INDEX IF NOT EXISTS "PrizedNumber_raffleId_claimedAt_idx" ON "PrizedNumber"("raffleId", "claimedAt")`,
 ];
