@@ -354,8 +354,9 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         setFormError(data.error || "No fue posible crear tu pedido");
         return;
       }
-      // Si la rifa cierra por WhatsApp, el comprador pasa derecho a la
-      // conversación con sus números y su código.
+      // Solo se usa el código del pedido: la respuesta del API ya no trae los
+      // números (se revelan cuando el pago esté confirmado). Si la rifa cierra
+      // por WhatsApp, el comprador pasa derecho a la conversación.
       router.push(
         raffle.whatsappCheckout
           ? `/pedido/${data.code}?enviar=1`

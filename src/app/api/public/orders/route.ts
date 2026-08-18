@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createOrder, OrderError } from "@/lib/engine/orders";
-import { formatNumbers } from "@/lib/numbers";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { createOrderSchema } from "@/lib/validation";
 
@@ -37,7 +36,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { order, raffle, numbers } = await createOrder({
+    // Los números que devuelve createOrder se quedan en el servidor: el
+    // pedido nace PENDIENTE y hasta que el pago no esté confirmado no salen
+    // de aquí (antes viajaban en esta respuesta y se leían con las
+    // herramientas del navegador sin haber pagado).
+    const { order } = await createOrder({
       raffleSlug: parsed.data.raffleSlug,
       name: parsed.data.name,
       phone: parsed.data.phone,
@@ -55,7 +58,6 @@ export async function POST(req: NextRequest) {
         reservedUntil: order.reservedUntil,
         total: order.total,
         quantity: order.quantity,
-        numbers: formatNumbers(numbers, raffle.digits),
       },
       { status: 201 }
     );

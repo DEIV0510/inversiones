@@ -41,21 +41,28 @@ export async function notify(
   await Promise.allSettled(providers.map((p) => p.send(event, payload)));
 }
 
-/** Mensaje de WhatsApp hacia el NEGOCIO para coordinar el pago de una orden. */
+/**
+ * Mensaje de WhatsApp hacia el NEGOCIO para coordinar el pago de una orden.
+ *
+ * A propósito NO lleva los números: este texto se abre dentro del WhatsApp
+ * del comprador, así que los podría leer (y capturar) antes de pagar. Va el
+ * CÓDIGO de participación, la cantidad y el total; con ese código el dueño
+ * ve los números en el panel.
+ */
 export function orderWhatsAppMessage(params: {
   businessPhone: string;
   participantName: string;
   raffleTitle: string;
   orderCode: string;
-  numbers: string[];
+  quantity: number;
   total: number;
 }): string {
+  const boletas =
+    params.quantity === 1 ? "1 número" : `${params.quantity} números`;
   const message =
-    `Hola, soy ${params.participantName}. Acabo de reservar en el sorteo ` +
+    `Hola, soy ${params.participantName}. Acabo de comprar en el sorteo ` +
     `${params.raffleTitle}.\n` +
-    `Orden: ${params.orderCode}\n` +
-    `Números: ${params.numbers.join(", ")}\n` +
-    `Total: ${formatCop(params.total)}\n` +
+    `Pedido ${params.orderCode} - ${boletas} - ${formatCop(params.total)}\n` +
     `Quiero coordinar el pago.`;
   return waLink(params.businessPhone, message);
 }

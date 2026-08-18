@@ -5,12 +5,22 @@
 La plataforma opera con DOS flujos de pago reales:
 
 1. **Manual (activo por defecto)**: el comprador reserva sus números y
-   coordina el pago por WhatsApp (Nequi/transferencia). El administrador
-   verifica el dinero y confirma el pedido en el panel (Pedidos → Confirmar
-   pago). Pasa por el mismo motor idempotente que la pasarela.
+   coordina el pago por WhatsApp (Nequi/transferencia) con el CÓDIGO de su
+   pedido. El administrador verifica el dinero y confirma el pedido en el
+   panel (Pedidos → Confirmar pago). Pasa por el mismo motor idempotente que
+   la pasarela.
 2. **Wompi (se activa con credenciales)**: pago en línea con Nequi, PSE,
    tarjetas y Botón Bancolombia. Sin credenciales configuradas, el botón
    "Pagar en línea" NO se muestra (nada simulado).
+
+> **Los números no se revelan hasta que el pago está confirmado.** Con el
+> pedido PENDIENTE o EXPIRADO el comprador ve cuántos números tiene
+> apartados (fichas tapadas), el total y su código, pero nunca los números:
+> no salen de la página del pedido, ni de la respuesta del API que crea el
+> pedido, ni del mensaje de WhatsApp, ni de "Mis boletas". Se muestran (y se
+> envían por correo) al confirmarse el pago. Cierra el fraude de capturar los
+> números sin pagar y reclamarlos después. La reserva NO cambia: los números
+> se siguen apartando en el momento de comprar.
 
 ## Activar Wompi
 

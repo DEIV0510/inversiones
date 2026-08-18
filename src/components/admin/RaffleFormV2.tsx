@@ -1028,8 +1028,8 @@ export default function RaffleFormV2({
           }
           help={
             whatsappCheckout
-              ? "Al comprar, el cliente pasa directo a tu WhatsApp con sus números y el código del pedido."
-              : "Esta rifa no mostrará WhatsApp al cliente por ningún lado. El sistema le entrega los números y el comprobante."
+              ? "Al comprar, el cliente pasa directo a tu WhatsApp con el código del pedido, cuántos números son y el total. Los números los ves tú buscando ese código en el panel."
+              : "Esta rifa no mostrará WhatsApp al cliente por ningún lado. El sistema le entrega los números y el comprobante cuando el pago quede confirmado."
           }
         />
 

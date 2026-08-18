@@ -180,16 +180,26 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     // Solo el nombre, como antes. El saludo usa el del pedido más reciente.
     participant: { name: orders[0].participant.name },
-    orders: orders.map((o) => ({
-      code: o.code,
-      raffleTitle: o.raffle.title,
-      drawDateText: o.raffle.drawDateText,
-      numbers: formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits),
-      quantity: o.quantity,
-      total: o.total,
-      status: isOrderExpired(o) ? "EXPIRED" : o.status,
-      createdAt: o.createdAt,
-      paidAt: o.paidAt,
-    })),
+    orders: orders.map((o) => {
+      const estado = isOrderExpired(o) ? "EXPIRED" : o.status;
+      // Los números solo salen de aquí con el pago confirmado. En un pedido
+      // pendiente se manda la cantidad (para pintar las fichas tapadas) pero
+      // NINGÚN número: si no, bastaba con mirar la respuesta de esta consulta
+      // para verlos sin haber pagado.
+      return {
+        code: o.code,
+        raffleTitle: o.raffle.title,
+        drawDateText: o.raffle.drawDateText,
+        numbers:
+          estado === "PAID"
+            ? formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits)
+            : [],
+        quantity: o.quantity,
+        total: o.total,
+        status: estado,
+        createdAt: o.createdAt,
+        paidAt: o.paidAt,
+      };
+    }),
   });
 }

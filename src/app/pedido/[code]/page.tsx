@@ -77,30 +77,35 @@ export default async function PedidoPage({
   }
 
   const settings = await getSettings();
-  const numbers = formatNumbers(
-    JSON.parse(order.numbersJson),
-    order.raffle.digits
-  );
+  // Los números SOLO se revelan con el pago confirmado. Mientras el pedido
+  // no esté pagado ni siquiera se calculan: así no viajan al navegador y no
+  // se pueden leer abriendo el código de la página. Los números siguen
+  // apartados en la base de datos exactamente igual que antes.
+  const pagada = order.status === "PAID";
+  const numbers = pagada
+    ? formatNumbers(JSON.parse(order.numbersJson), order.raffle.digits)
+    : [];
   // Premios instantáneos ganados (ticket premiado). Solo cuenta lo que ganó
   // ESTE pedido y ya está pagado; además se cruza con los números de la
   // boleta para poder pintar en verde la ficha exacta que resultó premiada.
   const numerosDelPedido = new Set(numbers);
-  const prizesWon =
-    order.status === "PAID"
-      ? (await getPrizesWon(order.id))
-          .map((p) => ({
-            number: formatNumber(p.number, order.raffle.digits),
-            prize: p.prize,
-          }))
-          .filter((p) => numerosDelPedido.has(p.number))
-      : [];
+  const prizesWon = pagada
+    ? (await getPrizesWon(order.id))
+        .map((p) => ({
+          number: formatNumber(p.number, order.raffle.digits),
+          prize: p.prize,
+        }))
+        .filter((p) => numerosDelPedido.has(p.number))
+    : [];
 
+  // El mensaje de WhatsApp lleva el código, la cantidad y el total: nunca los
+  // números. El dueño los ve buscando ese código en el panel.
   const whatsappUrl = orderWhatsAppMessage({
     businessPhone: settings.whatsapp_number,
     participantName: order.participant.name,
     raffleTitle: order.raffle.title,
     orderCode: order.code,
-    numbers,
+    quantity: order.quantity,
     total: order.total,
   });
 

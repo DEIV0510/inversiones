@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { formatCop } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
-import { IconTicket, IconWhatsApp } from "@/components/icons";
+import { IconCandado, IconTicket, IconWhatsApp } from "@/components/icons";
 
 /* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. */
 const inputCls =
@@ -199,21 +199,52 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
                     {meta.text}
                   </span>
                 </div>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {o.numbers.slice(0, 10).map((n) => (
-                    <span
-                      key={n}
-                      className="rounded-md bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg"
-                    >
-                      {n}
-                    </span>
-                  ))}
-                  {o.numbers.length > 10 ? (
-                    <span className="px-1 py-1 text-xs text-fg-faint">
-                      +{o.numbers.length - 10} más
-                    </span>
-                  ) : null}
-                </div>
+                {o.status === "PAID" ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {o.numbers.slice(0, 10).map((n) => (
+                      <span
+                        key={n}
+                        className="rounded-md bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg"
+                      >
+                        {n}
+                      </span>
+                    ))}
+                    {o.numbers.length > 10 ? (
+                      <span className="px-1 py-1 text-xs text-fg-faint">
+                        +{o.numbers.length - 10} más
+                      </span>
+                    ) : null}
+                  </div>
+                ) : (
+                  /* Sin pago confirmado los números van tapados: aquí ni
+                     siquiera llegan desde el servidor. Se muestran fichas del
+                     mismo tamaño para que se vea cuántas boletas son. */
+                  <div className="mt-2">
+                    <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+                      {Array.from({
+                        length: Math.min(10, Math.max(0, o.quantity)),
+                      }).map((_, i) => (
+                        <span
+                          key={i}
+                          className="rounded-md border border-dashed border-line-strong bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg-faint"
+                        >
+                          ••••
+                        </span>
+                      ))}
+                      {o.quantity > 10 ? (
+                        <span className="px-1 py-1 text-xs text-fg-faint">
+                          +{o.quantity - 10} más
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1.5 flex items-center gap-1.5 text-xs leading-relaxed text-fg-faint">
+                      <IconCandado width={13} height={13} className="shrink-0" />
+                      {o.quantity === 1
+                        ? "1 número apartado a tu nombre. Lo verás al confirmarse el pago."
+                        : `${o.quantity} números apartados a tu nombre. Los verás al confirmarse el pago.`}
+                    </p>
+                  </div>
+                )}
                 <div className="mt-2 flex items-center justify-between text-xs text-fg-faint">
                   <span>Código {o.code}</span>
                   <span className="font-display text-sm font-black tabular-nums text-fg">

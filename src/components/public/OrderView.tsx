@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
 import {
   IconCalendar,
+  IconCandado,
   IconCheck,
   IconClock,
   IconTicket,
@@ -21,6 +22,11 @@ type OrderData = {
   prize: string;
   drawDateText: string | null;
   participantName: string;
+  /**
+   * Los números SOLO llegan con el pago confirmado. Con el pedido pendiente
+   * (o expirado) esta lista viene vacía a propósito: el servidor no los
+   * manda, así que no están ni en el código de la página.
+   */
   numbers: string[];
   quantity: number;
   unitPrice: number;
@@ -591,31 +597,45 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Cuántas fichas tapadas se pintan como máximo antes del "y N más". */
+const MAX_FICHAS_TAPADAS = 20;
+
 /**
  * Tarjeta de boleta: es lo que el comprador guarda como captura de pantalla.
  * Se usa en todos los estados del pedido; solo el pago aprobado lleva el
  * sello verde y el resplandor.
+ *
+ * Con `oculta` (pedido sin pagar) las fichas van tapadas: se ve cuántos
+ * números son, pero no cuáles. Los números ni siquiera llegan al navegador.
  */
 function BoletaCard({
   title,
   numbers,
+  cantidad,
   estado,
   fecha,
   tono,
   nota,
   premios,
+  oculta = false,
 }: {
   title: string;
   numbers: string[];
+  /** Cuántos números tiene el pedido (sirve también con la boleta tapada). */
+  cantidad: number;
   estado: string;
   fecha: string;
   tono: "pagada" | "espera" | "inactiva";
   nota?: string;
   /** Números de este pedido que ganaron premio: van en verde. */
   premios?: { number: string; prize: string }[];
+  /** true = números tapados hasta que se confirme el pago. */
+  oculta?: boolean;
 }) {
   const pagada = tono === "pagada";
   const inactiva = tono === "inactiva";
+  const tapadas = Math.min(MAX_FICHAS_TAPADAS, Math.max(0, cantidad));
+  const tapadasRestantes = Math.max(0, cantidad - tapadas);
   // Mapa número → premio para pintar la ficha ganadora sin recorrer la lista
   // en cada número.
   const ganadores = inactiva ? [] : (premios ?? []);
@@ -661,44 +681,79 @@ function BoletaCard({
 
         <div className="my-5 border-t border-dashed border-line-strong" />
 
-        <p className="text-center text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+        <p className="flex items-center justify-center gap-1.5 text-center text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+          {oculta ? <IconCandado width={13} height={13} /> : null}
           Tus números
         </p>
-        <ul className="mt-3 grid grid-cols-2 gap-2.5">
-          {numbers.map((n) => {
-            // El número premiado va en verde Y con la palabra "Premiado":
-            // el color por sí solo no basta para distinguirlo.
-            const premio = mapaGanadores.get(n);
-            if (premio) {
+
+        {/* Sin pago confirmado: fichas tapadas del mismo tamaño. Se ve
+            cuántos números son y que ya están apartados, pero no cuáles. */}
+        {oculta ? (
+          <>
+            <ul className="mt-3 grid grid-cols-2 gap-2.5" aria-hidden>
+              {Array.from({ length: tapadas }).map((_, i) => (
+                <li
+                  key={i}
+                  className="flex min-h-14 items-center justify-center rounded-2xl border border-dashed border-line-strong bg-well px-1 font-display text-xl font-black tracking-[0.3em] text-fg-faint sm:text-2xl"
+                >
+                  •••••
+                </li>
+              ))}
+            </ul>
+            {tapadasRestantes > 0 ? (
+              <p aria-hidden className="mt-2 text-center text-xs text-fg-faint">
+                y {tapadasRestantes} más
+              </p>
+            ) : null}
+            <p className="mt-3 text-center text-sm leading-relaxed text-fg-soft">
+              {inactiva
+                ? cantidad === 1
+                  ? "Este pedido tenía 1 número. Como el pago no se confirmó, no se muestra."
+                  : `Este pedido tenía ${cantidad} números. Como el pago no se confirmó, no se muestran.`
+                : cantidad === 1
+                  ? "Tienes 1 número apartado a tu nombre."
+                  : `Tienes ${cantidad} números apartados a tu nombre.`}
+            </p>
+          </>
+        ) : null}
+
+        {oculta ? null : (
+          <ul className="mt-3 grid grid-cols-2 gap-2.5">
+            {numbers.map((n) => {
+              // El número premiado va en verde Y con la palabra "Premiado":
+              // el color por sí solo no basta para distinguirlo.
+              const premio = mapaGanadores.get(n);
+              if (premio) {
+                return (
+                  <li
+                    key={n}
+                    className="ticket-chip-win flex min-h-14 flex-col items-center justify-center rounded-2xl px-1 py-1.5"
+                  >
+                    <span className="font-display text-xl font-black tabular-nums tracking-[0.12em] text-bg sm:text-2xl">
+                      {n}
+                    </span>
+                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-bg">
+                      <span aria-hidden>★ </span>Premiado
+                    </span>
+                    <span className="sr-only">: te ganaste {premio}</span>
+                  </li>
+                );
+              }
               return (
                 <li
                   key={n}
-                  className="ticket-chip-win flex min-h-14 flex-col items-center justify-center rounded-2xl px-1 py-1.5"
+                  className={`flex min-h-14 items-center justify-center rounded-2xl px-1 font-display text-xl font-black tabular-nums tracking-[0.12em] sm:text-2xl ${
+                    inactiva
+                      ? "border border-line bg-well text-fg-soft"
+                      : "ticket-chip text-white"
+                  }`}
                 >
-                  <span className="font-display text-xl font-black tabular-nums tracking-[0.12em] text-bg sm:text-2xl">
-                    {n}
-                  </span>
-                  <span className="text-[9px] font-black uppercase tracking-[0.14em] text-bg">
-                    <span aria-hidden>★ </span>Premiado
-                  </span>
-                  <span className="sr-only">: te ganaste {premio}</span>
+                  {n}
                 </li>
               );
-            }
-            return (
-              <li
-                key={n}
-                className={`flex min-h-14 items-center justify-center rounded-2xl px-1 font-display text-xl font-black tabular-nums tracking-[0.12em] sm:text-2xl ${
-                  inactiva
-                    ? "border border-line bg-well text-fg-soft"
-                    : "ticket-chip text-white"
-                }`}
-              >
-                {n}
-              </li>
-            );
-          })}
-        </ul>
+            })}
+          </ul>
+        )}
 
         {/* La felicitación viaja dentro de la boleta: es lo que el comprador
             guarda como captura o descarga como imagen. */}
@@ -761,7 +816,8 @@ export default function OrderView({
   const yaEnviado = useRef(false);
 
   // Rifas que cierran por WhatsApp: apenas se crea el pedido, se abre la
-  // conversación con los números y el código. Solo una vez.
+  // conversación con el código, la cantidad y el total (nunca los números).
+  // Solo una vez.
   useEffect(() => {
     if (!autoEnviarWhatsApp || !whatsappUrl || yaEnviado.current) return;
     yaEnviado.current = true;
@@ -806,8 +862,13 @@ export default function OrderView({
    * Dibuja la boleta en un canvas y la descarga como PNG.
    * Funciona sin conexión; si el navegador no soporta canvas, se avisa y
    * queda el mensaje de "guarda una captura de pantalla".
+   *
+   * SOLO con el pago confirmado: el botón únicamente existe en la vista
+   * pagada, y este cerrojo evita que se dispare por otra vía (por ejemplo
+   * desde la consola del navegador). Sin pagar no hay números que dibujar.
    */
   async function descargarBoleta() {
+    if (order.status !== "PAID" || order.numbers.length === 0) return;
     if (descargando) return;
     setDescargando(true);
     setErrorDescarga(false);
@@ -959,6 +1020,7 @@ export default function OrderView({
         <BoletaCard
           title={order.raffleTitle}
           numbers={order.numbers}
+          cantidad={order.quantity}
           estado="Aprobado"
           fecha={fechaPago}
           tono="pagada"
@@ -1061,8 +1123,11 @@ export default function OrderView({
           <h1 className="mt-1.5 font-display text-3xl font-black leading-tight text-fg sm:text-4xl">
             Realiza el pago
           </h1>
-          <p className="mt-2 text-sm text-fg-soft">
-            Tus números están reservados mientras completas el pago.
+          {/* Se le dice de una vez lo que va a pasar: no perdió nada, sus
+              números ya son suyos y los verá al confirmarse el pago. */}
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">
+            Tus números ya están apartados a tu nombre. Los verás aquí y te
+            llegarán al correo en cuanto confirmemos tu pago.
           </p>
         </div>
 
@@ -1081,18 +1146,30 @@ export default function OrderView({
           </div>
         ) : null}
 
-        {/* Boleta reservada */}
+        {/* Boleta con los números tapados: se revelan al confirmar el pago */}
         <BoletaCard
           title={order.raffleTitle}
-          numbers={order.numbers}
+          numbers={[]}
+          cantidad={order.quantity}
           estado="Pendiente de pago"
           fecha={dateShortFmt.format(new Date(order.createdAt))}
           tono="espera"
-          nota="Guarda esta imagen mientras confirmamos"
+          nota="Tus números se revelan al confirmar el pago"
+          oculta
         />
 
         <div className="rounded-2xl border border-line bg-card p-5">
-          <div className="flex items-center justify-between gap-3">
+          {/* Cuántos números son y cuánto cuestan: lo único que se le sigue
+              mostrando del detalle mientras no haya pagado. */}
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span className="text-fg-faint">
+              {order.quantity} × {formatCop(order.unitPrice)}
+            </span>
+            <span className="font-semibold text-fg">
+              {order.quantity === 1 ? "1 número" : `${order.quantity} números`}
+            </span>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
             <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
               Total a pagar
             </span>
@@ -1188,14 +1265,17 @@ export default function OrderView({
         <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">{detail}</p>
       </div>
 
-      {/* Boleta sin validez: mismo formato, sin resplandor */}
+      {/* Boleta sin validez: mismo formato, sin resplandor. Los números
+          siguen tapados: este pedido nunca llegó a pagarse. */}
       <BoletaCard
         title={order.raffleTitle}
-        numbers={order.numbers}
+        numbers={[]}
+        cantidad={order.quantity}
         estado={estado}
         fecha={dateShortFmt.format(new Date(order.createdAt))}
         tono="inactiva"
         nota="Esta boleta ya no participa"
+        oculta
       />
 
       <div className={`grid w-full gap-3 ${whatsappUrl ? "grid-cols-2" : ""}`}>
