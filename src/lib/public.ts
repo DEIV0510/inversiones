@@ -14,6 +14,82 @@ export const PUBLIC_STATUSES = [
   "FINISHED",
 ] as const;
 
+/**
+ * Proporción con la que se pinta la foto del sorteo. Los flyers del dueño son
+ * verticales y en un marco 4/3 se les corta media información (premios
+ * anticipados, precio por ficha, fecha), así que la elige él por rifa.
+ */
+export const IMAGE_ASPECTS = ["4/3", "1/1", "9/16"] as const;
+export type RaffleImageAspect = (typeof IMAGE_ASPECTS)[number];
+
+/** Cualquier valor raro guardado en la base se lee como la proporción vieja. */
+export function sanearImageAspect(valor: string | null | undefined): RaffleImageAspect {
+  return IMAGE_ASPECTS.includes(valor as RaffleImageAspect)
+    ? (valor as RaffleImageAspect)
+    : "4/3";
+}
+
+/**
+ * Paquete de boletas tal como lo ve el comprador. Siempre con las tres
+ * claves puestas —etiqueta vacía y 0% cuando no hay— para que la tarjeta no
+ * tenga que andar comprobando `undefined`.
+ */
+export type PublicTicketPack = {
+  /** Cuántos números trae el paquete. */
+  qty: number;
+  /** Etiqueta de color, ej. "Más vendido". Vacía si no tiene. */
+  label: string;
+  /** Descuento en porcentaje entero. 0 si no tiene. */
+  discountPct: number;
+};
+
+/**
+ * Lee los paquetes de ticketPacksJson admitiendo las DOS formas: la vieja
+ * ([1, 2, 5, 10]) y la nueva ([{ "q": 55, "label": "Más vendido", "off": 10 }]).
+ *
+ * Es el ÚNICO sitio donde se interpreta ese JSON: lo usan tanto la página
+ * pública como el cálculo del total en el servidor, así que lo que se le
+ * cobra al comprador y lo que se le enseña salen siempre de la misma lectura.
+ * Nada de lanzar excepciones: una rifa con el JSON corrupto se queda sin
+ * paquetes, pero se sigue pudiendo comprar con los botones +/−.
+ */
+export function parseTicketPacks(raw: string): PublicTicketPack[] {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return []; // paquetes corruptos → sin botones rápidos
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const packs: PublicTicketPack[] = [];
+  for (const item of parsed) {
+    // Forma vieja: un número suelto, sin etiqueta ni descuento.
+    if (typeof item === "number") {
+      if (Number.isInteger(item) && item >= 1) {
+        packs.push({ qty: item, label: "", discountPct: 0 });
+      }
+      continue;
+    }
+    if (typeof item !== "object" || item === null) continue;
+
+    const fila = item as { q?: unknown; label?: unknown; off?: unknown };
+    const qty = fila.q;
+    if (typeof qty !== "number" || !Number.isInteger(qty) || qty < 1) continue;
+    const label =
+      typeof fila.label === "string" ? fila.label.trim().slice(0, 24) : "";
+    // Un descuento fuera de rango (o guardado como texto) se lee como 0: ante
+    // la duda se cobra el precio de lista, nunca un descuento inventado.
+    const off = fila.off;
+    const discountPct =
+      typeof off === "number" && Number.isInteger(off) && off >= 1 && off <= 90
+        ? off
+        : 0;
+    packs.push({ qty, label, discountPct });
+  }
+  return packs.slice(0, 12);
+}
+
 /** Premio adicional mostrado en la página del sorteo. */
 export type RafflePrize = {
   label: string; // "ANTICIPADO · LUNES"
@@ -29,6 +105,8 @@ export type PublicRaffle = {
   description: string;
   prize: string;
   imageUrl: string | null;
+  /** Proporción con la que se pinta la foto: "4/3", "1/1" o "9/16". */
+  imageAspect: RaffleImageAspect;
   gallery: string[];
   pricePerNumber: number;
   drawDateText: string | null;
@@ -52,7 +130,7 @@ export type PublicRaffle = {
   showPrize: boolean;
   /** Si la ficha del sorteo repite la fila de la fecha. */
   showDrawDate: boolean;
-  ticketPacks: number[];
+  ticketPacks: PublicTicketPack[];
   prizes: RafflePrize[];
 };
 
@@ -103,6 +181,7 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     description: raffle.description,
     prize: raffle.prize,
     imageUrl: raffle.imageUrl,
+    imageAspect: sanearImageAspect(raffle.imageAspect),
     gallery,
     pricePerNumber: raffle.pricePerNumber,
     drawDateText: raffle.drawDateText,
@@ -118,10 +197,7 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     whatsappCheckout: raffle.whatsappCheckout,
     showPrize: raffle.showPrize,
     showDrawDate: raffle.showDrawDate,
-    ticketPacks: parseJsonArray<number>(
-      raffle.ticketPacksJson,
-      (v) => typeof v === "number" && v > 0
-    ).slice(0, 12),
+    ticketPacks: parseTicketPacks(raffle.ticketPacksJson),
     prizes: parseJsonArray<RafflePrize>(
       raffle.prizesJson,
       (v) => typeof v === "object" && v !== null && typeof (v as RafflePrize).title === "string"

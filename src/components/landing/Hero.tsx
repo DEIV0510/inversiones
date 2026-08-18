@@ -22,10 +22,47 @@ type Props = {
 };
 
 /**
+ * Marco de la foto del sorteo destacado según el formato elegido para la rifa.
+ *
+ * Las clases van escritas ENTERAS: Tailwind arma el CSS leyendo el código y
+ * un nombre juntado con texto (`aspect-[${x}]`) no llegaría a la hoja de
+ * estilos.
+ *
+ * `caja` limita el ancho para que un flyer vertical no estire la apertura:
+ * a 320 px de ancho, un 9/16 mide unos 570 px de alto, que es lo que cabe al
+ * lado del texto sin empujar el botón fuera de la pantalla. `sizes` le dice al
+ * navegador qué ancho va a ocupar de verdad para que no pida una foto enorme.
+ */
+const FORMATOS_FOTO: Record<
+  string,
+  { marco: string; caja: string; sizes: string }
+> = {
+  "4/3": {
+    marco: "aspect-[4/3]",
+    caja: "",
+    sizes: "(min-width: 1024px) 520px, 100vw",
+  },
+  "1/1": {
+    marco: "aspect-square",
+    caja: "mx-auto w-full max-w-[28rem]",
+    sizes: "(min-width: 640px) 448px, 100vw",
+  },
+  "9/16": {
+    marco: "aspect-[9/16]",
+    caja: "mx-auto w-full max-w-[20rem]",
+    sizes: "(min-width: 640px) 320px, 100vw",
+  },
+};
+
+/**
  * Apertura tipo app: la página comienza mostrando directamente el sorteo
  * destacado con su CTA hacia la selección de números.
  */
 export default function Hero({ whatsappNumber, location, featured }: Props) {
+  // Formato desconocido (rifa antigua o dato raro) → el horizontal de siempre.
+  const foto =
+    (featured ? FORMATOS_FOTO[featured.imageAspect] : null) ?? FORMATOS_FOTO["4/3"];
+
   return (
     <section id="inicio" className="relative overflow-hidden">
       <div className="dot-grid absolute inset-0" aria-hidden="true" />
@@ -40,30 +77,48 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
             <Reveal>
               <Link
                 href={`/sorteo/${featured.slug}`}
-                className="neon-card relative block overflow-hidden rounded-3xl bg-card"
+                className={`neon-card relative block overflow-hidden rounded-3xl bg-card ${foto.marco} ${foto.caja}`}
                 aria-label={`Ver el sorteo ${featured.title}`}
               >
                 {featured.imageUrl ? (
+                  // La foto se ve ENTERA (object-contain): si es un flyer, ahí
+                  // van los premios anticipados y la fecha, y recortarlo sería
+                  // esconder justo lo que vende. Detrás va la misma foto
+                  // ampliada y desenfocada para tapar las franjas cuando las
+                  // proporciones no calzan al milímetro; es el mismo archivo y
+                  // el mismo `sizes`, así que el navegador lo descarga una
+                  // sola vez.
                   // Es la primera imagen que se ve, así que carga con
                   // prioridad. En el móvil ocupa el ancho de la pantalla y en
-                  // escritorio la mitad de la rejilla (unos 520 px dentro del
-                  // max-w-6xl), que es lo que declara `sizes` para que el
-                  // navegador no pida una versión más grande de la necesaria.
+                  // escritorio el ancho que declara el formato, que es lo que
+                  // dice `sizes` para que no pida una versión más grande de la
+                  // necesaria.
                   // Los SVG de demostración pasan sin optimizar: ya son
                   // vectoriales y ligeros, y el optimizador los rechaza por
                   // seguridad (podrían llevar scripts dentro).
-                  <Image
-                    src={featured.imageUrl}
-                    alt={`Imagen del sorteo destacado: ${featured.title}`}
-                    width={1200}
-                    height={900}
-                    sizes="(min-width: 1024px) 520px, 100vw"
-                    priority
-                    unoptimized={featured.imageUrl.toLowerCase().endsWith(".svg")}
-                    className="aspect-[4/3] w-full object-cover"
-                  />
+                  <>
+                    <Image
+                      src={featured.imageUrl}
+                      alt=""
+                      aria-hidden="true"
+                      fill
+                      sizes={foto.sizes}
+                      priority
+                      unoptimized={featured.imageUrl.toLowerCase().endsWith(".svg")}
+                      className="scale-110 object-cover opacity-30 blur-2xl"
+                    />
+                    <Image
+                      src={featured.imageUrl}
+                      alt={`Imagen del sorteo destacado: ${featured.title}`}
+                      fill
+                      sizes={foto.sizes}
+                      priority
+                      unoptimized={featured.imageUrl.toLowerCase().endsWith(".svg")}
+                      className="object-contain"
+                    />
+                  </>
                 ) : (
-                  <span className="flex aspect-[4/3] w-full items-center justify-center text-fg-faint">
+                  <span className="flex h-full w-full items-center justify-center text-fg-faint">
                     <IconGift width={72} height={72} strokeWidth={1.25} />
                   </span>
                 )}

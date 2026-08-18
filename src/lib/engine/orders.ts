@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
 import { formatNumbers, validateSelection } from "@/lib/numbers";
 import { correoConfigurado, enviarBoletas, type BoletasCorreo } from "@/lib/email";
+import { parseTicketPacks } from "@/lib/public";
 import {
   ClaimConflictError,
   claimNumbers,
@@ -57,6 +58,51 @@ export type CreateOrderInput = {
 function normalizarCedula(valor?: string): string | undefined {
   const digitos = (valor ?? "").replace(/\D/g, "").slice(0, 15);
   return digitos.length >= 5 ? digitos : undefined;
+}
+
+/**
+ * Cuánto se cobra por una cantidad de números.
+ *
+ * EL DINERO LO DECIDE EL SERVIDOR. El descuento sale SIEMPRE de la rifa
+ * guardada en la base (ticketPacksJson); nada de lo que mande el navegador
+ * participa en el precio, porque si no cualquiera pediría 100 números con un
+ * "descuento" del 90% escrito a mano en la petición.
+ *
+ * El descuento se aplica cuando la cantidad pedida coincide EXACTAMENTE con
+ * la de un paquete que lo tenga: 55 números al 10% cuestan menos, 54 y 56 se
+ * pagan a precio de lista. Si por un descuido del panel hubiera dos paquetes
+ * con la misma cantidad, gana el de mayor descuento: el comprador nunca paga
+ * de más por un error de configuración ajeno.
+ *
+ * DECISIÓN sobre los números elegidos a mano: el descuento SÍ se aplica
+ * también ahí. El paquete es una condición de precio por cantidad ("55
+ * números con 10% de descuento"), no un modo de compra; a quien escoge sus
+ * 55 números uno por uno se le cobra lo mismo que a quien pulsa el botón del
+ * paquete. Cobrarle más sería castigarlo por usar una función que la misma
+ * página le ofrece, y el dueño estaría vendiendo dos precios para lo mismo.
+ */
+export function calcularTotalPedido(params: {
+  cantidad: number;
+  pricePerNumber: number;
+  ticketPacksJson: string;
+}): { total: number; discountPct: number } {
+  const bruto = params.cantidad * params.pricePerNumber;
+
+  let discountPct = 0;
+  for (const pack of parseTicketPacks(params.ticketPacksJson)) {
+    if (pack.qty === params.cantidad && pack.discountPct > discountPct) {
+      discountPct = pack.discountPct;
+    }
+  }
+  if (discountPct <= 0) return { total: bruto, discountPct: 0 };
+
+  // Math.round y no floor ni ceil: en Colombia el total se cobra en pesos
+  // enteros (la pasarela recibe centavos, pero el comprobante y el arqueo del
+  // dueño van en pesos), así que hay que quitar los decimales sí o sí y el
+  // redondeo al peso más cercano es el que menos se aleja del porcentaje
+  // anunciado: el error nunca pasa de medio peso, ni a favor ni en contra.
+  const total = Math.round((bruto * (100 - discountPct)) / 100);
+  return { total, discountPct };
 }
 
 /** ¿La orden PENDING sigue viva o ya expiró su reserva? */
@@ -142,6 +188,15 @@ export async function createOrder(input: CreateOrderInput): Promise<{
       Date.now() + raffle.reservationMinutes * 60_000
     );
 
+    // Total con el descuento del paquete si la cantidad coincide con uno. Se
+    // calcula sobre los números que de verdad se van a reservar, no sobre lo
+    // que pidió el navegador.
+    const { total } = calcularTotalPedido({
+      cantidad: numbers.length,
+      pricePerNumber: raffle.pricePerNumber,
+      ticketPacksJson: raffle.ticketPacksJson,
+    });
+
     try {
       const order = await prisma.$transaction(async (tx) => {
         // `undefined` en el update deja el valor que ya hubiera: una compra
@@ -169,8 +224,11 @@ export async function createOrder(input: CreateOrderInput): Promise<{
             participantId: participant.id,
             numbersJson: JSON.stringify(numbers),
             quantity: numbers.length,
+            // unitPrice sigue siendo el precio de LISTA, no el rebajado: así
+            // el panel y el comprobante pueden enseñar "55 × $5.000" junto al
+            // total y se ve cuánto se ahorró.
             unitPrice: raffle.pricePerNumber,
-            total: numbers.length * raffle.pricePerNumber,
+            total,
             status: "PENDING",
             reservedUntil,
           },

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { slugify } from "@/lib/slug";
 import { formatCop } from "@/lib/format";
 import { RAFFLE_STATUSES_V2, STATUS_META_V2, type RaffleStatusV2 } from "@/lib/raffle-status";
@@ -19,6 +19,19 @@ export type RafflePrizeInitial = {
 
 export type RafflePrizedNumberInitial = { number: number; prize: string };
 
+/**
+ * Un paquete tal como sale de la base, ya normalizado: cantidad, etiqueta de
+ * color (vacía si no tiene) y descuento en porcentaje (0 si no tiene). Es la
+ * misma forma que devuelve `parseTicketPacks` de src/lib/public.ts, que es
+ * quien lee el JSON guardado; aquí se repite el tipo porque este componente
+ * corre en el navegador y ese módulo habla con Prisma.
+ */
+export type RaffleTicketPackInitial = {
+  qty: number;
+  label: string;
+  discountPct: number;
+};
+
 export type RaffleFormInitial = {
   id: string;
   slug: string;
@@ -26,6 +39,7 @@ export type RaffleFormInitial = {
   description: string;
   prize: string;
   imageUrl: string | null;
+  imageAspect: string;
   gallery: string[];
   pricePerNumber: number;
   totalNumbers: number;
@@ -34,7 +48,7 @@ export type RaffleFormInitial = {
   whatsappCheckout: boolean;
   showPrize: boolean;
   showDrawDate: boolean;
-  ticketPacks: number[];
+  ticketPacks: RaffleTicketPackInitial[];
   prizes: RafflePrizeInitial[];
   prizedNumbers: RafflePrizedNumberInitial[];
   drawDateText: string | null;
@@ -139,8 +153,68 @@ const TOTAL_PRESETS = [100, 1000, 10000, 100000, 1000000];
 const DIGIT_PRESETS = [2, 3, 4, 5, 6, 7];
 const MIN_DIGITS = 2;
 const MAX_DIGITS = 7;
-const DEFAULT_PACKS = [1, 2, 5, 10];
+const DEFAULT_PACK_QTYS = [1, 2, 5, 10];
 const MAX_PACKS = 12;
+/* Un paquete no puede traer más números que estos (mismo tope del servidor). */
+const MAX_PACK_QTY = 5000;
+/* Tope del servidor para la etiqueta. Es una pastilla encima de la tarjeta:
+   pasando de LABEL_COMODA se le avisa que en el móvil se verá cortada. */
+const MAX_PACK_LABEL = 24;
+const LABEL_COMODA = 16;
+const MIN_PACK_OFF = 1;
+const MAX_PACK_OFF = 90;
+/* Las cuatro etiquetas de siempre, a un toque para no tener que escribirlas. */
+const PACK_LABEL_SUGERENCIAS = [
+  "Más vendido",
+  "Recomendado",
+  "VIP",
+  "Mejor precio",
+];
+
+/**
+ * Proporciones de la foto del sorteo. Los flyers del dueño son verticales
+ * (933×1400 y parecidos): metidos en un marco horizontal se les corta arriba y
+ * abajo, y ahí es donde van los premios anticipados, el precio de la ficha y la
+ * fecha. Por eso puede elegir el marco, y debajo ve el recorte de verdad.
+ * Los tres valores son los mismos de IMAGE_ASPECTS en src/lib/public.ts (se
+ * repiten aquí, con su nombre y su silueta, porque ese módulo habla con Prisma
+ * y este componente corre en el navegador).
+ * `frame` y `box` van escritos enteros porque Tailwind lee las clases del
+ * código: armadas con plantillas no se generarían.
+ */
+const IMAGE_ASPECT_OPCIONES = [
+  {
+    value: "4/3",
+    name: "Horizontal (4:3)",
+    help: "El marco de siempre. Ideal para fotos apaisadas.",
+    frame: "aspect-[4/3]",
+    box: "w-full",
+    shape: "h-8 w-11",
+    ratio: 4 / 3,
+  },
+  {
+    value: "1/1",
+    name: "Cuadrada (1:1)",
+    help: "Como una publicación de Instagram.",
+    frame: "aspect-square",
+    box: "mx-auto w-full max-w-72",
+    shape: "h-10 w-10",
+    ratio: 1,
+  },
+  {
+    value: "9/16",
+    name: "Vertical (9:16)",
+    help: "El flyer completo: no se corta arriba ni abajo.",
+    frame: "aspect-[9/16]",
+    box: "mx-auto w-full max-w-60",
+    shape: "h-11 w-[25px]",
+    ratio: 9 / 16,
+  },
+] as const;
+
+type ImageAspectValue = (typeof IMAGE_ASPECT_OPCIONES)[number]["value"];
+
+const DEFAULT_ASPECT: ImageAspectValue = "4/3";
 const MAX_PRIZES = 12;
 /* Tope del servidor: 200 números premiados sumando todos los apartados. */
 const MAX_PRIZED_NUMBERS = 200;
@@ -153,6 +227,113 @@ const MAX_RESERVA = 1440;
 /** "1 número" / "25 números": los avisos no pueden decir "1 números". */
 function cantidadNumeros(n: number): string {
   return n === 1 ? "1 número" : `${n.toLocaleString("es-CO")} números`;
+}
+
+/**
+ * Cuánto se pierde de la foto dentro de un marco. 0 = entra entera; 0,47 = se
+ * corta el 47%. Sale de comparar las dos proporciones: la foto se agranda
+ * hasta tapar el marco (object-cover), así que lo que sobra se queda fuera.
+ */
+function recorteEn(ratioFoto: number, ratioMarco: number): number {
+  if (ratioFoto <= 0 || ratioMarco <= 0) return 0;
+  return 1 - Math.min(ratioFoto, ratioMarco) / Math.max(ratioFoto, ratioMarco);
+}
+
+/**
+ * Una fila de paquete mientras se edita: la cantidad y el descuento viven como
+ * texto para que el campo pueda quedarse vacío mientras el dueño escribe.
+ */
+type PackRow = { id: string; qty: string; label: string; off: string };
+
+/** Un paquete ya revisado: precios calculados y el aviso que le corresponda. */
+type PackParsed = {
+  row: PackRow;
+  qty: number;
+  off: number;
+  /** Lo que costaría sin descuento. */
+  base: number;
+  /** Lo que pagaría el comprador. */
+  total: number;
+  ahorro: number;
+  /** Impide guardar. */
+  error: string;
+  /** No impide guardar: solo avisa de que el comprador no lo verá. */
+  aviso: string;
+};
+
+/**
+ * Revisa todos los paquetes de una: cantidades escritas y sin repetir,
+ * descuentos dentro de rango y etiquetas que quepan. De aquí salen también los
+ * precios de la vista previa, calculados igual que los calcula el servidor: el
+ * descuento se aplica sobre el total del paquete.
+ */
+function reviewPacks(
+  rows: PackRow[],
+  price: number,
+  minPorPedido: number,
+  maxPorPedido: number
+): PackParsed[] {
+  /* Dónde salió cada cantidad, para cazar los paquetes repetidos. */
+  const cantidadVista = new Map<number, number>();
+  return rows.map((row, i) => {
+    const qty = parseInt(row.qty || "0", 10) || 0;
+    const off = parseInt(row.off || "0", 10) || 0;
+    const label = row.label.trim();
+    let error = "";
+    let aviso = "";
+    if (qty < 1) {
+      error = `Escribe cuántos números trae el paquete ${i + 1}.`;
+    } else if (qty > MAX_PACK_QTY) {
+      error = `El paquete ${i + 1} no puede pasar de ${MAX_PACK_QTY.toLocaleString("es-CO")} números.`;
+    } else {
+      const antes = cantidadVista.get(qty);
+      if (antes !== undefined) {
+        error = `El paquete ${i + 1} tiene la misma cantidad que el paquete ${antes + 1} (${cantidadNumeros(qty)}). Cámbiala o quita uno de los dos.`;
+      } else {
+        cantidadVista.set(qty, i);
+      }
+    }
+    if (
+      !error &&
+      row.off !== "" &&
+      (off < MIN_PACK_OFF || off > MAX_PACK_OFF)
+    ) {
+      error = `El descuento del paquete ${i + 1} va del ${MIN_PACK_OFF}% al ${MAX_PACK_OFF}%. Déjalo vacío si ese paquete no lleva descuento.`;
+    }
+    if (!error && label.length > MAX_PACK_LABEL) {
+      error = `La etiqueta del paquete ${i + 1} es muy larga: máximo ${MAX_PACK_LABEL} caracteres y llevas ${label.length}.`;
+    }
+    /* Los avisos solo se miran cuando la fila está bien escrita: si no, el
+       dueño leería dos cosas a la vez sobre el mismo paquete. */
+    if (!error && qty > 0) {
+      if (maxPorPedido > 0 && qty > maxPorPedido) {
+        aviso = `Al comprador no le aparecerá: pasa del máximo de ${cantidadNumeros(maxPorPedido)} por pedido. Sube ese máximo o baja la cantidad.`;
+      } else if (minPorPedido > 0 && qty < minPorPedido) {
+        aviso = `Al comprador no le aparecerá: queda por debajo de la compra mínima de ${cantidadNumeros(minPorPedido)}. Baja esa compra mínima o sube la cantidad.`;
+      } else if (label.length > LABEL_COMODA) {
+        aviso = `La etiqueta es larga (${label.length} caracteres): en el celular la pastilla se verá cortada. Con ${LABEL_COMODA} o menos entra completa.`;
+      }
+    }
+    const aplicaOff = off >= MIN_PACK_OFF && off <= MAX_PACK_OFF ? off : 0;
+    const base = qty * price;
+    const total = aplicaOff > 0 ? Math.round((base * (100 - aplicaOff)) / 100) : base;
+    return { row, qty, off: aplicaOff, base, total, ahorro: base - total, error, aviso };
+  });
+}
+
+/** Arma las filas de paquetes de partida (los guardados o los de siempre). */
+function initialPackRows(packs: RaffleTicketPackInitial[] | undefined): PackRow[] {
+  const base: RaffleTicketPackInitial[] = packs?.length
+    ? packs
+    : DEFAULT_PACK_QTYS.map((q) => ({ qty: q, label: "", discountPct: 0 }));
+  /* El id sale del índice (no de un contador de módulo) para que el servidor y
+     el navegador pinten exactamente lo mismo. */
+  return base.map((p, i) => ({
+    id: `paquete-${i}`,
+    qty: String(p.qty),
+    label: p.label ?? "",
+    off: p.discountPct > 0 ? String(p.discountPct) : "",
+  }));
 }
 
 /**
@@ -327,6 +508,15 @@ export default function RaffleFormV2({
   const [description, setDescription] = useState(initial?.description ?? "");
   const [prize, setPrize] = useState(initial?.prize ?? "");
   const [imageUrl, setImageUrl] = useState<string | null>(initial?.imageUrl ?? null);
+  const [imageAspect, setImageAspect] = useState<ImageAspectValue>(() =>
+    IMAGE_ASPECT_OPCIONES.some((a) => a.value === initial?.imageAspect)
+      ? (initial!.imageAspect as ImageAspectValue)
+      : DEFAULT_ASPECT
+  );
+  /* Proporción real de la foto subida (ancho ÷ alto). Se sabe cuando el
+     navegador la termina de cargar, así que hasta entonces vale 0 y no se
+     habla de recortes. */
+  const [imgRatio, setImgRatio] = useState(0);
   const [gallery, setGallery] = useState<string[]>(initial?.gallery ?? []);
   const [price, setPrice] = useState(
     initial ? String(initial.pricePerNumber) : "10000"
@@ -356,10 +546,9 @@ export default function RaffleFormV2({
   const [showDrawDate, setShowDrawDate] = useState(
     initial?.showDrawDate ?? true
   );
-  const [ticketPacks, setTicketPacks] = useState<number[]>(() =>
-    initial?.ticketPacks?.length ? [...initial.ticketPacks] : [...DEFAULT_PACKS]
+  const [packs, setPacks] = useState<PackRow[]>(() =>
+    initialPackRows(initial?.ticketPacks)
   );
-  const [packDraft, setPackDraft] = useState("");
   const [prizes, setPrizes] = useState<PrizeRow[]>(() =>
     (initial?.prizes ?? []).map((p, i) => ({
       id: `premio-${i}`,
@@ -403,22 +592,48 @@ export default function RaffleFormV2({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
+  /**
+   * Mide la foto en cuanto su nodo entra en la página. Hace falta además del
+   * `onLoad`: una foto que ya está en la memoria del navegador termina de
+   * cargar ANTES de que React ate el manejador, así que ese evento no lo
+   * vería nadie y los avisos de recorte no saldrían nunca.
+   */
+  const medirFoto = useCallback((node: HTMLImageElement | null) => {
+    if (node && node.complete && node.naturalHeight > 0) {
+      setImgRatio(node.naturalWidth / node.naturalHeight);
+    }
+  }, []);
+
   const totalInt = parseInt(totalNumbers || "0", 10) || 0;
   const capacity = Math.pow(10, digits);
   const numbersLocked = mode === "edit" && !!initial?.hasOrders;
   /* Con el estado GUARDADO (no el del desplegable, que todavía no se ha
      enviado) se decide si el botón abre la página pública o la vista previa. */
   const yaEsPublica = ESTADOS_PUBLICOS.has(initial?.status ?? "");
+  /* Marco elegido para la foto y cuánto le recorta a la que está subida. */
+  const aspectActual =
+    IMAGE_ASPECT_OPCIONES.find((a) => a.value === imageAspect) ?? IMAGE_ASPECT_OPCIONES[0];
+  const recorteElegido = recorteEn(imgRatio, aspectActual.ratio);
+  /* El marco que menos le corta a ESTA foto: es el que se ofrece cuando el
+     elegido se está comiendo media imagen. */
+  const mejorAspecto = IMAGE_ASPECT_OPCIONES.reduce((mejor, op) =>
+    recorteEn(imgRatio, op.ratio) < recorteEn(imgRatio, mejor.ratio) ? op : mejor
+  );
+  const fotoVertical = imgRatio > 0 && imgRatio < 1;
   const maxPorPedido = parseInt(maxPerOrder || "0", 10) || 0;
   const minPorPedido = parseInt(minPerOrder || "0", 10) || 0;
-  // Paquetes que el comprador NO llegaría a ver: la página del sorteo esconde
-  // los que pasan del máximo por pedido, así que aquí se avisa antes.
-  const packsOcultos = ticketPacks.filter(
-    (q) => maxPorPedido > 0 && q > maxPorPedido
-  );
+  const precioNumero = parseInt(price || "0", 10) || 0;
+  /* Paquetes revisados en cada render (sin estado duplicado): de aquí salen la
+     vista previa con el precio, los avisos y lo que se guarda. */
+  const packsParsed = reviewPacks(packs, precioNumero, minPorPedido, maxPorPedido);
+  /* Lo primero que esté mal escrito en los paquetes. Como las cantidades, se
+     recalcula en cada render para que el aviso se apague solo al corregirlo. */
+  const errorPaquetes = packsParsed.find((p) => p.error)?.error ?? "";
+  /* Cantidades ya escritas: sirven para el resto de avisos del formulario. */
+  const packQtys = packsParsed.map((p) => p.qty).filter((q) => q > 0);
   /* El paquete más pequeño manda: lo normal es que la compra mínima sea
      exactamente esa cantidad, para que el primer botón siga sirviendo. */
-  const paqueteMinimo = ticketPacks.length > 0 ? Math.min(...ticketPacks) : 0;
+  const paqueteMinimo = packQtys.length > 0 ? Math.min(...packQtys) : 0;
   /* Se avisa cuando la compra mínima y el paquete más pequeño no coinciden:
      por arriba el paquete deja de poderse ofrecer, por abajo el mínimo no
      hace nada porque ningún botón baja hasta ahí. */
@@ -506,12 +721,24 @@ export default function RaffleFormV2({
     }
   }
 
+  function updatePack(id: string, patch: Partial<PackRow>) {
+    setError("");
+    setPacks((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  /** Agrega un paquete con la cantidad siguiente al más grande que ya haya. */
   function addPack() {
-    const value = parseInt(packDraft || "0", 10) || 0;
-    if (value < 1 || value > 5000) return;
-    setPackDraft("");
-    if (ticketPacks.length >= MAX_PACKS || ticketPacks.includes(value)) return;
-    setTicketPacks([...ticketPacks, value].sort((a, b) => a - b));
+    if (packs.length >= MAX_PACKS) return;
+    setError("");
+    const mayor = packQtys.length > 0 ? Math.max(...packQtys) : 0;
+    const sugerida = mayor > 0 ? Math.min(MAX_PACK_QTY, mayor * 2) : 1;
+    /* Si la cantidad sugerida ya existe, se deja el campo vacío para que la
+       escriba él: dos paquetes iguales no se pueden guardar. */
+    const libre = !packQtys.includes(sugerida);
+    setPacks((rows) => [
+      ...rows,
+      { id: nextRowId(), qty: libre ? String(sugerida) : "", label: "", off: "" },
+    ]);
   }
 
   function updatePrize(id: string, patch: Partial<PrizeRow>) {
@@ -575,15 +802,24 @@ export default function RaffleFormV2({
       description: description.trim(),
       prize: prize.trim(),
       imageUrl,
+      imageAspect,
       gallery,
-      pricePerNumber: parseInt(price || "0", 10) || 0,
+      pricePerNumber: precioNumero,
       totalNumbers: totalInt,
       digits,
       selectionMode,
       whatsappCheckout,
       showPrize,
       showDrawDate,
-      ticketPacks,
+      /* Los paquetes van en la forma nueva: la cantidad siempre, y la etiqueta
+         y el descuento solo cuando el dueño los puso. */
+      ticketPacks: packsParsed
+        .filter((p) => p.qty > 0)
+        .map((p) => ({
+          q: p.qty,
+          ...(p.row.label.trim() ? { label: p.row.label.trim() } : {}),
+          ...(p.off > 0 ? { off: p.off } : {}),
+        })),
       prizes: prizes
         .filter(
           (p) =>
@@ -620,9 +856,10 @@ export default function RaffleFormV2({
 
   async function save() {
     setError("");
-    /* Las cantidades ya se avisan solas debajo del botón: aquí solo se corta
-       el envío para no llegar a la red con una rifa que nadie podría comprar. */
-    if (errorCantidades) return;
+    /* Las cantidades y los paquetes ya se avisan solos debajo del botón: aquí
+       solo se corta el envío para no llegar a la red con una rifa que nadie
+       podría comprar. */
+    if (errorCantidades || errorPaquetes) return;
     /* Los apartados se revisan antes de salir a la red: el mensaje del
        servidor sería mucho más seco que el nuestro. */
     if (prizedError) {
@@ -686,14 +923,35 @@ export default function RaffleFormV2({
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (f) uploadFile(f, (url) => setImageUrl(url));
+              if (f)
+                uploadFile(f, (url) => {
+                  setImageUrl(url);
+                  /* Foto nueva, medida nueva: hasta que cargue no se habla de
+                     recortes con las medidas de la anterior. */
+                  setImgRatio(0);
+                });
             }}
             aria-label="Seleccionar imagen principal"
           />
           {imageUrl ? (
             <div className="overflow-hidden rounded-xl border border-line">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt="Imagen del sorteo" className="aspect-[4/3] w-full object-cover" />
+              {/* La foto se ve YA recortada por el marco elegido: es la misma
+                  imagen que va a salir en la página del sorteo. */}
+              <div className={aspectActual.box}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  key={imageUrl}
+                  ref={medirFoto}
+                  src={imageUrl}
+                  alt="Imagen del sorteo"
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    if (img.naturalHeight > 0)
+                      setImgRatio(img.naturalWidth / img.naturalHeight);
+                  }}
+                  className={`${aspectActual.frame} w-full object-cover`}
+                />
+              </div>
               <div className="grid grid-cols-2 gap-2 p-3">
                 <button
                   type="button"
@@ -706,7 +964,10 @@ export default function RaffleFormV2({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setImageUrl(null)}
+                  onClick={() => {
+                    setImageUrl(null);
+                    setImgRatio(0);
+                  }}
                   disabled={uploading}
                   className={btnOutline}
                 >
@@ -720,7 +981,7 @@ export default function RaffleFormV2({
               type="button"
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-well text-fg-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-50"
+              className={`flex ${aspectActual.frame} ${aspectActual.box} flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-line bg-well text-fg-soft transition-colors hover:border-brand hover:text-brand disabled:opacity-50`}
             >
               <IconImage width={32} height={32} />
               <span className="text-sm font-bold uppercase tracking-wide">
@@ -729,6 +990,98 @@ export default function RaffleFormV2({
               <span className="text-xs">Desde la galería de tu celular</span>
             </button>
           )}
+          <p className={helpCls}>
+            {imageUrl
+              ? "Así queda la foto en la página del sorteo, ya recortada por el marco de abajo."
+              : "El marco de abajo decide cómo se recorta la foto en la página del sorteo."}
+          </p>
+        </div>
+
+        {/* Formato (proporción) de la foto */}
+        <div>
+          <p className={labelCls}>Formato de la foto</p>
+          <div className="flex flex-col gap-2">
+            {IMAGE_ASPECT_OPCIONES.map((op) => {
+              const activo = imageAspect === op.value;
+              /* Cuánto se le corta a ESTA foto en este marco. Sin foto subida
+                 todavía no se puede decir nada, así que no se dice. */
+              const recortePct =
+                imgRatio > 0 ? Math.round(recorteEn(imgRatio, op.ratio) * 100) : 0;
+              return (
+                <button
+                  key={op.value}
+                  type="button"
+                  onClick={() => setImageAspect(op.value)}
+                  aria-pressed={activo}
+                  className={`flex min-h-14 w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                    activo
+                      ? "glow-brand-sm border-brand bg-brand/12"
+                      : "border-line bg-well hover:border-brand/60"
+                  }`}
+                >
+                  {/* Silueta del marco, para reconocerlo de un vistazo. */}
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center"
+                  >
+                    <span
+                      className={`${op.shape} rounded-[3px] ${
+                        activo ? "bg-brand" : "bg-line-strong"
+                      }`}
+                    />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span
+                      className={`block text-sm font-bold ${
+                        activo ? "text-fg" : "text-fg-soft"
+                      }`}
+                    >
+                      {op.name}
+                    </span>
+                    <span className="block text-[11px] leading-relaxed text-fg-faint">
+                      {op.help}
+                    </span>
+                  </span>
+                  {imgRatio > 0 ? (
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-bold tabular-nums ${
+                        recortePct <= 2
+                          ? "bg-wa/15 text-wa"
+                          : recortePct >= 15
+                            ? "bg-warn/15 text-warn"
+                            : "bg-bg2 text-fg-soft"
+                      }`}
+                    >
+                      {recortePct <= 2 ? "Entera" : `Corta ${recortePct}%`}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+          <p className={helpCls}>
+            Si tu flyer es vertical (los que traen los premios anticipados, el
+            precio de la ficha y la fecha), elige Vertical: en los otros marcos
+            se le corta arriba y abajo.
+          </p>
+          {/* Solo se avisa cuando el recorte es gordo Y existe un marco mejor
+              para ESA foto: si ya está en el que menos le corta, el aviso no
+              tendría salida y la etiqueta de cada opción ya dice el recorte. */}
+          {recorteElegido >= 0.15 && mejorAspecto.value !== imageAspect ? (
+            <div role="status" className={`mt-2 ${warnCls}`}>
+              <p>
+                {`Tu foto es ${fotoVertical ? "vertical" : "apaisada"} y en este marco se le corta el ${Math.round(recorteElegido * 100)}% ${fotoVertical ? "(arriba y abajo)" : "(a los lados)"}: ahí es donde suele ir la información de venta del flyer.`}
+              </p>
+              <button
+                type="button"
+                onClick={() => setImageAspect(mejorAspecto.value)}
+                aria-label={`Usar el formato ${mejorAspecto.name} para la foto`}
+                className="mt-2 inline-flex min-h-11 items-center justify-center rounded-full border border-warn/50 bg-warn/10 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-warn transition-colors hover:bg-warn/20"
+              >
+                Usar {mejorAspecto.name}
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {/* Galería adicional */}
@@ -1033,84 +1386,222 @@ export default function RaffleFormV2({
           }
         />
 
+        {/* Paquetes: cantidad, etiqueta de color y descuento, con la tarjeta
+            que verá el comprador debajo de cada uno. */}
         <div>
-          <p className={labelCls}>
-            Paquetes de boletas ({ticketPacks.length}/{MAX_PACKS})
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {ticketPacks.length === 0 ? (
-              <span className="text-sm text-fg-faint">
-                Sin botones rápidos: el comprador escribe la cantidad.
-              </span>
-            ) : null}
-            {ticketPacks.map((q) => (
-              <span
-                key={q}
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-brand/40 bg-brand/12 pl-4 pr-2 text-sm font-bold text-brand-light"
-              >
-                <span className="tabular-nums">
-                  {q === 1 ? "1 boleta" : `${q} boletas`}
-                </span>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setTicketPacks((packs) => packs.filter((x) => x !== q))
-                  }
-                  aria-label={`Quitar paquete de ${q}`}
-                  /* El círculo se ve de 28px, pero el área que responde al dedo
-                     crece a 44px con el pseudo-elemento, sin mover el diseño. */
-                  className="relative flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white after:absolute after:-inset-2 after:content-['']"
-                >
-                  <IconX width={12} height={12} />
-                </button>
-              </span>
-            ))}
+          <div className="mb-2 flex items-center justify-between gap-3">
+            {/* Mismo aspecto que labelCls, pero sin su margen: el aire lo pone
+                la fila para que la cuenta quede alineada con el título. */}
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+              Paquetes de boletas
+            </span>
+            <span className="shrink-0 text-[11px] font-bold tabular-nums text-fg-faint">
+              {packs.length}/{MAX_PACKS}
+            </span>
           </div>
-          <div className="mt-2 flex gap-2">
-            <input
-              id="rf-pack"
-              type="text"
-              inputMode="numeric"
-              value={packDraft}
-              onChange={(e) =>
-                setPackDraft(e.target.value.replace(/\D/g, "").slice(0, 4))
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  addPack();
-                }
-              }}
-              className={`${inputCls} w-24 text-center tabular-nums`}
-              placeholder="20"
-              aria-label="Cantidad de boletas del paquete"
-              disabled={ticketPacks.length >= MAX_PACKS}
-            />
-            <button
-              type="button"
-              onClick={addPack}
-              disabled={ticketPacks.length >= MAX_PACKS || packDraft === ""}
-              className={btnOutline}
-            >
-              <IconPlus width={14} height={14} />
-              Agregar
-            </button>
-          </div>
-          <p className={helpCls}>
-            Son los botones rápidos que verá el comprador (ej. 2 boletas, 5
-            boletas)
-          </p>
-          {packsOcultos.length > 0 ? (
-            <p role="status" className={`mt-2 ${warnCls}`}>
-              {packsOcultos.length === 1
-                ? `El paquete de ${packsOcultos[0].toLocaleString("es-CO")} no le aparecerá al comprador: pasa del máximo`
-                : `Los paquetes de ${packsOcultos
-                    .map((q) => q.toLocaleString("es-CO"))
-                    .join(", ")} no le aparecerán al comprador: pasan del máximo`}{" "}
-              de {cantidadNumeros(maxPorPedido)} por pedido. Sube ese máximo o
-              quita esos paquetes.
+
+          {packs.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-line bg-well px-4 py-6 text-center text-sm text-fg-soft">
+              Sin paquetes: el comprador tendrá que escribir a mano cuántos
+              números quiere.
             </p>
           ) : null}
+
+          <div className="flex flex-col gap-3">
+            {packsParsed.map(
+              (
+                { row, qty, off, base, total, ahorro, error: rowError, aviso },
+                i
+              ) => {
+                const etiqueta = row.label.trim();
+                return (
+                  <div
+                    key={row.id}
+                    className="flex flex-col gap-2.5 rounded-xl border border-line bg-well p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-violet">
+                        Paquete {i + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setError("");
+                          setPacks((rows) =>
+                            rows.filter((x) => x.id !== row.id)
+                          );
+                        }}
+                        aria-label={`Quitar el paquete ${i + 1}`}
+                        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg text-fg-soft transition-colors hover:text-brand"
+                      >
+                        <IconTrash width={16} height={16} />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label
+                          htmlFor={`rf-pack-qty-${row.id}`}
+                          className={subLabelCls}
+                        >
+                          Números *
+                        </label>
+                        <input
+                          id={`rf-pack-qty-${row.id}`}
+                          type="text"
+                          inputMode="numeric"
+                          value={row.qty}
+                          onChange={(e) =>
+                            updatePack(row.id, {
+                              qty: e.target.value.replace(/\D/g, "").slice(0, 4),
+                            })
+                          }
+                          aria-invalid={rowError ? true : undefined}
+                          className={`${inputCls} tabular-nums`}
+                          placeholder="25"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor={`rf-pack-off-${row.id}`}
+                          className={subLabelCls}
+                        >
+                          Descuento %
+                        </label>
+                        <input
+                          id={`rf-pack-off-${row.id}`}
+                          type="text"
+                          inputMode="numeric"
+                          value={row.off}
+                          onChange={(e) =>
+                            updatePack(row.id, {
+                              off: e.target.value.replace(/\D/g, "").slice(0, 2),
+                            })
+                          }
+                          className={`${inputCls} tabular-nums`}
+                          placeholder="Sin dcto."
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label
+                        htmlFor={`rf-pack-label-${row.id}`}
+                        className={subLabelCls}
+                      >
+                        Etiqueta (opcional)
+                      </label>
+                      <input
+                        id={`rf-pack-label-${row.id}`}
+                        type="text"
+                        value={row.label}
+                        onChange={(e) =>
+                          updatePack(row.id, { label: e.target.value })
+                        }
+                        className={inputCls}
+                        placeholder="Ej: Más vendido"
+                        maxLength={MAX_PACK_LABEL}
+                      />
+                      {/* Las cuatro de siempre, a un toque. Volver a tocarla la
+                          quita, para no tener que borrar letra por letra. */}
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {PACK_LABEL_SUGERENCIAS.map((s) => {
+                          const puesta =
+                            etiqueta.toLowerCase() === s.toLowerCase();
+                          return (
+                            <button
+                              key={s}
+                              type="button"
+                              onClick={() =>
+                                updatePack(row.id, { label: puesta ? "" : s })
+                              }
+                              aria-pressed={puesta}
+                              className={`min-h-11 rounded-full px-3 text-[11px] font-bold ${
+                                puesta ? chipBtnActive : chipBtnIdle
+                              }`}
+                            >
+                              {s}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {rowError ? (
+                      <p role="alert" className={alertCls}>
+                        {rowError}
+                      </p>
+                    ) : null}
+                    {aviso ? (
+                      <p role="status" className={warnCls}>
+                        {aviso}
+                      </p>
+                    ) : null}
+
+                    {/* Vista previa: la misma tarjeta de la página del sorteo,
+                        con el precio ya calculado y el ahorro. */}
+                    <div className="rounded-xl border border-line bg-bg2 p-3">
+                      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                        Así lo verá el comprador
+                      </p>
+                      {qty < 1 ? (
+                        <p className="text-xs leading-relaxed text-fg-soft">
+                          Escribe cuántos números trae el paquete y aquí verás
+                          el botón tal como le queda al comprador.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="relative mx-auto flex w-full max-w-44 flex-col items-center gap-1 rounded-3xl border border-brand/40 bg-card px-3 py-4 text-center">
+                            {etiqueta ? (
+                              <span className="glow-brand-sm absolute -top-2.5 left-1/2 max-w-[92%] -translate-x-1/2 truncate rounded-full bg-brand px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.06em] text-white">
+                                {etiqueta}
+                              </span>
+                            ) : null}
+                            <span className="font-display text-4xl font-black leading-none tabular-nums text-brand">
+                              {qty.toLocaleString("es-CO")}
+                            </span>
+                            <span className="text-xs text-fg-soft">
+                              {qty === 1 ? "Número" : "Números"}
+                            </span>
+                            {off > 0 && precioNumero > 0 ? (
+                              <span className="text-[11px] font-bold tabular-nums text-fg-faint line-through">
+                                {formatCop(base)}
+                              </span>
+                            ) : null}
+                            <span className="mt-1 max-w-full rounded-full bg-brand px-3.5 py-1.5 font-display text-sm font-black tabular-nums text-white">
+                              {formatCop(total)}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-[11px] leading-relaxed text-fg-faint">
+                            {precioNumero < 1
+                              ? "Escribe el precio por número para ver cuánto pagaría."
+                              : off > 0
+                                ? `${cantidadNumeros(qty)}: ${formatCop(total)} en vez de ${formatCop(base)}, ahorra ${formatCop(ahorro)} (${off}%).`
+                                : `${cantidadNumeros(qty)}: ${formatCop(total)}, sin descuento.`}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={addPack}
+            disabled={packs.length >= MAX_PACKS}
+            className={`${btnOutline} mt-3`}
+          >
+            <IconPlus width={14} height={14} />
+            Agregar paquete
+          </button>
+          <p className={helpCls}>
+            Son los botones rápidos que verá el comprador (25 números, 55
+            números…). La etiqueta sale como una pastilla encima de la tarjeta y
+            el descuento se lo aplica el sistema al total de ese paquete.
+          </p>
         </div>
       </div>
 
@@ -1483,10 +1974,11 @@ export default function RaffleFormV2({
       </div>
 
       {/* Un solo aviso rojo junto al botón: primero lo que impide guardar y se
-          arregla solo (las cantidades) y después lo que contestó el servidor. */}
-      {errorCantidades || error ? (
+          arregla solo (las cantidades y los paquetes) y después lo que contestó
+          el servidor. */}
+      {errorCantidades || errorPaquetes || error ? (
         <p role="alert" className={alertCls}>
-          {errorCantidades || error}
+          {errorCantidades || errorPaquetes || error}
         </p>
       ) : null}
 

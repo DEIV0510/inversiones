@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { parseTicketPacks, sanearImageAspect } from "@/lib/public";
 import RaffleFormV2, {
   type RafflePrizeInitial,
+  type RaffleTicketPackInitial,
 } from "@/components/admin/RaffleFormV2";
 
 export const metadata: Metadata = { title: "Editar rifa" };
@@ -29,17 +31,12 @@ export default async function EditarRifaPage({
     // galería corrupta → vacía
   }
 
-  let ticketPacks: number[] = [];
-  try {
-    const parsed = JSON.parse(raffle.ticketPacksJson);
-    if (Array.isArray(parsed)) {
-      ticketPacks = parsed
-        .map((v) => Number(v))
-        .filter((v) => Number.isInteger(v) && v >= 1);
-    }
-  } catch {
-    // paquetes corruptos → el formulario usa los de siempre
-  }
+  // Paquetes: se guardan de dos formas (la vieja [1,2,5,10] y la nueva con
+  // etiqueta y descuento) y las dos se leen en el MISMO sitio que la página
+  // del sorteo, para que el dueño edite exactamente lo que ve el comprador.
+  const ticketPacks: RaffleTicketPackInitial[] = parseTicketPacks(
+    raffle.ticketPacksJson
+  );
 
   let prizes: RafflePrizeInitial[] = [];
   try {
@@ -85,6 +82,7 @@ export default async function EditarRifaPage({
           description: raffle.description,
           prize: raffle.prize,
           imageUrl: raffle.imageUrl,
+          imageAspect: sanearImageAspect(raffle.imageAspect),
           gallery,
           pricePerNumber: raffle.pricePerNumber,
           totalNumbers: raffle.totalNumbers,

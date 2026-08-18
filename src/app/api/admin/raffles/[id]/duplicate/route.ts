@@ -62,6 +62,7 @@ export async function POST(
       whatsappCheckout: original.whatsappCheckout,
       showPrize: original.showPrize,
       showDrawDate: original.showDrawDate,
+      imageAspect: original.imageAspect,
       ticketPacksJson: original.ticketPacksJson,
       prizesJson: original.prizesJson,
       ...(premiados.length > 0

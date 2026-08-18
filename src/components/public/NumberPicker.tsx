@@ -46,6 +46,55 @@ function TituloSeccion({
 }
 
 /**
+ * Lo que cuesta una cantidad con el descuento del paquete ya aplicado.
+ *
+ * EL DINERO LO DECIDE EL SERVIDOR: esta cuenta es solo para que el comprador
+ * vea de antemano lo que le van a cobrar, y por eso tiene que ser la MISMA
+ * fórmula que aplica el motor de pedidos al crear la orden —precio de lista
+ * por la cantidad, menos el porcentaje del paquete, redondeado al peso—. Si
+ * las dos cuentas no dieran igual, el comprador vería un precio y pagaría
+ * otro.
+ */
+function precioConDescuento(
+  cantidad: number,
+  precioUnitario: number,
+  descuentoPct: number
+): number {
+  const lista = cantidad * precioUnitario;
+  if (descuentoPct <= 0) return lista;
+  return Math.round((lista * (100 - descuentoPct)) / 100);
+}
+
+/**
+ * Colores de la pastilla de cada etiqueta.
+ *
+ * El dueño escribe el texto ("Más vendido", "VIP", "Personalizado"…) pero no
+ * elige color: lo decide el descuento, para que la pantalla siempre señale
+ * hacia la mejor oferta y no dependa del gusto del día.
+ *   · fucsia (la marca) → el paquete con el MEJOR descuento del sorteo; es el
+ *     que queremos que se lleve, así que además lleva resplandor;
+ *   · ámbar → los demás paquetes que también traen descuento;
+ *   · violeta → etiqueta sin descuento ("VIP", "Personalizado"), que informa
+ *     pero no es una rebaja.
+ * Son los tonos de ESTA plataforma, no los de la captura de referencia (que
+ * es de un sitio de fondo blanco).
+ */
+const TONOS_ETIQUETA = {
+  mejor: {
+    pastilla: "bg-brand text-white",
+    tarjeta: "glow-brand-sm border-brand bg-brand/5",
+  },
+  rebaja: {
+    pastilla: "bg-warn text-bg",
+    tarjeta: "border-warn/70 bg-warn/5",
+  },
+  aviso: {
+    pastilla: "bg-brand-violet text-white",
+    tarjeta: "border-brand-violet/70 bg-brand-violet/5",
+  },
+} as const;
+
+/**
  * Selección de números escalable: nunca se carga el universo completo.
  * Las dos formas de comprar van APILADAS en la misma pantalla (sin pestañas):
  * primero la compra rápida por paquetes y debajo la elección del número.
@@ -80,20 +129,43 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   // Solo se habla del mínimo cuando de verdad limita algo.
   const hayMinimo = minPorPedido > 1;
 
-  // Paquetes definidos por el dueño: sin repetidos, ordenados, sin superar el
-  // máximo por pedido y —igual de importante— sin quedar por debajo de la
-  // compra mínima: un paquete más pequeño que el mínimo el servidor lo
-  // rechazaría, así que ni se ofrece. Si no hay paquetes, solo quedan los
-  // botones +/−.
-  const packs = [...new Set(raffle.ticketPacks)]
-    .filter(
-      (n) =>
-        Number.isFinite(n) &&
-        n >= minPorPedido &&
-        n <= raffle.maxNumbersPerOrder
-    )
-    .sort((a, b) => a - b)
+  // Paquetes definidos por el dueño: sin cantidades repetidas, ordenados, sin
+  // superar el máximo por pedido y —igual de importante— sin quedar por debajo
+  // de la compra mínima: un paquete más pequeño que el mínimo el servidor lo
+  // rechazaría, así que ni se ofrece. Cada uno puede traer su etiqueta y su
+  // descuento. Si no hay paquetes, solo quedan los botones +/−.
+  //
+  // Si por un descuido del panel hubiera dos paquetes con la misma cantidad,
+  // se queda el de MAYOR descuento: es el que va a aplicar el servidor al
+  // cobrar, así que es el que hay que enseñar.
+  const packsPorCantidad = new Map<number, (typeof raffle.ticketPacks)[number]>();
+  for (const p of raffle.ticketPacks) {
+    if (p.qty < minPorPedido || p.qty > raffle.maxNumbersPerOrder) continue;
+    const previo = packsPorCantidad.get(p.qty);
+    if (!previo || p.discountPct > previo.discountPct) {
+      packsPorCantidad.set(p.qty, p);
+    }
+  }
+  const packs = [...packsPorCantidad.values()]
+    .sort((a, b) => a.qty - b.qty)
     .slice(0, 12);
+
+  // Cuál es el paquete de la mejor oferta: el del descuento más alto (y ante
+  // un empate, el primero). Es el único que se pinta en fucsia, para que la
+  // pantalla señale a un solo sitio.
+  const iMejorOferta = packs.reduce(
+    (mejor, p, i) =>
+      p.discountPct > 0 && p.discountPct > (packs[mejor]?.discountPct ?? 0)
+        ? i
+        : mejor,
+    -1
+  );
+
+  // El sitio extra de la rejilla (la pastilla asomando por arriba, la línea
+  // del precio tachado) solo se reserva si de verdad hay algo que mostrar:
+  // una rifa sin etiquetas ni descuentos se ve exactamente igual que antes.
+  const hayEtiquetas = packs.some((p) => p.label);
+  const hayDescuentos = packs.some((p) => p.discountPct > 0);
 
   // Relleno de la última tarjeta: cuando los paquetes no llenan la última
   // fila, la de cierre se estira para tapar el hueco que quedaba a su derecha
@@ -154,7 +226,23 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
   // eligió una cantidad, el pedido lleva solo la cantidad.
   const usaNumerosElegidos = selected.size > 0;
   const quantity = usaNumerosElegidos ? selected.size : randomQty;
-  const total = quantity * raffle.pricePerNumber;
+  // Descuento del pedido. Depende SOLO de la cantidad: si el pedido lleva
+  // tantos números como un paquete con descuento, se aplica ese descuento —dé
+  // igual si llegó tocando la tarjeta del paquete, subiendo con "+" o
+  // eligiendo los números a mano—. Se busca sobre TODOS los paquetes de la
+  // rifa y quedándose con el mayor, calcado de lo que hace el servidor al
+  // cobrar (calcularTotalPedido); por eso lo que se ve aquí es lo que se paga.
+  const descuentoPct = raffle.ticketPacks.reduce(
+    (mayor, p) => (p.qty === quantity && p.discountPct > mayor ? p.discountPct : mayor),
+    0
+  );
+  const totalLista = quantity * raffle.pricePerNumber;
+  const total = precioConDescuento(
+    quantity,
+    raffle.pricePerNumber,
+    descuentoPct
+  );
+  const ahorro = totalLista - total;
   const hayPedido = quantity > 0;
   // Cuántos números le faltan para llegar a la compra mínima. En la práctica
   // solo pasa eligiendo a mano: los paquetes y el contador ya salen del
@@ -407,6 +495,19 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
         </div>
       ) : null}
 
+      {/* La compra mínima es una condición del sorteo, no inventario: se dice
+          de frente y ARRIBA del todo, antes de que elija nada, para que no
+          descubra el límite al intentar comprar. Va en ámbar (aviso), nunca en
+          rojo: no se ha equivocado en nada. */}
+      {hayMinimo ? (
+        <div className="flex items-center gap-3 rounded-2xl border border-warn/40 bg-warn/10 px-4 py-3">
+          <IconTicket width={18} height={18} className="shrink-0 text-warn" />
+          <p className="text-sm font-bold leading-snug text-warn">
+            Compra mínima: {minPorPedido} números
+          </p>
+        </div>
+      ) : null}
+
       {/* ── COMPRA RÁPIDA ─────────────────────────────────────────────
           Paquetes de boletas: la forma más directa de comprar. Al público
           nunca se le nombra "aleatorio": solo elige cuántas quiere. */}
@@ -415,36 +516,106 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
           <TituloSeccion className="mb-3">Compra rápida</TituloSeccion>
 
           {packs.length > 0 ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              {packs.map((n, i) => {
-                const activo = randomQty === n;
-                // La última tarjeta se estira si la fila queda a medias.
-                const relleno = i === packs.length - 1 ? spanUltimoPack : "";
-                return (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => elegirCantidad(n)}
-                    aria-pressed={activo}
-                    className={`flex min-h-36 flex-col items-center justify-center gap-1 rounded-3xl border bg-card px-3 py-5 text-center transition-all active:scale-[0.99] sm:min-h-40 ${relleno} ${
-                      activo
-                        ? "glow-brand border-brand"
-                        : "border-line hover:border-brand/60"
-                    }`}
-                  >
-                    <span className="font-display text-[2.75rem] font-black leading-none tabular-nums text-brand sm:text-5xl">
-                      {n}
-                    </span>
-                    <span className="text-sm text-fg-soft">
-                      {n === 1 ? "Número" : "Números"}
-                    </span>
-                    <span className="mt-2 max-w-full rounded-full bg-brand px-3.5 py-1.5 font-display text-sm font-black tabular-nums text-white">
-                      {formatCop(n * raffle.pricePerNumber)}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+            <>
+              {/* La pastilla de la etiqueta se monta sobre el borde de arriba,
+                  así que la rejilla necesita ese respiro extra; sin etiquetas
+                  queda igual de compacta que antes. */}
+              <div
+                className={`grid grid-cols-2 gap-x-3 sm:grid-cols-3 ${
+                  hayEtiquetas ? "gap-y-5 pt-3" : "gap-y-3"
+                }`}
+              >
+                {packs.map((p, i) => {
+                  const activo = randomQty === p.qty;
+                  // La última tarjeta se estira si la fila queda a medias.
+                  const relleno = i === packs.length - 1 ? spanUltimoPack : "";
+                  const precioLista = p.qty * raffle.pricePerNumber;
+                  const precioFinal = precioConDescuento(
+                    p.qty,
+                    raffle.pricePerNumber,
+                    p.discountPct
+                  );
+                  // El color de la pastilla lo decide el descuento (ver
+                  // TONOS_ETIQUETA); sin etiqueta no hay pastilla.
+                  const tono = !p.label
+                    ? null
+                    : i === iMejorOferta
+                      ? TONOS_ETIQUETA.mejor
+                      : p.discountPct > 0
+                        ? TONOS_ETIQUETA.rebaja
+                        : TONOS_ETIQUETA.aviso;
+                  return (
+                    <button
+                      key={p.qty}
+                      type="button"
+                      onClick={() => elegirCantidad(p.qty)}
+                      aria-pressed={activo}
+                      aria-label={`${p.label ? `${p.label}. ` : ""}${p.qty} ${
+                        p.qty === 1 ? "número" : "números"
+                      } por ${formatCop(precioFinal)}${
+                        p.discountPct > 0
+                          ? `, ${p.discountPct}% de descuento`
+                          : ""
+                      }`}
+                      className={`relative flex flex-col items-center justify-center gap-1 rounded-3xl border bg-card px-3 py-5 text-center transition-all active:scale-[0.99] ${
+                        hayDescuentos
+                          ? "min-h-40 sm:min-h-44"
+                          : "min-h-36 sm:min-h-40"
+                      } ${relleno} ${
+                        activo
+                          ? "glow-brand border-brand"
+                          : (tono?.tarjeta ?? "border-line hover:border-brand/60")
+                      }`}
+                    >
+                      {p.label && tono ? (
+                        <span
+                          aria-hidden="true"
+                          className={`absolute -top-3 left-1/2 max-w-[94%] -translate-x-1/2 truncate rounded-full px-3 py-1 text-[10px] font-black uppercase tracking-[0.1em] shadow-card ${tono.pastilla}`}
+                        >
+                          {p.label}
+                        </span>
+                      ) : null}
+                      <span
+                        aria-hidden="true"
+                        className="font-display text-[2.75rem] font-black leading-none tabular-nums text-brand sm:text-5xl"
+                      >
+                        {p.qty}
+                      </span>
+                      <span aria-hidden="true" className="text-sm text-fg-soft">
+                        {p.qty === 1 ? "Número" : "Números"}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="mt-2 max-w-full rounded-full bg-brand px-3.5 py-1.5 font-display text-sm font-black tabular-nums text-white"
+                      >
+                        {formatCop(precioFinal)}
+                      </span>
+                      {/* Con descuento se ve de un vistazo que sale más
+                          barato: el precio de lista tachado y cuánto se
+                          rebaja. */}
+                      {p.discountPct > 0 ? (
+                        <span
+                          aria-hidden="true"
+                          className="mt-1.5 flex max-w-full flex-wrap items-center justify-center gap-1.5 text-[11px] leading-none"
+                        >
+                          <s className="tabular-nums text-fg-faint">
+                            {formatCop(precioLista)}
+                          </s>
+                          <span className="rounded-full bg-warn/15 px-1.5 py-0.5 font-black tabular-nums text-warn">
+                            −{p.discountPct}%
+                          </span>
+                        </span>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Empuje de la referencia: sin contadores ni cifras de venta,
+                  solo la idea de que comprar más suma oportunidades. */}
+              <p className="mt-3 text-center text-xs font-semibold leading-relaxed text-fg-soft">
+                Más números, más oportunidades de ganar
+              </p>
+            </>
           ) : null}
 
           {/* Cantidad libre, por si quiere una distinta a los paquetes. */}
@@ -475,13 +646,6 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 </button>
               </span>
             </div>
-            {/* La condición de compra se dice de frente, antes de que la
-                intente: el primer toque en "+" ya salta al mínimo. */}
-            {hayMinimo ? (
-              <p className="mt-2 px-1 text-xs leading-relaxed text-fg-faint">
-                La compra mínima de este sorteo es de {minPorPedido} números.
-              </p>
-            ) : null}
           </div>
         </div>
       ) : null}
@@ -678,6 +842,18 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 <p className="font-display text-xl font-black tabular-nums text-brand">
                   {formatCop(total)}
                 </p>
+                {/* Con descuento se ve aquí mismo lo que se ahorra: es el
+                    total que va a cobrar el servidor, no una promesa. */}
+                {descuentoPct > 0 ? (
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] font-semibold leading-tight">
+                    <s className="tabular-nums text-fg-faint">
+                      {formatCop(totalLista)}
+                    </s>
+                    <span className="tabular-nums text-warn">
+                      Ahorras {formatCop(ahorro)}
+                    </span>
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -754,6 +930,18 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               <p className="mt-1 text-sm text-fg-soft">
                 Por {quantity} {quantity === 1 ? "número" : "números"}
               </p>
+              {/* El mismo descuento que ya vio en la barra de resumen: el
+                  importe grande de arriba es exactamente lo que se cobra. */}
+              {descuentoPct > 0 ? (
+                <p className="mt-2 inline-flex max-w-full flex-wrap items-center justify-center gap-x-2 gap-y-1 rounded-full border border-warn/40 bg-warn/10 px-3 py-1.5 text-xs font-bold leading-tight text-warn">
+                  <s className="tabular-nums text-fg-faint">
+                    {formatCop(totalLista)}
+                  </s>
+                  <span className="tabular-nums">
+                    −{descuentoPct}% · ahorras {formatCop(ahorro)}
+                  </span>
+                </p>
+              ) : null}
               {usaNumerosElegidos ? (
                 <p className="mt-1.5 truncate font-display text-xs tracking-wider text-fg-faint">
                   {[...selected.values()].join(" · ")}

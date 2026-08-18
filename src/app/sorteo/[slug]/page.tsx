@@ -39,6 +39,24 @@ const TEXTO_NO_ACTIVA: Record<string, string> = {
   DRAFT: "Todavía no has publicado este sorteo",
 };
 
+/**
+ * Marco de la foto según el formato que el dueño eligió para esta rifa.
+ *
+ * Las clases van escritas ENTERAS a propósito: Tailwind arma el CSS leyendo
+ * el código, así que un nombre juntado con texto (`aspect-[${x}]`) no
+ * existiría en la hoja de estilos y el marco no se aplicaría.
+ *
+ * El ancho máximo es lo que evita que un flyer vertical empuje toda la página
+ * hacia abajo en escritorio: a 22 rem de ancho un 9/16 mide unos 620 px de
+ * alto, que se lee de una pantallada. En el móvil ni llega a estorbar, porque
+ * la columna ya es más estrecha que ese tope.
+ */
+const MARCO_FOTO: Record<string, string> = {
+  "4/3": "aspect-[4/3]",
+  "1/1": "aspect-square max-w-[34rem]",
+  "9/16": "aspect-[9/16] max-w-[22rem]",
+};
+
 export async function generateMetadata({
   params,
 }: {
@@ -116,17 +134,36 @@ export default async function SorteoPage({
       >
         <div className="dot-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div className="relative">
-          {/* Imagen + estado */}
-          <div className="neon-card relative overflow-hidden rounded-3xl bg-card">
+          {/* Imagen + estado.
+              Aquí la foto se ve ENTERA (object-contain): el flyer trae los
+              premios anticipados, el precio por ficha y la fecha, y recortarlo
+              era perder información de venta. El marco lo elige el dueño en el
+              panel; detrás va la misma foto ampliada y desenfocada para que no
+              queden franjas muertas cuando las proporciones no calzan al
+              milímetro (es el mismo archivo, no se descarga dos veces). */}
+          <div
+            className={`neon-card relative mx-auto w-full overflow-hidden rounded-3xl bg-card ${
+              MARCO_FOTO[raffle.imageAspect] ?? MARCO_FOTO["4/3"]
+            }`}
+          >
             {raffle.imageUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={raffle.imageUrl}
-                alt={`Imagen del sorteo: ${raffle.title}`}
-                className="aspect-[4/3] w-full object-cover"
-              />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={raffle.imageUrl}
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 h-full w-full scale-110 object-cover opacity-30 blur-2xl"
+                />
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={raffle.imageUrl}
+                  alt={`Imagen del sorteo: ${raffle.title}`}
+                  className="relative h-full w-full object-contain"
+                />
+              </>
             ) : (
-              <div className="flex aspect-[4/3] w-full items-center justify-center text-fg-faint">
+              <div className="flex h-full w-full items-center justify-center text-fg-faint">
                 <IconGift width={72} height={72} strokeWidth={1.25} />
               </div>
             )}

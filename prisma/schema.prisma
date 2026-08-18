@@ -70,6 +70,11 @@ model Raffle {
   // Premios adicionales de la rifa (mayor, anticipados por día...).
   // [{ label, title, amount, note }]
   prizesJson String @default("[]")
+  // Proporcion de la foto del sorteo. Los flyers suelen ser verticales y en
+  // un marco 4/3 se les corta la mitad de la informacion, asi que el dueno
+  // elige: 4/3 horizontal, 1/1 cuadrada o 9/16 vertical (flyer completo).
+  imageAspect String @default("4/3")
+
   // Filas opcionales de la ficha del sorteo. El premio nace apagado porque el
   // dueño ya lo escribe dentro del título; la fecha nace encendida y cuando no
   // hay texto se lee "Por anunciar".

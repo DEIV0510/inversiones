@@ -17,10 +17,29 @@ type Props = {
   whatsappNumber: string;
 };
 
+/**
+ * Marco de la foto según el formato que el dueño eligió para esta rifa.
+ *
+ * Las clases van escritas ENTERAS a propósito: Tailwind arma el CSS leyendo
+ * el código, así que un nombre juntado con texto (`aspect-[${x}]`) no
+ * existiría en la hoja de estilos y la tarjeta se quedaría sin marco.
+ *
+ * En el listado la foto vertical lleva tope de alto: sin él una tarjeta
+ * quedaría del doble de larga que sus vecinas y la rejilla se descuadraría.
+ * El flyer entero se ve en la página del sorteo.
+ */
+const MARCO_FOTO: Record<string, string> = {
+  "4/3": "aspect-[4/3]",
+  "1/1": "aspect-square",
+  "9/16": "aspect-[9/16] max-h-[26rem]",
+};
+
 export default function RaffleCard({ raffle, whatsappNumber }: Props) {
   const meta = statusMetaV2(raffle.status);
   const isActive = raffle.status === "ACTIVE";
   const isComing = raffle.status === "COMING_SOON";
+  // Formato desconocido (rifa antigua o dato raro) → el horizontal de siempre.
+  const marcoFoto = MARCO_FOTO[raffle.imageAspect] ?? MARCO_FOTO["4/3"];
 
   return (
     <article
@@ -30,12 +49,12 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
     >
       <Link
         href={`/sorteo/${raffle.slug}`}
-        className="relative block aspect-[4/3] overflow-hidden bg-bg2"
+        className={`relative block overflow-hidden bg-bg2 ${marcoFoto}`}
         aria-label={`Ver el sorteo ${raffle.title}`}
       >
         {raffle.imageUrl ? (
-          // El enlace ya es la caja 4/3, así que la imagen la rellena con
-          // `fill`. La tarjeta ocupa el ancho de la pantalla en el móvil, la
+          // El enlace ya es la caja con el formato elegido, así que la imagen
+          // la rellena con `fill`. La tarjeta ocupa el ancho de la pantalla en el móvil, la
           // mitad desde 640 px y un tercio (unos 352 px) desde 1024 px: con
           // eso el móvil pide una versión pequeña en vez del original.
           // Los SVG de demostración pasan sin optimizar: ya son vectoriales y

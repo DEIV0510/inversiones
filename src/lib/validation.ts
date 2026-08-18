@@ -19,6 +19,52 @@ const imagePath = z
 // RIFAS (admin)
 // ============================================================
 
+/**
+ * Paquete de boletas tal como queda GUARDADO en ticketPacksJson.
+ * q = cuántos números trae, label = etiqueta ("Más vendido"), off = descuento
+ * en porcentaje entero. La etiqueta y el descuento solo se escriben cuando
+ * existen, así que una rifa sin ellos guarda un JSON tan corto como antes.
+ */
+export type TicketPack = { q: number; label?: string; off?: number };
+
+/**
+ * Un paquete admite DOS formas de entrada y las dos se guardan igual:
+ *   - la vieja, que siguen mandando las rifas ya creadas:  5
+ *   - la nueva, con etiqueta y descuento:  { "q": 55, "label": "Más vendido", "off": 10 }
+ * El número suelto se convierte antes de validar, así el comprobante de
+ * errores es siempre el del objeto y los mensajes salen en español.
+ */
+const ticketPack = z
+  .preprocess(
+    (v) => (typeof v === "number" ? { q: v } : v),
+    z.object({
+      q: z
+        .number({ error: "Indica cuántos números trae el paquete" })
+        .int("La cantidad del paquete debe ser un número entero")
+        .min(1, "Un paquete debe traer al menos 1 número")
+        .max(5000, "Un paquete no puede pasar de 5000 números"),
+      label: z
+        .string()
+        .trim()
+        .max(24, "La etiqueta no puede pasar de 24 caracteres")
+        .optional(),
+      off: z
+        .number({ error: "El descuento debe ser un número" })
+        .int("El descuento debe ser un número entero")
+        .min(1, "El descuento mínimo es del 1%")
+        .max(90, "El descuento no puede pasar del 90%")
+        .optional(),
+    })
+  )
+  .transform((p): TicketPack => {
+    // Etiqueta vacía y descuento ausente no se guardan: nada de `"label": ""`
+    // dando vueltas por la base ni etiquetas invisibles en la tarjeta.
+    const pack: TicketPack = { q: p.q };
+    if (p.label) pack.label = p.label;
+    if (p.off) pack.off = p.off;
+    return pack;
+  });
+
 export const RAFFLE_STATUS_VALUES = [
   "DRAFT",
   "COMING_SOON",
@@ -40,6 +86,14 @@ const raffleFields = z.object({
   description: z.string().trim().max(2000).default(""),
   prize: z.string().trim().min(2, "Indica el premio").max(160),
   imageUrl: imagePath.nullable().default(null),
+  // Proporción con la que se pinta la foto del sorteo. Los flyers del dueño
+  // son verticales y en un marco 4/3 se les corta media información (premios
+  // anticipados, precio por ficha, fecha), así que la elige él por rifa.
+  // Misma lista que IMAGE_ASPECTS de src/lib/public.ts; se repite aquí porque
+  // ese módulo habla con Prisma y este esquema también se usa en el navegador.
+  imageAspect: z
+    .enum(["4/3", "1/1", "9/16"], { error: "Proporción de foto no válida" })
+    .default("4/3"),
   gallery: z.array(imagePath).max(8).default([]),
   pricePerNumber: z
     .number()
@@ -66,15 +120,25 @@ const raffleFields = z.object({
   showPrize: z.boolean().default(false),
   showDrawDate: z.boolean().default(false),
   ticketPacks: z
-    .array(
-      z
-        .number()
-        .int()
-        .min(1, "Un paquete debe traer al menos 1 número")
-        .max(5000, "Un paquete no puede pasar de 5000 números")
-    )
+    .array(ticketPack)
     .max(12, "Máximo 12 paquetes")
-    .default([1, 2, 5, 10]),
+    .superRefine((packs, ctx) => {
+      // Dos paquetes con la misma cantidad son un error de configuración: el
+      // comprador vería dos tarjetas idénticas con precios distintos y el
+      // servidor tendría que elegir por él cuál cobra.
+      const vistas = new Set<number>();
+      packs.forEach((pack, i) => {
+        if (vistas.has(pack.q)) {
+          ctx.addIssue({
+            code: "custom",
+            path: [i, "q"],
+            message: `Ya hay un paquete de ${pack.q} números`,
+          });
+        }
+        vistas.add(pack.q);
+      });
+    })
+    .default([{ q: 1 }, { q: 2 }, { q: 5 }, { q: 10 }]),
   prizes: z
     .array(
       z.object({
