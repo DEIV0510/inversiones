@@ -5,11 +5,16 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
 import {
+  IconBanknote,
   IconCalendar,
   IconCandado,
   IconCheck,
   IconClock,
+  IconFacebook,
+  IconInstagram,
+  IconMapPin,
   IconTicket,
+  IconTikTok,
   IconTrophy,
   IconWhatsApp,
 } from "@/components/icons";
@@ -28,6 +33,12 @@ type OrderData = {
    * manda, así que no están ni en el código de la página.
    */
   numbers: string[];
+  /**
+   * Cifras del número en esta rifa (4 → 0042). Con el pedido sin pagar es lo
+   * único que dice de qué tamaño son los números tapados: la ficha dibuja
+   * justo esos puntos. Opcional para no romper si la página no lo manda.
+   */
+  digits?: number;
   quantity: number;
   unitPrice: number;
   total: number;
@@ -37,6 +48,19 @@ type OrderData = {
   companyName: string;
   /** Premios instantáneos ganados con los números comprados. */
   prizesWon?: { number: string; prize: string }[];
+};
+
+/** Redes sociales que el dueño publicó en Configuración. */
+type RedSocial = { tipo: "facebook" | "instagram" | "tiktok"; url: string };
+
+/**
+ * Datos del negocio para el respaldo de pago. Los arma la página desde
+ * Configuración. A propósito NO incluye el WhatsApp: ver `RespaldoPago`.
+ */
+type ContactoNegocio = {
+  companyName: string;
+  location: string;
+  redes: RedSocial[];
 };
 
 const dateFmt = new Intl.DateTimeFormat("es-CO", {
@@ -91,6 +115,10 @@ type DatosBoleta = {
   codigo: string;
   empresa: string;
   fuente: string;
+  /** Nombre del participante: la boleta es SUYA y tiene que decirlo. */
+  participante: string;
+  /** Fecha del sorteo tal como la escribió el dueño ("" si no la puso). */
+  sorteo: string;
   /** Números de ESTE pedido que resultaron premiados (van en verde). */
   premiados: { number: string; prize: string }[];
 };
@@ -287,8 +315,53 @@ function dibujarBoleta(canvas: HTMLCanvasElement, datos: DatosBoleta) {
   }
   y -= altoLinea;
 
+  // ---- A nombre de quién va la boleta y cuándo se juega ----
+  // Esta imagen es la que el comprador manda por WhatsApp y la que el dueño
+  // archiva como comprobante: sin el nombre no se sabe de quién es la boleta,
+  // y sin la fecha del sorteo hay que ir a buscarla a otra pantalla. Los dos
+  // datos ya estaban en la página; solo faltaban en el dibujo.
+  const nombre = datos.participante.trim();
+  const sorteo = datos.sorteo.trim();
+  // Ancho útil entre los márgenes de la tarjeta, con aire a los lados.
+  const anchoDato = IMG_W - 232;
+
+  if (nombre) {
+    y += 36;
+    ctx.font = `700 12px ${fuente}`;
+    ctx.fillStyle = PALETA.fgFaint;
+    textoEspaciado(ctx, "A NOMBRE DE", IMG_W / 2, y, 3.5, "center");
+
+    y += 28;
+    // El nombre encoge antes de recortarse, igual que el título: una boleta
+    // que dice "MARÍA FERNANDA…" no identifica a nadie.
+    let tamNombre = 26;
+    for (const tam of [26, 23, 20, 17]) {
+      tamNombre = tam;
+      ctx.font = `800 ${tam}px ${fuente}`;
+      if (ctx.measureText(nombre).width <= anchoDato) break;
+    }
+    ctx.font = `800 ${tamNombre}px ${fuente}`;
+    ctx.fillStyle = PALETA.fg;
+    ctx.fillText(recortarTexto(ctx, nombre, anchoDato), IMG_W / 2, y);
+  }
+
+  if (sorteo) {
+    y += nombre ? 26 : 34;
+    const frase = `Se juega: ${sorteo}`;
+    let tamSorteo = 16;
+    for (const tam of [16, 14, 12]) {
+      tamSorteo = tam;
+      ctx.font = `600 ${tam}px ${fuente}`;
+      if (ctx.measureText(frase).width <= anchoDato) break;
+    }
+    ctx.font = `600 ${tamSorteo}px ${fuente}`;
+    ctx.fillStyle = PALETA.fgSoft;
+    ctx.fillText(recortarTexto(ctx, frase, anchoDato), IMG_W / 2, y);
+  }
+
   // ---- Separador punteado ----
-  y += 42;
+  // Sin nombre ni fecha la maqueta queda exactamente como estaba.
+  y += nombre || sorteo ? 32 : 42;
   ctx.setLineDash([6, 8]);
   ctx.strokeStyle = PALETA.line;
   ctx.lineWidth = 2;
@@ -567,9 +640,16 @@ function Countdown({ until, onExpired }: { until: string; onExpired: () => void 
     return () => clearInterval(id);
   }, [until, onExpired]);
 
+  // Con plazos de horas (las rifas que cobran por WhatsApp usan 720 minutos)
+  // un reloj de solo mm:ss pintaba "720:00", que se lee como 720 minutos… o
+  // como cualquier cosa. Cuando queda una hora o más se añade el tramo de
+  // horas y queda "11:59:47"; por debajo de la hora sigue siendo el mm:ss de
+  // siempre, que es lo que ve la mayoría.
   const totalSec = Math.floor(remaining / 1000);
-  const mm = String(Math.floor(totalSec / 60)).padStart(2, "0");
+  const horas = Math.floor(totalSec / 3600);
+  const mm = String(Math.floor((totalSec % 3600) / 60)).padStart(2, "0");
   const ss = String(totalSec % 60).padStart(2, "0");
+  const reloj = horas > 0 ? `${horas}:${mm}:${ss}` : `${mm}:${ss}`;
   // El reloj se calcula con la hora del dispositivo, así que el segundo que
   // pinta el servidor y el que pinta el navegador casi nunca coinciden. Se
   // avisa a React de que esa diferencia es esperada: si no, la hidratación
@@ -577,9 +657,13 @@ function Countdown({ until, onExpired }: { until: string; onExpired: () => void 
   return (
     <span
       suppressHydrationWarning
-      className="font-display text-3xl font-black tabular-nums text-brand"
+      /* Con horas el texto es más largo: a 360 px un 3xl se comía la fila,
+         así que ahí baja un escalón y vuelve a caber junto a su etiqueta. */
+      className={`font-display font-black tabular-nums text-brand ${
+        horas > 0 ? "text-2xl" : "text-3xl"
+      }`}
     >
-      {`${mm}:${ss}`}
+      {reloj}
     </span>
   );
 }
@@ -597,8 +681,108 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** Nombre e icono de cada red social del respaldo de contacto. */
+const REDES_META = {
+  facebook: { label: "Facebook", Icono: IconFacebook },
+  instagram: { label: "Instagram", Icono: IconInstagram },
+  tiktok: { label: "TikTok", Icono: IconTikTok },
+} as const;
+
+/**
+ * Respaldo de pago: se muestra cuando la rifa se quedó sin NINGÚN camino para
+ * pagar (ni WhatsApp ni pasarela en línea). Antes, en ese caso, la pantalla
+ * terminaba en el total y el código y el comprador se quedaba mirando, con
+ * sus números apartados y sin un solo botón.
+ *
+ * DECISIÓN sobre el WhatsApp del negocio: aquí NO se pinta. Este bloque solo
+ * aparece cuando la rifa tiene el cobro por WhatsApp apagado, así que sacar
+ * el número de Configuración sería devolverle al comprador, por la puerta de
+ * atrás, justo el canal que el dueño cerró a propósito (y el resto de la
+ * página —cabecera, pie y barra inferior— ya lo esconde). Lo honesto es
+ * decirle la verdad: quién organiza el sorteo, dónde está, las redes que el
+ * propio dueño publicó, y que guarde su código, que es la credencial con la
+ * que el organizador encuentra su pedido. Nunca se inventa un canal.
+ */
+function RespaldoPago({
+  contacto,
+  codigo,
+}: {
+  contacto: ContactoNegocio;
+  codigo: string;
+}) {
+  return (
+    <div className="neon-card overflow-hidden rounded-2xl bg-card p-5">
+      <div className="flex items-start gap-3.5">
+        <span
+          aria-hidden
+          className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand/15 text-brand-light"
+        >
+          <IconBanknote width={24} height={24} />
+        </span>
+        <div className="min-w-0">
+          <h2 className="font-display text-base font-black uppercase leading-tight tracking-wide text-fg">
+            Cómo completar tu pago
+          </h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-fg-soft">
+            Este sorteo no recibe pagos en línea: el organizador los confirma
+            uno por uno. Comunícate con él para completar el tuyo.
+          </p>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-line bg-well px-4 py-4">
+        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+          Organiza este sorteo
+        </p>
+        <p className="mt-1.5 font-display text-lg font-black uppercase leading-tight text-fg">
+          {contacto.companyName}
+        </p>
+        {contacto.location ? (
+          <p className="mt-2 flex items-start gap-2 text-sm leading-relaxed text-fg-soft">
+            <IconMapPin width={15} height={15} className="mt-0.5 shrink-0 text-brand" />
+            {contacto.location}
+          </p>
+        ) : null}
+        {contacto.redes.length > 0 ? (
+          <ul className="mt-3.5 flex flex-wrap gap-2">
+            {contacto.redes.map((red) => {
+              const { label, Icono } = REDES_META[red.tipo];
+              return (
+                <li key={red.tipo}>
+                  {/* min-h-11 = 44px: el dedo tiene dónde caer en el móvil. */}
+                  <a
+                    href={red.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-line-strong px-3.5 text-sm font-semibold text-fg transition-colors hover:border-brand hover:text-brand"
+                  >
+                    <Icono width={17} height={17} className="shrink-0" />
+                    {label}
+                  </a>
+                </li>
+              );
+            })}
+          </ul>
+        ) : null}
+      </div>
+
+      <p className="mt-4 text-sm leading-relaxed text-fg-soft">
+        Guarda tu código{" "}
+        <strong className="font-display font-black tracking-[0.12em] text-brand">
+          {codigo}
+        </strong>
+        : es lo único que necesita el organizador para encontrar tu pedido y
+        confirmarte el pago.
+      </p>
+    </div>
+  );
+}
+
 /** Cuántas fichas tapadas se pintan como máximo antes del "y N más". */
 const MAX_FICHAS_TAPADAS = 20;
+
+/** Cifras que se asumen si la página no las manda (mismo dibujo de antes). */
+const CIFRAS_POR_DEFECTO = 5;
 
 /**
  * Tarjeta de boleta: es lo que el comprador guarda como captura de pantalla.
@@ -612,6 +796,7 @@ function BoletaCard({
   title,
   numbers,
   cantidad,
+  cifras,
   estado,
   fecha,
   tono,
@@ -623,6 +808,12 @@ function BoletaCard({
   numbers: string[];
   /** Cuántos números tiene el pedido (sirve también con la boleta tapada). */
   cantidad: number;
+  /**
+   * Cifras del número en esta rifa. La ficha tapada dibuja un punto por
+   * cifra: en una rifa de 4 cifras se ven 4, no los 5 de siempre. Es lo único
+   * que anticipa la forma del número que va a salir al confirmarse el pago.
+   */
+  cifras: number;
   estado: string;
   fecha: string;
   tono: "pagada" | "espera" | "inactiva";
@@ -636,6 +827,9 @@ function BoletaCard({
   const inactiva = tono === "inactiva";
   const tapadas = Math.min(MAX_FICHAS_TAPADAS, Math.max(0, cantidad));
   const tapadasRestantes = Math.max(0, cantidad - tapadas);
+  // Un punto por cifra de la rifa. Se acota al rango que admite el panel
+  // (2 a 7 cifras) para que un dato raro no desarme la ficha.
+  const puntos = "•".repeat(Math.min(7, Math.max(2, Math.round(cifras))));
   // Mapa número → premio para pintar la ficha ganadora sin recorrer la lista
   // en cada número.
   const ganadores = inactiva ? [] : (premios ?? []);
@@ -696,7 +890,7 @@ function BoletaCard({
                   key={i}
                   className="flex min-h-14 items-center justify-center rounded-2xl border border-dashed border-line-strong bg-well px-1 font-display text-xl font-black tracking-[0.3em] text-fg-faint sm:text-2xl"
                 >
-                  •••••
+                  {puntos}
                 </li>
               ))}
             </ul>
@@ -804,16 +998,22 @@ export default function OrderView({
   order,
   whatsappUrl,
   wompiUrl,
+  contacto,
   autoEnviarWhatsApp = false,
 }: {
   order: OrderData;
   /** null cuando la rifa está configurada sin WhatsApp. */
   whatsappUrl: string | null;
   wompiUrl: string | null;
+  /** Datos del negocio para el respaldo cuando no hay forma de pagar. */
+  contacto: ContactoNegocio;
   autoEnviarWhatsApp?: boolean;
 }) {
   const router = useRouter();
   const yaEnviado = useRef(false);
+  // Sin WhatsApp y sin pasarela no queda ni un botón de pago: la pantalla
+  // tiene que darle al comprador un camino de todas formas.
+  const sinFormaDePago = !whatsappUrl && !wompiUrl;
 
   // Rifas que cierran por WhatsApp: apenas se crea el pedido, se abre la
   // conversación con el código, la cantidad y el total (nunca los números).
@@ -835,6 +1035,8 @@ export default function OrderView({
   // Números premiados de ESTE pedido (la página solo los envía si el pedido
   // está pagado y el premio quedó a su nombre).
   const premiados = order.prizesWon ?? [];
+  // Cifras de la rifa: marcan cuántos puntos lleva la ficha tapada.
+  const cifras = order.digits ?? CIFRAS_POR_DEFECTO;
 
   async function verifyPayment() {
     setVerifying(true);
@@ -892,6 +1094,8 @@ export default function OrderView({
         codigo: order.code,
         empresa: order.companyName,
         fuente,
+        participante: order.participantName,
+        sorteo: order.drawDateText ?? "",
         premiados,
       });
       if (!dibujada) throw new Error("sin-canvas");
@@ -1021,6 +1225,7 @@ export default function OrderView({
           title={order.raffleTitle}
           numbers={order.numbers}
           cantidad={order.quantity}
+          cifras={cifras}
           estado="Aprobado"
           fecha={fechaPago}
           tono="pagada"
@@ -1124,10 +1329,15 @@ export default function OrderView({
             Realiza el pago
           </h1>
           {/* Se le dice de una vez lo que va a pasar: no perdió nada, sus
-              números ya son suyos y los verá al confirmarse el pago. */}
+              números ya son suyos y los verá al confirmarse el pago.
+              NO se promete el correo: solo sale si el comprador dejó su
+              dirección, el envío está encendido y el servidor tiene la clave
+              del proveedor. Prometerlo aquí sin saberlo era prometer algo que
+              en muchos pedidos no llega. Esta pantalla, en cambio, siempre
+              enseña los números al confirmarse el pago. */}
           <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">
-            Tus números ya están apartados a tu nombre. Los verás aquí y te
-            llegarán al correo en cuanto confirmemos tu pago.
+            Tus números ya están apartados a tu nombre. Los verás aquí en
+            cuanto confirmemos tu pago.
           </p>
         </div>
 
@@ -1151,6 +1361,7 @@ export default function OrderView({
           title={order.raffleTitle}
           numbers={[]}
           cantidad={order.quantity}
+          cifras={cifras}
           estado="Pendiente de pago"
           fecha={dateShortFmt.format(new Date(order.createdAt))}
           tono="espera"
@@ -1221,26 +1432,39 @@ export default function OrderView({
               {verifyMsg}
             </p>
           ) : null}
+          {/* Respaldo: ocupa el lugar donde iría el botón de pago, que es
+              justo donde el comprador está buscando. */}
+          {sinFormaDePago ? (
+            <RespaldoPago contacto={contacto} codigo={order.code} />
+          ) : null}
         </div>
 
-        <p className="text-center text-xs leading-relaxed text-fg-faint">
-          Guarda tu código de participación para consultar tus boletas.
-        </p>
+        {/* Con el respaldo en pantalla esta línea sobra: allí ya se le dice
+            que guarde su código y para qué le sirve. */}
+        {sinFormaDePago ? null : (
+          <p className="text-center text-xs leading-relaxed text-fg-faint">
+            Guarda tu código de participación para consultar tus boletas.
+          </p>
+        )}
       </div>
     );
   }
 
   // ============ EXPIRADA / CANCELADA / RECHAZADA ============
+  // Aquí tampoco se habla de "reserva": en todo el checkout el mensaje es que
+  // le GUARDAMOS los números un rato mientras paga, así que al vencerse se
+  // dice justo eso y no una palabra que el comprador no ha leído en ninguna
+  // otra pantalla.
   const title =
     order.status === "EXPIRED"
-      ? "Tu reserva expiró"
+      ? "Se acabó el tiempo"
       : order.status === "CANCELLED"
         ? "Pedido cancelado"
         : "No pudimos confirmar este pedido";
   // El texto de contacto solo nombra WhatsApp si la rifa tiene ese canal.
   const detail =
     order.status === "EXPIRED"
-      ? "El tiempo de reserva terminó y los números volvieron a estar disponibles. Puedes intentarlo de nuevo."
+      ? "Se acabó el tiempo que te guardábamos los números y volvieron a estar disponibles. Puedes intentarlo de nuevo."
       : order.status === "CANCELLED"
         ? "Este pedido fue cancelado. Si crees que es un error, comunícate con nosotros."
         : whatsappUrl
@@ -1248,7 +1472,7 @@ export default function OrderView({
           : "Hubo un problema con este pedido. Comunícate con nosotros para resolverlo.";
   const estado =
     order.status === "EXPIRED"
-      ? "Reserva expirada"
+      ? "Tiempo agotado"
       : order.status === "CANCELLED"
         ? "Cancelada"
         : "Sin confirmar";
@@ -1271,6 +1495,7 @@ export default function OrderView({
         title={order.raffleTitle}
         numbers={[]}
         cantidad={order.quantity}
+        cifras={cifras}
         estado={estado}
         fecha={dateShortFmt.format(new Date(order.createdAt))}
         tono="inactiva"

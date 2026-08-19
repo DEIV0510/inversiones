@@ -55,12 +55,20 @@ export default function WinnerLookup({ rifas }: Props) {
 
   const rifa = rifas.find((r) => r.slug === slug) ?? rifas[0];
 
+  // Sin sorteos que puedan tener ganador (los de "próximamente" no cuentan)
+  // se explica con palabras en vez de dejar un selector vacío.
   if (!rifa) {
     return (
       <div className="mt-6 rounded-3xl border border-line bg-card p-6 text-center">
-        <p className="text-sm leading-relaxed text-fg-soft">
-          Todavía no hay sorteos publicados para consultar. Vuelve cuando se
-          anuncie el próximo.
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-well text-fg-faint">
+          <IconTrophy width={22} height={22} />
+        </span>
+        <p className="mt-3 font-display text-base font-black uppercase leading-tight text-fg">
+          Aún no hay resultados
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-fg-soft">
+          Todavía no hay ningún sorteo en juego. Cuando arranque el próximo,
+          aquí podrás escribir el número que salió y ver a quién le pertenece.
         </p>
       </div>
     );

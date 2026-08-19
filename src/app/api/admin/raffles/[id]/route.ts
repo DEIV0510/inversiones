@@ -5,11 +5,46 @@ import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { digitsForTotal } from "@/lib/numbers";
 import { deleteImage } from "@/lib/media";
+import { statusMetaV2 } from "@/lib/raffle-status";
 import { rafflePatchSchema } from "@/lib/validation";
+import { isWompiConfigured } from "@/lib/wompi";
 
 export const runtime = "nodejs";
 
 type Ctx = { params: Promise<{ id: string }> };
+
+/**
+ * Estados en los que la rifa está de cara al público y ACEPTA pedidos. En los
+ * demás (borrador, agotada, finalizada, cancelada) nadie puede comprar, así
+ * que no hace falta que exista forma de cobrar.
+ */
+const ESTADOS_QUE_COBRAN = new Set(["ACTIVE", "COMING_SOON"]);
+
+/**
+ * Regla de cobro, del lado del SERVIDOR. Copia deliberada de la que vive en
+ * ../route.ts (el POST): Next.js no deja exportar nada más que los verbos
+ * desde un route.ts, así que la alternativa era un módulo nuevo. Son diez
+ * líneas y el mensaje es el mismo en las dos puertas.
+ *
+ * Devuelve el mensaje de bloqueo, o "" cuando la combinación es válida.
+ * `status` y `whatsappCheckout` deben ser los del estado FINAL: lo que va a
+ * quedar guardado, no solo lo que trae la petición.
+ */
+function errorSinFormaDeCobro(
+  status: string,
+  whatsappCheckout: boolean
+): string {
+  if (!ESTADOS_QUE_COBRAN.has(status)) return "";
+  if (whatsappCheckout) return "";
+  if (isWompiConfigured()) return "";
+  return (
+    `No se puede dejar en «${statusMetaV2(status).label}» una rifa sin forma de cobrar: ` +
+    "el cobro por WhatsApp está apagado y esta tienda no tiene pasarela de pago " +
+    "configurada, así que el comprador apartaría sus números y en la pantalla de pago " +
+    "no le aparecería ningún botón. Hay dos salidas: enciende el cobro por WhatsApp, " +
+    "o déjala en «Borrador» hasta que configuren la pasarela de pago."
+  );
+}
 
 /** Rutas de la galería guardadas como JSON; si está corrupta, lista vacía. */
 function galeriaDe(galleryJson: string): string[] {
@@ -109,6 +144,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       },
       { status: 422 }
     );
+  }
+
+  // Nada de publicar una rifa que no puede cobrar. Lo que se juzga es el
+  // estado FINAL, no la petición: un PATCH que solo apaga el WhatsApp no trae
+  // el estado, y uno que solo cambia el estado no trae el WhatsApp. Cualquiera
+  // de los dos, por separado, deja la rifa vendiendo sin caja. Por eso cada
+  // campo se toma de la petición si viene y de lo guardado si no.
+  const sinCobro = errorSinFormaDeCobro(
+    parsed.data.status ?? existing.status,
+    parsed.data.whatsappCheckout ?? existing.whatsappCheckout
+  );
+  if (sinCobro) {
+    return NextResponse.json({ error: sinCobro }, { status: 422 });
   }
 
   const raffle = await prisma.raffle.update({

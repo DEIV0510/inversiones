@@ -24,6 +24,14 @@ export const runtime = "nodejs";
  * Límite de intentos estricto: sin él, cualquiera sacaría la lista completa
  * de compradores probando números uno por uno.
  */
+
+/**
+ * Estados en los que un sorteo puede tener ganador. Es el mismo criterio con
+ * el que /ganador arma su selector: un sorteo en "próximamente" no ha vendido
+ * nada, así que aquí tampoco se consulta.
+ */
+const ESTADOS_CONSULTABLES = ["ACTIVE", "SOLD_OUT", "FINISHED"];
+
 export async function GET(req: NextRequest) {
   const ip = clientIp(req);
   if (
@@ -42,7 +50,7 @@ export async function GET(req: NextRequest) {
   const slug = (req.nextUrl.searchParams.get("slug") ?? "").trim();
   // getPublicRaffleBySlug filtra por estado: los borradores no se consultan.
   const raffle = slug ? await getPublicRaffleBySlug(slug) : null;
-  if (!raffle) {
+  if (!raffle || !ESTADOS_CONSULTABLES.includes(raffle.status)) {
     return NextResponse.json({ error: "Sorteo no encontrado" }, { status: 404 });
   }
 

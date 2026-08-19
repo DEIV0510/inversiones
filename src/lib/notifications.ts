@@ -2,44 +2,14 @@ import { formatCop } from "./format";
 import { waLink } from "./whatsapp";
 
 /**
- * Arquitectura de notificaciones. Hoy el canal operativo es WhatsApp por
- * enlaces dinámicos (el negocio atiende manualmente). La interfaz Provider
- * deja listo el enganche de canales automáticos (WhatsApp Business API,
- * email con Resend, SMS) sin tocar el resto del sistema — ver docs/.
+ * Avisos hacia el comprador y hacia el negocio.
+ *
+ * Aquí vivía además un armazón de "providers" genérico (interfaz
+ * NotificationProvider + notify()) con la lista de providers VACÍA: nadie lo
+ * llamaba nunca y el correo acabó implementándose aparte, en `src/lib/email.ts`,
+ * con su propia llamada directa desde el motor de pagos. Se retiró para que no
+ * quede un segundo camino de notificaciones que en realidad no notifica nada.
  */
-
-export type NotificationEvent =
-  | "order.created"
-  | "order.paid"
-  | "order.expiring"
-  | "order.expired"
-  | "payment.rejected"
-  | "winner.published";
-
-export type NotificationPayload = {
-  participantName?: string;
-  participantPhone?: string;
-  raffleTitle?: string;
-  orderCode?: string;
-  numbers?: string[];
-  total?: number;
-};
-
-export interface NotificationProvider {
-  send(event: NotificationEvent, payload: NotificationPayload): Promise<void>;
-}
-
-const providers: NotificationProvider[] = [
-  // Registrar aquí providers automáticos cuando existan credenciales:
-  // new WhatsAppBusinessProvider(), new ResendEmailProvider(), ...
-];
-
-export async function notify(
-  event: NotificationEvent,
-  payload: NotificationPayload
-): Promise<void> {
-  await Promise.allSettled(providers.map((p) => p.send(event, payload)));
-}
 
 /**
  * Mensaje de WhatsApp hacia el NEGOCIO para coordinar el pago de una orden.
@@ -56,13 +26,33 @@ export function orderWhatsAppMessage(params: {
   orderCode: string;
   quantity: number;
   total: number;
+  /**
+   * Pago ya confirmado. El mismo botón de WhatsApp sigue en la pantalla del
+   * pedido DESPUÉS de pagar —y es justo el que la página le señala al ganador
+   * de un premio instantáneo para reclamarlo—, así que abrirlo con un "Quiero
+   * coordinar el pago" le hacía escribirle al dueño para pagar algo que ya
+   * pagó. El texto de los números sigue sin viajar aquí: solo el código.
+   */
+  pagada?: boolean;
+  /** Premios instantáneos que ganó ESTE pedido, ya pagado. */
+  premios?: { number: string; prize: string }[];
 }): string {
   const boletas =
     params.quantity === 1 ? "1 número" : `${params.quantity} números`;
+  const premios = params.pagada ? (params.premios ?? []) : [];
+  const cierre = !params.pagada
+    ? "Quiero coordinar el pago."
+    : premios.length > 0
+      ? `Mi pago ya está confirmado y ${
+          premios.length === 1 ? "gané un premio" : "gané premios"
+        }: ${premios
+          .map((p) => `${p.number} (${p.prize})`)
+          .join(", ")}. Quiero reclamarlo.`
+      : "Mi pago ya está confirmado. Escribo para dejar constancia de mi participación.";
   const message =
     `Hola, soy ${params.participantName}. Acabo de comprar en el sorteo ` +
     `${params.raffleTitle}.\n` +
     `Pedido ${params.orderCode} - ${boletas} - ${formatCop(params.total)}\n` +
-    `Quiero coordinar el pago.`;
+    cierre;
   return waLink(params.businessPhone, message);
 }

@@ -4,9 +4,50 @@ import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { digitsForTotal } from "@/lib/numbers";
+import { statusMetaV2 } from "@/lib/raffle-status";
 import { raffleSchema } from "@/lib/validation";
+import { isWompiConfigured } from "@/lib/wompi";
 
 export const runtime = "nodejs";
+
+/**
+ * Estados en los que la rifa está de cara al público y ACEPTA pedidos. En los
+ * demás (borrador, agotada, finalizada, cancelada) nadie puede comprar, así
+ * que no hace falta que exista forma de cobrar.
+ */
+const ESTADOS_QUE_COBRAN = new Set(["ACTIVE", "COMING_SOON"]);
+
+/**
+ * Regla de cobro, del lado del SERVIDOR. El panel ya frena este caso, pero el
+ * panel es solo la primera puerta: una petición directa al API (o un panel
+ * viejo en caché) podía dejar una rifa publicada con el cobro por WhatsApp
+ * apagado y sin pasarela configurada. Resultado: el comprador aparta sus
+ * números, llega a «Realiza el pago» y no le sale un solo botón. Es una venta
+ * perdida, así que la regla se repite aquí y aquí es donde manda.
+ *
+ * Devuelve el mensaje de bloqueo, o "" cuando la combinación es válida.
+ * `whatsappCheckout` y `status` deben ser los del estado FINAL, es decir lo
+ * que va a quedar guardado, no solo lo que trae la petición.
+ *
+ * NO se exporta: Next.js solo admite GET/POST/… y su configuración como
+ * exportaciones de un route.ts. Por eso el PATCH de [id]/route.ts lleva su
+ * propia copia; son diez líneas y no cruzan la frontera del framework.
+ */
+function errorSinFormaDeCobro(
+  status: string,
+  whatsappCheckout: boolean
+): string {
+  if (!ESTADOS_QUE_COBRAN.has(status)) return "";
+  if (whatsappCheckout) return "";
+  if (isWompiConfigured()) return "";
+  return (
+    `No se puede dejar en «${statusMetaV2(status).label}» una rifa sin forma de cobrar: ` +
+    "el cobro por WhatsApp está apagado y esta tienda no tiene pasarela de pago " +
+    "configurada, así que el comprador apartaría sus números y en la pantalla de pago " +
+    "no le aparecería ningún botón. Hay dos salidas: enciende el cobro por WhatsApp, " +
+    "o déjala en «Borrador» hasta que configuren la pasarela de pago."
+  );
+}
 
 export async function GET() {
   const auth = await requireAdminApi("numbers.view");
@@ -60,6 +101,17 @@ export async function POST(req: NextRequest) {
       },
       { status: 422 }
     );
+  }
+
+  // Nada de publicar una rifa que no puede cobrar. En el POST el estado final
+  // es exactamente el que trae la petición: no hay nada guardado con lo que
+  // mezclarlo.
+  const sinCobro = errorSinFormaDeCobro(
+    parsed.data.status,
+    parsed.data.whatsappCheckout
+  );
+  if (sinCobro) {
+    return NextResponse.json({ error: sinCobro }, { status: 422 });
   }
 
   const raffle = await prisma.raffle.create({

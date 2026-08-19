@@ -22,6 +22,8 @@
 | `BLOB_READ_WRITE_TOKEN` | prod | Lo inyecta la integración Blob |
 | `CRON_SECRET` | ✔ prod | Autoriza el cron (Vercel lo envía como Bearer) |
 | `WOMPI_PUBLIC_KEY` / `WOMPI_INTEGRITY_SECRET` / `WOMPI_EVENTS_SECRET` | opcional | Activan pago en línea (ver PAGOS.md) |
+| `RESEND_API_KEY` | opcional | Sin ella NO sale ningún correo, aunque el panel diga que está encendido (ver CORREO.md) |
+| `EMAIL_FROM` | opcional | Remitente por defecto; lo que se escriba en Panel → Configuración tiene prioridad |
 
 ## Primer despliegue de una base nueva
 
@@ -64,5 +66,12 @@ npx tsx scripts/test-engine.ts    # integración contra la DB del .env:
 1. `CRON_SECRET` configurado en Vercel.
 2. Credenciales Wompi de PRODUCCIÓN (cuando el comercio esté aprobado).
 3. `NEXT_PUBLIC_SITE_URL` con el dominio final.
-4. Textos legales reales en /terminos y /privacidad (Ley 1581 de 2012).
-5. Cambiar la contraseña del super admin desde Usuarios.
+4. `RESEND_API_KEY` si se quiere que el comprador reciba sus números por
+   correo; sin ella el interruptor del panel no envía nada.
+5. **Cada rifa publicada tiene al menos una forma de cobrar**: WhatsApp
+   encendido o pasarela configurada. Ver el aviso de `docs/PAGOS.md`.
+6. Textos legales reales en /terminos y /privacidad: hoy describen
+   correctamente lo que hace el sistema, pero el reglamento detallado y la
+   política completa de la Ley 1581 de 2012 siguen marcados como
+   `[PENDIENTE DE CONFIGURAR]` y los aporta el propietario.
+7. Cambiar la contraseña del super admin desde Usuarios.

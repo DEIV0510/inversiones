@@ -106,30 +106,11 @@ export async function getNumberStatus(
   return "RESERVADO";
 }
 
-/** Estado de varios números en una sola consulta (para verificar selecciones). */
-export async function getNumbersStatus(
-  raffleId: string,
-  numbers: number[]
-): Promise<Map<number, PublicNumberStatus>> {
-  const rows = await prisma.raffleNumber.findMany({
-    where: { raffleId, number: { in: numbers } },
-    select: { number: true, status: true, reservedUntil: true },
-  });
-  const map = new Map<number, PublicNumberStatus>();
-  for (const n of numbers) map.set(n, "DISPONIBLE");
-  for (const row of rows) {
-    if (!isRowAlive(row)) continue;
-    map.set(
-      row.number,
-      row.status === "PAID"
-        ? "VENDIDO"
-        : row.status === "BLOCKED"
-          ? "BLOQUEADO"
-          : "RESERVADO"
-    );
-  }
-  return map;
-}
+// Existía un `getNumbersStatus(raffleId, numbers[])` que resolvía el estado de
+// varias selecciones de golpe. Nunca se llamó: el comprador consulta de uno en
+// uno con el buscador, y quien de verdad arbitra si la selección entera es
+// válida es `claimNumbers` dentro de la transacción — comprobarlo antes solo
+// habría dado una respuesta que puede quedar obsoleta en el mismo instante.
 
 function randomCandidates(
   total: number,
@@ -207,15 +188,8 @@ export async function pickRandomAvailable(
   return [...picked];
 }
 
-/** Números vendidos reales (para el admin; nunca se muestra al público). */
-export async function countByStatus(raffleId: string) {
-  const now = new Date();
-  const [paid, blocked, reservedAlive] = await Promise.all([
-    prisma.raffleNumber.count({ where: { raffleId, status: "PAID" } }),
-    prisma.raffleNumber.count({ where: { raffleId, status: "BLOCKED" } }),
-    prisma.raffleNumber.count({
-      where: { raffleId, status: "RESERVED", reservedUntil: { gt: now } },
-    }),
-  ]);
-  return { paid, blocked, reserved: reservedAlive };
-}
+// Aquí estaba `countByStatus(raffleId)`, tres COUNT sueltos por rifa. Quedó sin
+// uso: el panel saca esos mismos conteos con un `groupBy` en
+// /api/admin/numbers, y el porcentaje público sale del contador atómico
+// `paidCount` de la rifa. Dos formas de contar lo mismo acaban discrepando, así
+// que se deja una sola.

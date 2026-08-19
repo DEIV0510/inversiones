@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { PublicRaffle } from "@/lib/public";
-import { formatCop } from "@/lib/format";
+import type { PrizedGroup, PublicRaffle } from "@/lib/public";
+import { formatCop, formatearPlazo } from "@/lib/format";
 import { formatNumber } from "@/lib/numbers";
 import { useModalA11y } from "@/components/useModalA11y";
 import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
@@ -17,6 +17,14 @@ type SearchResult = {
 
 const inputCls =
   "min-h-12 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
+
+/**
+ * Lista vacía compartida para cuando la rifa no publica números premiados.
+ * Es una constante de módulo a propósito: si se pusiera `= []` en el valor
+ * por defecto del prop, cada render crearía un array nuevo y el useMemo que
+ * arma el mapa de premios se recalcularía en cada pulsación del formulario.
+ */
+const SIN_PREMIOS: PrizedGroup[] = [];
 
 /** Etiqueta pequeña: mayúsculas con tracking muy abierto. */
 const labelCls = "text-xs font-bold uppercase tracking-[0.16em] text-fg-faint";
@@ -101,9 +109,41 @@ const TONOS_ETIQUETA = {
  * La disponibilidad SIEMPRE la decide el backend al cerrar la compra.
  * La forma de elegir (manual / azar / ambas) y los paquetes de boletas
  * vienen configurados en cada rifa desde el panel.
+ *
+ * `prizedGroups` son los números premiados que la propia página del sorteo ya
+ * publica arriba (los calcula el servidor con getPrizedGroups). Llegan hasta
+ * aquí para poder CELEBRARLOS dentro del selector: es el mejor argumento de
+ * venta que tiene la página y antes se perdía —el buscador decía solo
+ * "Disponible" aunque el número estuviera premiado—. El prop es opcional para
+ * que una rifa sin premios anticipados funcione exactamente igual.
+ *
+ * Esto no roza la regla de no enseñar inventario: decir que UN número tiene
+ * premio es repetir algo ya público; lo que jamás se dice es cuántos números
+ * quedan libres o cuántos se vendieron.
  */
-export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
+export default function NumberPicker({
+  raffle,
+  prizedGroups = SIN_PREMIOS,
+}: {
+  raffle: PublicRaffle;
+  prizedGroups?: PrizedGroup[];
+}) {
   const router = useRouter();
+
+  // Mapa número → premio, para preguntar en O(1) si una ficha está premiada.
+  // Los números vienen rellenados con ceros ("01038"), así que se pasan a
+  // entero para poder compararlos con los valores que maneja el selector.
+  const premiosPorNumero = useMemo(() => {
+    const mapa = new Map<number, string>();
+    for (const grupo of prizedGroups) {
+      for (const texto of grupo.numbers) {
+        const valor = Number(texto);
+        if (Number.isInteger(valor)) mapa.set(valor, grupo.prize);
+      }
+    }
+    return mapa;
+  }, [prizedGroups]);
+  const hayPremiados = premiosPorNumero.size > 0;
 
   // Modo de selección configurado en la rifa. Cualquier valor desconocido
   // se trata como "ambas" para no dejar al usuario sin manera de comprar.
@@ -287,7 +327,15 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
     };
   }, [loadSuggestions]);
 
-  /** Elegir un número a mano cancela la cantidad de la compra rápida. */
+  /**
+   * Elegir un número a mano cancela la cantidad de la compra rápida.
+   *
+   * El pedido lleva UNA cosa o la otra, nunca las dos, y eso es a propósito.
+   * Lo que fallaba es que el cambio se hacía EN SILENCIO: el comprador tocaba
+   * un paquete de 16, añadía su número de la suerte y el carrito se quedaba en
+   * "1 número" con un "te faltan 15" que parecía un error del sitio. Ahora
+   * cada vez que una acción descarta la otra se dice con todas las letras.
+   */
   function toggle(value: number, label: string) {
     // Tope del pedido: antes se ignoraba el toque en silencio y el comprador
     // creía que la ficha no respondía. Ahora se le dice por qué.
@@ -297,6 +345,10 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       );
       return;
     }
+    // Si había una cantidad de la compra rápida, este toque la borra: hay que
+    // avisar ANTES de perderla de vista, porque después ya no hay de dónde
+    // sacar el número que se descartó.
+    const cantidadDescartada = randomQty;
     setSelected((prev) => {
       const next = new Map(prev);
       if (next.has(value)) {
@@ -307,18 +359,37 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       return next;
     });
     setRandomQty(0);
+    if (cantidadDescartada > 0) {
+      setNotice(
+        `Ahora llevas los números que eliges tú: quitamos la compra rápida de ${cantidadDescartada} números.`
+      );
+    }
   }
 
   /**
    * Elegir una cantidad rápida cancela los números escogidos a mano.
    * La cantidad nunca se queda entre 1 y el mínimo: o es 0 (todavía no quiere
    * nada) o es al menos la compra mínima del sorteo.
+   *
+   * Igual que en toggle(): si esto descarta los números que ya había elegido,
+   * se le dice; y si solo está subiendo o bajando el contador no se le dice
+   * nada, porque ahí no pierde nada.
    */
   function elegirCantidad(n: number) {
     const acotada = Math.max(0, Math.min(raffle.maxNumbersPerOrder, n));
     const q = acotada > 0 ? Math.max(minPorPedido, acotada) : 0;
     setRandomQty(q);
-    if (q > 0 && selected.size > 0) setSelected(new Map());
+    if (q > 0 && selected.size > 0) {
+      const cuantos = selected.size;
+      setSelected(new Map());
+      setNotice(
+        `Cambiaste a la compra rápida de ${q} números: quitamos ${
+          cuantos === 1
+            ? "el número que habías elegido"
+            : `los ${cuantos} números que habías elegido`
+        }.`
+      );
+    }
   }
 
   /**
@@ -456,6 +527,29 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
       setSubmitting(false);
     }
   }
+
+  // ¿El número que acaba de buscar está premiado? Solo se celebra si además
+  // está DISPONIBLE: felicitar por un premio que ya no puede comprar sería
+  // burlarse de él. Con el número vendido o pendiente basta con su estado.
+  const premioBuscado = searchResult
+    ? premiosPorNumero.get(searchResult.value)
+    : undefined;
+  const celebraBuscado =
+    Boolean(premioBuscado) && searchResult?.status === "DISPONIBLE";
+  // El "al instante" solo se añade si el dueño no lo escribió ya dentro del
+  // premio. Sin esta comprobación, un premio guardado como "$200.000 al
+  // instante" se leía "…tiene premio: $200.000 al instante al instante!".
+  const premioBuscadoTexto = premioBuscado
+    ? /al\s+instante/i.test(premioBuscado)
+      ? `${premioBuscado}!`
+      : `${premioBuscado} al instante!`
+    : "";
+
+  // Cuántos de los números que él mismo eligió están premiados. No es
+  // inventario del sorteo: es lo que lleva en su carrito.
+  const premiadosElegidos = hayPremiados
+    ? [...selected.keys()].filter((v) => premiosPorNumero.has(v)).length
+    : 0;
 
   // Colores de estado igual que la leyenda: pendiente = ámbar, pagado = fucsia.
   // Un número que otra persona está pagando se nombra "Pendiente de pago", no
@@ -692,27 +786,53 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               </p>
             ) : null}
             {searchResult ? (
-              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-well px-4 py-3">
-                <span className="font-display text-xl font-black tracking-[0.15em] text-brand">
-                  {searchResult.label}
-                </span>
-                <span
-                  className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${statusChip[searchResult.status].cls}`}
-                >
-                  {statusChip[searchResult.status].text}
-                </span>
-                {searchResult.status === "DISPONIBLE" ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      toggle(searchResult.value, searchResult.label);
-                      setQuery("");
-                      setSearchResult(null);
-                    }}
-                    className="glow-brand-sm min-h-11 rounded-2xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+              <div
+                className={`mt-3 rounded-2xl px-4 py-3 ${
+                  celebraBuscado
+                    ? "border border-wa/60 bg-wa/10"
+                    : "bg-well"
+                }`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span
+                    className={`font-display text-xl font-black tracking-[0.15em] ${
+                      celebraBuscado ? "text-wa" : "text-brand"
+                    }`}
                   >
-                    {selected.has(searchResult.value) ? "Quitar" : "Agregar"}
-                  </button>
+                    {searchResult.label}
+                  </span>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${statusChip[searchResult.status].cls}`}
+                  >
+                    {statusChip[searchResult.status].text}
+                  </span>
+                  {searchResult.status === "DISPONIBLE" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        toggle(searchResult.value, searchResult.label);
+                        setQuery("");
+                        setSearchResult(null);
+                      }}
+                      className="glow-brand-sm min-h-11 rounded-2xl bg-brand px-4 text-xs font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+                    >
+                      {selected.has(searchResult.value) ? "Quitar" : "Agregar"}
+                    </button>
+                  ) : null}
+                </div>
+                {/* LA VENTA QUE SE PERDÍA. El número premiado ya está
+                    publicado más arriba en la página, así que aquí se celebra
+                    sin rodeos: quien busca su número de la suerte y le sale
+                    "$1.000.000 al instante" compra. Va en el verde de
+                    premiado, el mismo de la boleta ganadora. */}
+                {celebraBuscado ? (
+                  <p
+                    role="status"
+                    className="mt-2.5 border-t border-wa/30 pt-2.5 text-sm font-black leading-snug text-wa"
+                  >
+                    <span aria-hidden="true">★ </span>¡Este número tiene premio:{" "}
+                    {premioBuscadoTexto} Agrégalo antes de que se lo lleven.
+                  </p>
                 ) : null}
               </div>
             ) : null}
@@ -748,19 +868,42 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
               <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
                 {suggestions.map((s) => {
                   const isSelected = selected.has(s.value);
+                  // Las sugerencias son números libres, así que uno premiado
+                  // aquí siempre se puede comprar: se pinta en el verde de
+                  // premiado con su estrella para que salte a la vista.
+                  const premio = premiosPorNumero.get(s.value);
                   return (
                     <button
                       key={s.value}
                       type="button"
                       onClick={() => toggle(s.value, s.label)}
                       aria-pressed={isSelected}
-                      className={`min-h-11 overflow-hidden rounded-full px-1 font-display text-[13px] font-black tracking-wider tabular-nums transition-all sm:text-sm ${
-                        isSelected
-                          ? "glow-brand-sm bg-brand text-white"
-                          : "border border-line bg-well text-fg hover:border-brand"
+                      className={`flex min-h-11 flex-col items-center justify-center overflow-hidden rounded-full px-1 font-display text-[13px] font-black leading-none tracking-wider tabular-nums transition-all sm:text-sm ${
+                        premio
+                          ? `ticket-chip-win text-bg ${
+                              isSelected
+                                ? "outline-2 outline-offset-2 outline-brand"
+                                : ""
+                            }`
+                          : isSelected
+                            ? "glow-brand-sm bg-brand text-white"
+                            : "border border-line bg-well text-fg hover:border-brand"
                       }`}
                     >
-                      {s.label}
+                      {/* El color no basta para avisar de un premio: la
+                          estrella lo dice a la vista y el texto oculto lo
+                          dice al lector de pantalla. */}
+                      {premio ? (
+                        <span aria-hidden="true" className="text-[8px]">
+                          ★
+                        </span>
+                      ) : null}
+                      <span className={premio ? "mt-0.5" : ""}>{s.label}</span>
+                      {premio ? (
+                        <span className="sr-only">
+                          , número premiado con {premio}
+                        </span>
+                      ) : null}
                     </button>
                   );
                 })}
@@ -770,6 +913,15 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 No hay sugerencias en este momento. Usa el buscador.
               </p>
             )}
+
+            {/* Qué significa el verde de la cuadrícula. Solo se dice si la
+                rifa publica números premiados, y nunca cuántos hay. */}
+            {hayPremiados ? (
+              <p className="mt-3 text-center text-xs font-bold leading-relaxed text-wa">
+                <span aria-hidden="true">★ </span>Los números en verde tienen
+                premio al instante.
+              </p>
+            ) : null}
 
             {/* Leyenda de colores: sin cantidades ni contadores. */}
             <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 border-t border-line pt-3">
@@ -801,19 +953,44 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
             <div className="rounded-3xl border border-brand/40 bg-card p-4">
               <p className={labelCls}>Números seleccionados</p>
               <div className="mt-2.5 flex flex-wrap gap-2">
-                {[...selected.entries()].map(([value, label]) => (
-                  <button
-                    key={value}
-                    type="button"
-                    onClick={() => toggle(value, label)}
-                    aria-label={`Quitar número ${label}`}
-                    className="ticket-chip group inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 font-display text-sm font-black tracking-wider tabular-nums text-white"
-                  >
-                    {label}
-                    <IconX width={13} height={13} className="opacity-70 group-hover:opacity-100" />
-                  </button>
-                ))}
+                {[...selected.entries()].map(([value, label]) => {
+                  // El premiado sigue en verde también dentro del carrito:
+                  // ver ahí su número ganador es lo que le empuja a pagar.
+                  const premio = premiosPorNumero.get(value);
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => toggle(value, label)}
+                      aria-label={
+                        premio
+                          ? `Quitar número ${label}, premiado con ${premio}`
+                          : `Quitar número ${label}`
+                      }
+                      className={`group inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 font-display text-sm font-black tracking-wider tabular-nums ${
+                        premio
+                          ? "ticket-chip-win text-bg"
+                          : "ticket-chip text-white"
+                      }`}
+                    >
+                      {premio ? <span aria-hidden="true">★</span> : null}
+                      {label}
+                      <IconX width={13} height={13} className="opacity-70 group-hover:opacity-100" />
+                    </button>
+                  );
+                })}
               </div>
+              {/* Cuántos premiados lleva NO es inventario: es lo que hay en su
+                  propio carrito. Se le recuerda porque es su mejor razón para
+                  rematar la compra. */}
+              {premiadosElegidos > 0 ? (
+                <p className="mt-3 text-sm font-black leading-snug text-wa">
+                  <span aria-hidden="true">★ </span>
+                  {premiadosElegidos === 1
+                    ? "¡Llevas un número premiado!"
+                    : `¡Llevas ${premiadosElegidos} números premiados!`}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -942,11 +1119,56 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                   </span>
                 </p>
               ) : null}
+              {/* QUÉ NÚMEROS SE ENSEÑAN AQUÍ, Y POR QUÉ.
+                  El resto del sitio revela los números cuando el pago está
+                  confirmado, y esto no lo contradice:
+                  · si el comprador los TECLEÓ él mismo, ya son suyos y ya los
+                    conoce —no hay nada que revelar—, y verlos antes de pagar
+                    es justo lo que le deja comprobar que no se equivocó;
+                  · si en cambio se los va a entregar el sistema por cantidad,
+                    aquí NO aparece ninguno: se los enseñamos con el pago
+                    confirmado, igual que en la boleta y en la página del
+                    pedido. */}
               {usaNumerosElegidos ? (
-                <p className="mt-1.5 truncate font-display text-xs tracking-wider text-fg-faint">
-                  {[...selected.values()].join(" · ")}
+                <div className="mt-3">
+                  <p className={labelCls}>Tus números</p>
+                  <div className="mt-2 flex max-h-28 flex-wrap justify-center gap-1.5 overflow-y-auto">
+                    {[...selected.entries()].map(([value, label]) => {
+                      const premio = premiosPorNumero.get(value);
+                      return (
+                        <span
+                          key={value}
+                          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-xs font-black tracking-wider tabular-nums ${
+                            premio
+                              ? "ticket-chip-win text-bg"
+                              : "ticket-chip text-white"
+                          }`}
+                        >
+                          {premio ? <span aria-hidden="true">★</span> : null}
+                          {label}
+                          {premio ? (
+                            <span className="sr-only">
+                              , premiado con {premio}
+                            </span>
+                          ) : null}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {premiadosElegidos > 0 ? (
+                    <p className="mt-2.5 text-xs font-black leading-snug text-wa">
+                      <span aria-hidden="true">★ </span>
+                      {premiadosElegidos === 1
+                        ? "Llevas un número premiado."
+                        : `Llevas ${premiadosElegidos} números premiados.`}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="mt-3 text-xs leading-relaxed text-fg-faint">
+                  Te mostramos tus números apenas confirmemos tu pago.
                 </p>
-              ) : null}
+              )}
             </div>
 
             <div className="mt-5 flex flex-col gap-3.5">
@@ -1054,11 +1276,14 @@ export default function NumberPicker({ raffle }: { raffle: PublicRaffle }) {
                 )}
               </button>
               {/* Se dice la verdad sin hablar de "reservar": los números se
-                  guardan mientras paga, y por eso hay un tiempo límite. */}
+                  guardan mientras paga, y por eso hay un tiempo límite.
+                  El plazo pasa por formatearPlazo: las rifas que cobran por
+                  WhatsApp lo tienen en 720 minutos y aquí se leía "720
+                  minutos", que no lo entiende nadie. Ahora dice "12 horas". */}
               <p className="text-center text-xs leading-relaxed text-fg-faint">
                 {raffle.whatsappCheckout
-                  ? `Seguimos por WhatsApp para completar el pago. Te guardamos tus números ${raffle.reservationMinutes} minutos mientras tanto.`
-                  : `Te guardamos tus números ${raffle.reservationMinutes} minutos mientras completas el pago.`}
+                  ? `Seguimos por WhatsApp para completar el pago. Te guardamos tus números ${formatearPlazo(raffle.reservationMinutes)} mientras tanto.`
+                  : `Te guardamos tus números ${formatearPlazo(raffle.reservationMinutes)} mientras completas el pago.`}
               </p>
             </div>
           </div>

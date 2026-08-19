@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isOrderExpired } from "@/lib/engine/orders";
 import { formatNumbers } from "@/lib/numbers";
-import { clientIp, isRateLimited } from "@/lib/rate-limit";
+import { clientIp, isRateLimited, peekRateLimited } from "@/lib/rate-limit";
 import { lookupSchema } from "@/lib/validation";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
 
@@ -16,7 +16,8 @@ export const runtime = "nodejs";
  * contraseña. El dueño pidió expresamente la búsqueda con un solo dato (así
  * funcionan las plataformas de rifas), de modo que quien conozca un teléfono
  * puede ver esas boletas. Para acotar el riesgo:
- *   - límite de intentos endurecido y en dos ventanas (corta y de una hora);
+ *   - límite de intentos en dos ventanas (corta y de una hora), que solo
+ *     cuenta las búsquedas de verdad (ver RAFAGA/GOTEO más abajo);
  *   - la respuesta de "no hay nada" es SIEMPRE idéntica, así que nunca revela
  *     si el dato existe, si estaba mal escrito o si simplemente no se pudo
  *     interpretar;
@@ -27,6 +28,36 @@ export const runtime = "nodejs";
 /** Un solo mensaje para todos los casos sin resultado: no filtra nada. */
 const MSG_SIN_RESULTADOS =
   "No encontramos boletas con ese dato. Revisa que esté bien escrito e inténtalo de nuevo.";
+
+const MSG_DEMASIADOS = "Demasiados intentos. Espera unos minutos.";
+
+/**
+ * CUPO DE CONSULTAS. Antes eran 8 cada 10 minutos por IP y dejaba fuera a
+ * compradores de verdad: en una casa, un cibercafé o una red móvil (CGNAT)
+ * todos salen a internet con la MISMA IP, así que el cupo se reparte entre
+ * gente que no tiene nada que ver entre sí.
+ *
+ * Cómo se eligieron los números: una persona real consulta unas 4 o 5 veces
+ * seguidas (mira sus boletas, se equivoca de dato, vuelve a mirar tras pagar);
+ * por una salida compartida pasan del orden de 8 a 10 personas a la vez. De
+ * ahí RAFAGA = 40 cada 10 minutos. En una hora esa misma salida compartida da
+ * para unas 120 consultas legítimas (GOTEO), que corta el goteo lento sin
+ * molestar a nadie.
+ *
+ * La barrera sigue sirviendo contra quien quiera enumerar teléfonos: 120
+ * consultas por hora y por IP no llegan a ninguna parte frente a los millones
+ * de celulares posibles, y el cupo global endurece a quien insista.
+ */
+const RAFAGA = { max: 40, windowMs: 10 * 60_000, globalMax: 500 };
+const GOTEO = { max: 120, windowMs: 60 * 60_000, globalMax: 1500 };
+
+/**
+ * Cupo aparte, deliberadamente enorme, para lo que ni siquiera llega a ser una
+ * búsqueda (JSON roto, texto corto, dato ilegible). No gasta el cupo de
+ * consultas —escribir mal el correo no es un ataque— pero evita que alguien
+ * inunde el endpoint con basura. Ninguna persona real se acerca a este número.
+ */
+const RUIDO = { max: 300, windowMs: 10 * 60_000 };
 
 /** Vías de búsqueda deducidas del texto; null = esa vía no aplica. */
 type Vias = {
@@ -75,35 +106,38 @@ function interpretar(texto: string): Vias {
 
 export async function POST(req: NextRequest) {
   const ip = clientIp(req);
-  // Dos ventanas a la vez: la corta corta la ráfaga y la de una hora corta el
-  // goteo. Se evalúan las dos siempre (sin cortocircuito) para que un intento
-  // bloqueado igual cuente en ambas.
-  const excedeRafaga = isRateLimited("lookup", ip, {
-    max: 8,
-    windowMs: 10 * 60_000,
-    globalMax: 150,
-  });
-  const excedeGoteo = isRateLimited("lookup.hora", ip, {
-    max: 25,
-    windowMs: 60 * 60_000,
-    globalMax: 600,
-  });
-  if (excedeRafaga || excedeGoteo) {
-    return NextResponse.json(
-      { error: "Demasiados intentos. Espera unos minutos." },
-      { status: 429 }
-    );
+
+  // Primero se MIRA el cupo sin gastarlo: si esta IP ya lo agotó buscando de
+  // verdad, se corta aquí. Gastar cupo se hace más abajo, cuando ya sabemos
+  // que lo que llegó es una búsqueda y no un dato mal escrito.
+  if (
+    peekRateLimited("lookup", ip, RAFAGA) ||
+    peekRateLimited("lookup.hora", ip, GOTEO)
+  ) {
+    return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
+  }
+
+  /** Intento que no llega a búsqueda: no resta cupo, solo cuenta como ruido. */
+  function marcarRuido(): boolean {
+    return isRateLimited("lookup.ruido", ip, RUIDO);
   }
 
   let body: unknown;
   try {
     body = await req.json();
   } catch {
+    if (marcarRuido()) {
+      return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
+    }
     return NextResponse.json({ error: "Solicitud no válida" }, { status: 400 });
   }
 
   const parsed = lookupSchema.safeParse(body);
   if (!parsed.success) {
+    // Escribir mal el correo (o quedarse corto) no gasta consultas.
+    if (marcarRuido()) {
+      return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
+    }
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Datos no válidos" },
       { status: 422 }
@@ -113,9 +147,22 @@ export async function POST(req: NextRequest) {
   const vias = interpretar(parsed.data.query);
 
   // Si no se pudo interpretar nada, la respuesta es la MISMA que la de "no
-  // existe": el atacante no aprende qué formas de dato reconocemos.
+  // existe": el atacante no aprende qué formas de dato reconocemos. Tampoco
+  // gasta cupo, porque no se consulta la base de datos.
   if (!vias.code && !vias.email && !vias.phone && !vias.idNumber) {
+    if (marcarRuido()) {
+      return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
+    }
     return NextResponse.json({ error: MSG_SIN_RESULTADOS }, { status: 404 });
+  }
+
+  // A partir de aquí SÍ hay búsqueda contra la base: ahora se gasta cupo. Se
+  // evalúan las dos ventanas siempre (sin cortocircuito) para que un intento
+  // bloqueado igual cuente en ambas.
+  const excedeRafaga = isRateLimited("lookup", ip, RAFAGA);
+  const excedeGoteo = isRateLimited("lookup.hora", ip, GOTEO);
+  if (excedeRafaga || excedeGoteo) {
+    return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
   }
 
   // Cada vía activa solo devuelve identificadores internos, nunca datos

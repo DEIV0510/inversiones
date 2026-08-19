@@ -128,21 +128,10 @@ export function transactionMatchesOrder(
   return Math.round(tx.amount_in_cents / 100) === order.total;
 }
 
-/** Consulta una transacción directamente en Wompi (verificación de respaldo). */
-export async function fetchTransaction(
-  transactionId: string
-): Promise<WompiTransaction | null> {
-  try {
-    const res = await fetch(`${apiBase()}/transactions/${transactionId}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return (data?.data as WompiTransaction) ?? null;
-  } catch {
-    return null;
-  }
-}
+// Había también un `fetchTransaction(id)` que consultaba una transacción por
+// su id. Nunca llegó a usarse: el webhook ya recibe la transacción entera y la
+// verificación de respaldo del redirect busca por REFERENCIA (la de abajo),
+// porque el navegador solo conoce el código del pedido, no el id de Wompi.
 
 /** Busca la transacción aprobada de una referencia (fallback en el redirect). */
 export async function findTransactionByReference(

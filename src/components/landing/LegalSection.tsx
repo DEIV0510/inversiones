@@ -12,9 +12,12 @@ export default function LegalSection() {
               <h2 className="font-display text-base font-extrabold uppercase text-fg">
                 Participa informado
               </h2>
+              {/* Las condiciones ya no se "comparten por WhatsApp": cada rifa
+                  publica las suyas en su propia página (bloque "Condiciones de
+                  este sorteo") y las generales viven en estos dos enlaces. */}
               <p className="mt-1 text-xs leading-relaxed text-fg-soft sm:text-sm">
-                El detalle y las condiciones de cada sorteo se comparten por
-                WhatsApp antes de participar.
+                Cada sorteo publica sus condiciones en su propia página, antes
+                de que compres.
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap justify-center gap-2">

@@ -99,7 +99,10 @@ export default async function PedidoPage({
     : [];
 
   // El mensaje de WhatsApp lleva el código, la cantidad y el total: nunca los
-  // números. El dueño los ve buscando ese código en el panel.
+  // números… salvo los ya PREMIADOS de un pedido pagado, que el comprador ya
+  // tiene delante y son justo lo que va a reclamar. Con el pago confirmado el
+  // cierre del mensaje cambia: pedir el pago de algo ya pagado no tenía
+  // sentido, y ese mismo botón es el que la página le señala al ganador.
   const whatsappUrl = orderWhatsAppMessage({
     businessPhone: settings.whatsapp_number,
     participantName: order.participant.name,
@@ -107,7 +110,27 @@ export default async function PedidoPage({
     orderCode: order.code,
     quantity: order.quantity,
     total: order.total,
+    pagada,
+    premios: prizesWon,
   });
+
+  // Datos del negocio para el respaldo de pago (cuando la rifa se queda sin
+  // WhatsApp y sin pasarela). El WhatsApp NO viaja aquí a propósito: si el
+  // dueño lo apagó en esta rifa, no puede reaparecer por el respaldo. Solo
+  // van el nombre, la ubicación y las redes que él mismo publicó.
+  const contacto = {
+    companyName: settings.company_name,
+    location: settings.location,
+    redes: (
+      [
+        { tipo: "facebook", url: settings.facebook_url },
+        { tipo: "instagram", url: settings.instagram_url },
+        { tipo: "tiktok", url: settings.tiktok_url },
+      ] as const
+    )
+      .filter((red) => red.url.trim() !== "")
+      .map((red) => ({ tipo: red.tipo, url: red.url.trim() })),
+  };
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:5236";
   const wompiUrl =
@@ -139,6 +162,10 @@ export default async function PedidoPage({
             drawDateText: order.raffle.drawDateText,
             participantName: order.participant.name,
             numbers,
+            // Cifras de la rifa: la boleta sin pagar dibuja un punto por
+            // cifra. No revela nada (no dice qué números son, solo de qué
+            // tamaño), y sin este dato la ficha pintaba siempre 5 puntos.
+            digits: order.raffle.digits,
             quantity: order.quantity,
             unitPrice: order.unitPrice,
             total: order.total,
@@ -150,6 +177,7 @@ export default async function PedidoPage({
           }}
           whatsappUrl={order.raffle.whatsappCheckout ? whatsappUrl : null}
           wompiUrl={wompiUrl}
+          contacto={contacto}
           autoEnviarWhatsApp={enviar === "1" && order.raffle.whatsappCheckout}
         />
       </main>

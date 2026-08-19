@@ -21,6 +21,15 @@ const ESTADOS_PUBLICOS = new Set([
   "FINISHED",
 ]);
 
+/**
+ * Estados en los que la rifa puede dejar a un comprador delante de la pantalla
+ * «Realiza el pago»: ACTIVA vende de verdad y PRÓXIMAMENTE está a un toque de
+ * hacerlo. Agotada y finalizada también son públicas, pero ya no toman pedidos
+ * nuevos, así que marcarlas en rojo sería una falsa alarma. Misma lista que la
+ * de RaffleFormV2.
+ */
+const ESTADOS_QUE_COBRAN = new Set(["COMING_SOON", "ACTIVE"]);
+
 export type AdminRaffleRow = {
   id: string;
   slug: string;
@@ -28,6 +37,8 @@ export type AdminRaffleRow = {
   prize: string;
   imageUrl: string | null;
   status: string;
+  /** Si esta rifa cierra la compra por WhatsApp. */
+  whatsappCheckout: boolean;
   progressPct: number;
   progressMode: string;
   pricePerNumber: number;
@@ -41,9 +52,16 @@ export type AdminRaffleRow = {
 export default function RaffleListV2({
   raffles,
   canManage,
+  pasarelaLista,
 }: {
   raffles: AdminRaffleRow[];
   canManage: boolean;
+  /**
+   * Si la tienda tiene pasarela de pago configurada. Lo decide el SERVIDOR
+   * (isWompiConfigured, en la página) y baja al navegador como un simple sí o
+   * no: las llaves de la pasarela no salen nunca del servidor.
+   */
+  pasarelaLista: boolean;
 }) {
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -128,6 +146,13 @@ export default function RaffleListV2({
         const verTitulo = esPublica
           ? "Abrir la página del sorteo en el sitio"
           : "Solo tú puedes verla: el público todavía no";
+        // Rifa de cara al público, con WhatsApp apagado y sin pasarela: sus
+        // compradores llegan a la pantalla de pago sin un solo botón. Se marca
+        // en rojo para que se vea de un vistazo, sin entrar a editarla.
+        const sinFormaDeCobro =
+          ESTADOS_QUE_COBRAN.has(raffle.status) &&
+          !raffle.whatsappCheckout &&
+          !pasarelaLista;
         return (
           <article
             key={raffle.id}
@@ -172,6 +197,14 @@ export default function RaffleListV2({
                   >
                     {meta.label}
                   </span>
+                  {sinFormaDeCobro ? (
+                    <span
+                      title="WhatsApp apagado y sin pasarela de pago: el comprador llega a «Realiza el pago» y no le aparece ningún botón. Ábrela y enciende WhatsApp, o déjala en borrador."
+                      className="rounded-full border border-error/50 bg-error/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-error"
+                    >
+                      Sin forma de cobrar
+                    </span>
+                  ) : null}
                   <span className="text-xs tabular-nums text-fg-soft">
                     {raffle.progressPct}%
                     {raffle.progressMode === "MANUAL" ? " (manual)" : ""} ·{" "}

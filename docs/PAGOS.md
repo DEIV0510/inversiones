@@ -4,23 +4,50 @@
 
 La plataforma opera con DOS flujos de pago reales:
 
-1. **Manual (activo por defecto)**: el comprador reserva sus números y
-   coordina el pago por WhatsApp (Nequi/transferencia) con el CÓDIGO de su
-   pedido. El administrador verifica el dinero y confirma el pedido en el
-   panel (Pedidos → Confirmar pago). Pasa por el mismo motor idempotente que
-   la pasarela.
+1. **WhatsApp (por rifa, encendido de fábrica)**: el comprador aparta sus
+   números y coordina el pago por WhatsApp (Nequi/transferencia) con el
+   CÓDIGO de su pedido. El administrador verifica el dinero y confirma el
+   pedido en el panel (Pedidos → Confirmar pago). Pasa por el mismo motor
+   idempotente que la pasarela. Se controla con `whatsappCheckout` en cada
+   rifa; apagado, WhatsApp desaparece de esa rifa incluso como texto.
 2. **Wompi (se activa con credenciales)**: pago en línea con Nequi, PSE,
    tarjetas y Botón Bancolombia. Sin credenciales configuradas, el botón
    "Pagar en línea" NO se muestra (nada simulado).
+
+> ⚠️ **Una rifa necesita AL MENOS uno de los dos.** Con `whatsappCheckout`
+> apagado y sin credenciales de Wompi, el comprador llega a "Realiza el pago"
+> con sus números apartados y sin un solo botón para pagar. Ya pasó en
+> producción. La pantalla de pedido ahora muestra un respaldo con los datos
+> del organizador, pero eso es una red de seguridad, no una forma de cobrar:
+> antes de apagar WhatsApp en una rifa hay que tener la pasarela activa.
 
 > **Los números no se revelan hasta que el pago está confirmado.** Con el
 > pedido PENDIENTE o EXPIRADO el comprador ve cuántos números tiene
 > apartados (fichas tapadas), el total y su código, pero nunca los números:
 > no salen de la página del pedido, ni de la respuesta del API que crea el
 > pedido, ni del mensaje de WhatsApp, ni de "Mis boletas". Se muestran (y se
-> envían por correo) al confirmarse el pago. Cierra el fraude de capturar los
-> números sin pagar y reclamarlos después. La reserva NO cambia: los números
-> se siguen apartando en el momento de comprar.
+> envían por correo, si dejó dirección y el proveedor está configurado) al
+> confirmarse el pago. Cierra el fraude de capturar los números sin pagar y
+> reclamarlos después. El apartado NO cambia: los números se siguen guardando
+> en el momento de comprar.
+
+## Cuánto se cobra (lo decide el servidor)
+
+`createOrder` calcula el importe leyendo la RIFA, nunca el cuerpo de la
+petición:
+
+1. Se comprueba la cantidad contra `minNumbersPerOrder` /
+   `maxNumbersPerOrder` → 422 si no encaja.
+2. `unitPrice` = `pricePerNumber` de la rifa. Se guarda el precio de LISTA a
+   propósito, sin rebajar.
+3. `total` = bruto menos el descuento del paquete cuya cantidad COINCIDE
+   exactamente con la comprada (`ticketPacksJson`, campo `off`, 1-90 %).
+   Se redondea con `Math.round` (el peso colombiano no tiene decimales).
+4. Guardando el precio de lista en `unitPrice` y el rebajado en `total`, el
+   comprobante puede mostrar los dos y cuánto se ahorró.
+
+Un `ticketPacksJson` corrupto se lee como "sin paquetes": se cobra el precio
+de lista. Ante la duda nunca se aplica un descuento inventado.
 
 ## Activar Wompi
 

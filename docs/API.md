@@ -7,11 +7,11 @@ Todas las respuestas son JSON (salvo el CSV de exportación). Errores:
 
 | Método | Ruta | Descripción |
 | --- | --- | --- |
-| POST | `/api/public/orders` | Crea orden + reserva atómica. Body: `{raffleSlug, name, phone, email?, idNumber?, numbers?: int[], randomCount?: int}`. 201 → `{code, reservedUntil, total, quantity}`. **La respuesta NO trae los números**: solo se revelan con el pago confirmado. 409 con `conflicting: int[]` si otros tomaron números. 422 si no llega a la compra mínima de la rifa. |
+| POST | `/api/public/orders` | Crea orden + reserva atómica. Body: `{raffleSlug, name, phone, email?, idNumber?, numbers?: int[], randomCount?: int}`. 201 → `{code, reservedUntil, total, quantity}`. **La respuesta NO trae los números**: solo se revelan con el pago confirmado. El TOTAL lo calcula el servidor (precio de la rifa + descuento del paquete que coincida): nunca se acepta un importe del cliente. 409 con `conflicting: int[]` si otros tomaron números. 422 si no llega a la compra mínima de la rifa. |
 | GET | `/api/public/raffles/[slug]/number-status?n=00042` | Estado de un número: `{number, value, status: DISPONIBLE\|RESERVADO\|VENDIDO\|BLOQUEADO}` |
 | GET | `/api/public/raffles/[slug]/suggestions?count=24` | Números disponibles sugeridos (candidatos, no reservas) |
-| POST | `/api/public/lookup` | Mis boletas. Body `{query}` con UN solo dato: celular, correo, cédula o código de 8 caracteres (el servidor deduce cuál es) → participaciones del comprador. Los `numbers` van vacíos mientras el pedido no esté PAGADO (solo viaja la cantidad). |
-| POST | `/api/public/winner` | ¿Quién ganó? Devuelve el dueño de un número VENDIDO de una rifa pública, con el nombre abreviado y el teléfono enmascarado. Nunca dice si un número está libre, apartado o bloqueado. |
+| POST | `/api/public/lookup` | Mis boletas. Body `{query}` con UN solo dato: celular, correo, cédula o código de 8 caracteres (el servidor deduce cuál es) → participaciones del comprador. Los `numbers` van vacíos mientras el pedido no esté PAGADO (solo viaja la cantidad). Todas las respuestas sin resultado son idénticas (404 con el mismo mensaje). |
+| GET | `/api/public/winner?slug=<slug>&n=00042` | ¿Quién ganó? → `{raffle:{slug,title,drawDateText}, number, dueno, premio}`. `dueno` trae el nombre abreviado y el teléfono enmascarado solo si el número está VENDIDO con la orden PAGADA; en cualquier otro caso es `null`, sin distinguir entre libre, apartado o bloqueado. |
 | POST | `/api/public/orders/[code]/verify` | Verifica el pago contra Wompi (server-side) y confirma si está aprobado |
 
 ## Webhooks y cron
@@ -39,7 +39,7 @@ Todas las respuestas son JSON (salvo el CSV de exportación). Errores:
 | GET | `/api/admin/participants?q=&page=` | participants.view |
 | GET/POST | `/api/admin/winners` · PATCH/DELETE `[id]` | winners.manage |
 | GET | `/api/admin/reports/export?raffleId=&status=` (CSV) | reports.view |
-| PATCH | `/api/admin/settings` | settings.manage |
+| GET/PATCH | `/api/admin/settings` | settings.manage |
 | GET/POST | `/api/admin/users` · PATCH/DELETE `[id]` | users.manage |
 | GET | `/api/admin/audit?entity=&action=&page=` | audit.view |
 | POST | `/api/admin/upload` (multipart, ≤10 MB → WebP en Blob) | raffles.manage |

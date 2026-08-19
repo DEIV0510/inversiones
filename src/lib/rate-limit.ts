@@ -74,6 +74,27 @@ export function isRateLimited(
 }
 
 /**
+ * Mira el cupo de una IP SIN gastarlo.
+ *
+ * Sirve para endpoints donde no todo intento debe restar: primero se consulta
+ * si esa IP ya está bloqueada (y se corta), y solo cuando el intento resulta
+ * ser una petición de verdad se llama a `isRateLimited`, que sí cuenta. Así
+ * escribir mal un correo no le quita cupo a nadie.
+ *
+ * Devuelve true cuando el siguiente intento contado quedaría por encima del
+ * tope, que es exactamente lo que haría `isRateLimited`.
+ */
+export function peekRateLimited(
+  scope: string,
+  key: string,
+  opts: { max: number }
+): boolean {
+  const bucket = stores.get(scope)?.get(key);
+  if (!bucket || Date.now() > bucket.resetAt) return false;
+  return bucket.count >= opts.max;
+}
+
+/**
  * Indica si el scope está bajo presión inusual. Los endpoints sensibles la
  * usan para aumentar el retardo (fricción) sin negar el servicio a nadie.
  */

@@ -10,6 +10,14 @@ import { getSettings } from "@/lib/settings";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Estados en los que un sorteo PUEDE tener número ganador: los que ya están
+ * vendiendo, los agotados y los finalizados. Un sorteo en "próximamente" no
+ * ha vendido nada, así que ofrecerlo en el selector solo lleva a consultar un
+ * número que nunca va a tener dueño.
+ */
+const ESTADOS_CONSULTABLES = ["ACTIVE", "SOLD_OUT", "FINISHED"];
+
 export const metadata: Metadata = {
   title: "Consultar número ganador",
   description:
@@ -27,13 +35,16 @@ export default async function GanadorPage() {
   const ocultarWhatsApp = !conWhatsApp;
 
   // Al cliente solo viaja lo indispensable para escribir el número: título,
-  // cifras y rango. Ni un dato de inventario.
-  const consultables: RifaConsultable[] = rifas.map((r) => ({
-    slug: r.slug,
-    title: r.title,
-    digits: r.digits,
-    totalNumbers: r.totalNumbers,
-  }));
+  // cifras y rango. Ni un dato de inventario. Y solo los sorteos que de
+  // verdad pueden tener ganador.
+  const consultables: RifaConsultable[] = rifas
+    .filter((r) => ESTADOS_CONSULTABLES.includes(r.status))
+    .map((r) => ({
+      slug: r.slug,
+      title: r.title,
+      digits: r.digits,
+      totalNumbers: r.totalNumbers,
+    }));
 
   return (
     <>

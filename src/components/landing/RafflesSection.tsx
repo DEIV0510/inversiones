@@ -18,7 +18,10 @@ export default function RafflesSection({ raffles, whatsappNumber }: Props) {
           <SectionHeading
             kicker="Sorteos"
             title="Sorteos disponibles"
-            intro="Elige el tuyo y participa por WhatsApp."
+            /* La compra se cierra en la página del sorteo, no por WhatsApp:
+               además hay rifas con ese canal apagado y esta portada es común
+               a todas. */
+            intro="Elige el tuyo, escoge tus números y participa."
           />
         </Reveal>
 

@@ -10,12 +10,20 @@ preparada para rifas de **10.000, 100.000 o 1.000.000+ números**.
 **Público** (dark premium, mobile-first, sensación de app):
 - Landing con sorteo destacado y cards de sorteos con porcentaje de avance
   (regla de negocio: el público JAMÁS ve cantidades, solo el porcentaje).
-- Página de cada sorteo con **selección de números escalable**: buscador
-  puntual (O(1) a cualquier escala), cuadrícula de números disponibles
-  sugeridos y modo "al azar" resuelto en el backend.
-- Checkout de 3 pasos con **reserva temporal** (countdown configurable),
-  pago en línea (Wompi) o coordinación por WhatsApp, **comprobante digital**
-  con código de participación y **Mis boletas** (teléfono + código).
+- Página de cada sorteo con **selección de números escalable**: paquetes de
+  cantidad (con etiqueta y descuento opcional), buscador puntual (O(1) a
+  cualquier escala) y cuadrícula de números sugeridos. Al comprador nunca se
+  le nombra "manual" ni "aleatorio": elige cuántos quiere o busca el suyo.
+  Compra mínima por rifa, avisada antes de elegir nada.
+- Checkout de 3 pasos con los **números guardados** un tiempo configurable
+  (countdown), pago en línea (Wompi) y/o coordinación por WhatsApp según lo
+  que tenga encendido cada rifa, y **comprobante digital** descargable con
+  código de participación.
+- **Los números no se ven hasta que el pago está confirmado**: antes solo se
+  muestran fichas tapadas, la cantidad y el total.
+- **Mis boletas** con un solo dato (celular, correo, cédula o código) y
+  **Consultar número ganador**, que devuelve el nombre abreviado y el celular
+  enmascarado del dueño de un número vendido.
 
 **Motor** (Postgres + Prisma):
 - Asignación perezosa: solo existen filas para números tomados;
@@ -63,13 +71,17 @@ npx tsx scripts/test-engine.ts    # integración: concurrencia, expiración,
 | --- | --- |
 | [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) | Diseño del sistema y del motor de números |
 | [docs/API.md](docs/API.md) | Endpoints públicos y admin |
-| [docs/PAGOS.md](docs/PAGOS.md) | Wompi: activación, webhook, sandbox |
+| [docs/PAGOS.md](docs/PAGOS.md) | Wompi, cobro por WhatsApp y cálculo del total |
 | [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md) | Infraestructura, variables, backups |
 | [docs/SEGURIDAD.md](docs/SEGURIDAD.md) | Auth, RBAC, rate limiting, auditoría |
+| [docs/CORREO.md](docs/CORREO.md) | Envío de los números por correo (Resend) |
 
 ## Legal
 
-La plataforma deja los espacios preparados (/terminos, /privacidad y
-términos por sorteo). Los textos legales definitivos y la información de
-autorización correspondiente deben ser aportados por el propietario — no se
-afirma ninguna autorización que no exista.
+/terminos y /privacidad describen lo que el sistema hace de verdad: qué se
+guarda (nombre, celular, correo y cédula opcionales), cuánto tiempo se
+apartan los números, cuándo se revelan, qué se publica de un ganador y qué
+derechos tiene el comprador. El reglamento detallado de los sorteos y la
+política completa de la Ley 1581 de 2012 siguen marcados como
+`[PENDIENTE DE CONFIGURAR]`: los aporta el propietario con su asesor legal —
+no se afirma ninguna autorización que no exista.

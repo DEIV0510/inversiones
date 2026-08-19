@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseTicketPacks, sanearImageAspect } from "@/lib/public";
+import { isWompiConfigured } from "@/lib/wompi";
 import RaffleFormV2, {
   type RafflePrizeInitial,
   type RaffleTicketPackInitial,
@@ -73,8 +74,12 @@ export default async function EditarRifaPage({
         </h1>
         <p className="mt-1 truncate text-sm text-fg-soft">{raffle.title}</p>
       </div>
+      {/* Solo viaja el sí o el no: las llaves de la pasarela se quedan en el
+          servidor. Con esto el formulario puede frenar una rifa que se
+          publicaría sin ninguna forma de cobrarle al comprador. */}
       <RaffleFormV2
         mode="edit"
+        pasarelaLista={isWompiConfigured()}
         initial={{
           id: raffle.id,
           slug: raffle.slug,

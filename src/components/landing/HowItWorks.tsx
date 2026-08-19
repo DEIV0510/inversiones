@@ -1,6 +1,15 @@
 import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
 
+/**
+ * Los cuatro pasos describen la compra tal como ocurre HOY en el sitio: se
+ * elige el sorteo, se eligen los números, se paga y se espera el sorteo.
+ *
+ * Antes decían "escríbenos por WhatsApp" porque la página era solo una
+ * vitrina; ahora la venta se cierra aquí y ningún paso puede prometer un
+ * canal concreto: hay rifas con el cobro por WhatsApp apagado y esta sección
+ * vive en la portada, que es común a todas.
+ */
 const STEPS = [
   {
     number: "01",
@@ -9,13 +18,13 @@ const STEPS = [
   },
   {
     number: "02",
-    title: "Contáctanos",
-    text: "Escríbenos por WhatsApp con el botón del sorteo.",
+    title: "Elige tus números",
+    text: "Escoge cuántos quieres o busca tu número de la suerte.",
   },
   {
     number: "03",
-    title: "Realiza tu participación",
-    text: "Sigue las instrucciones que te damos por WhatsApp.",
+    title: "Completa tu compra",
+    text: "Deja tus datos, paga y recibe tu código de participación.",
   },
   {
     number: "04",

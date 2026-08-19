@@ -19,14 +19,33 @@
 - Validación de entrada con Zod en todos los bodies/params.
 - Rate limiting por IP (último salto de x-forwarded-for, no falsificable)
   + tope GLOBAL por ventana (protege aunque la IP se falsifique):
-  órdenes 10/10min, búsquedas 60/min, lookup de boletas 10/10min, login
-  8/10min + 40 global.
-- "Mis boletas": credencial DOBLE (teléfono + código de 8 caracteres de
-  ~40 bits). Respuesta idéntica si falla cualquiera de los dos (no se
-  filtra cuál). Jamás se expone información solo con el teléfono.
+  órdenes 10/10min + 300 global · búsqueda de número 60/min + 2000 ·
+  sugerencias 30/min + 1000 · verificación de pago 20/min + 500 ·
+  "¿quién ganó?" 20/10min + 400 · login 8/10min + 40.
+- **"Mis boletas" con UN solo dato** (celular, correo, cédula o código de
+  8 caracteres): el dueño lo pidió así, como en las plataformas de rifas.
+  Al bajar de credencial doble a dato único, el riesgo se acota con: doble
+  ventana de intentos (8/10min **y** 25/hora, +150/+600 globales), respuesta
+  literalmente IDÉNTICA en todos los casos sin resultado (no revela si el
+  dato existe, si está mal escrito o si no se supo interpretar) y proyección
+  mínima: se devuelven nombre y pedidos, nunca el teléfono, el correo ni la
+  cédula del comprador.
+- **Números ocultos hasta el pago**: los números de un pedido no salen del
+  servidor mientras la orden no esté PAGADA — ni en la respuesta que crea la
+  orden, ni en "Mis boletas", ni en la página del pedido, ni en el mensaje de
+  WhatsApp. Solo viaja la cantidad, para pintar las fichas tapadas.
+- **/ganador (dueño de un número)**: solo responde por números VENDIDOS y con
+  la orden PAGADA; devuelve el nombre abreviado ("Wilson A. T.") y el
+  teléfono enmascarado ("310 *** 0187"), nunca correo ni cédula. Un número
+  libre, apartado o bloqueado devuelve lo mismo (null) sin distinguir entre
+  esos casos: eso es inventario y al público no se le informa.
 - La regla "solo porcentaje": la capa pública (`src/lib/public.ts`) nunca
   proyecta cantidades vendidas; los conteos reales solo existen en
-  endpoints admin protegidos.
+  endpoints admin protegidos. La compra mínima/máxima por pedido SÍ es
+  pública a propósito: es una condición de compra, no inventario.
+- El dinero lo decide el servidor: precio por número, compra mínima y
+  descuento por paquete se leen de la rifa (`parseTicketPacks`), nunca del
+  cuerpo de la petición.
 
 ## Pagos
 
@@ -38,8 +57,11 @@
 
 ## Datos
 
-- Sin datos de tarjetas (viven en Wompi). Participantes: solo nombre,
-  teléfono y email opcional (minimización).
+- Sin datos de tarjetas (viven en Wompi). Participantes: nombre y teléfono
+  (obligatorios) + correo y cédula OPCIONALES. La cédula se pide solo para
+  que el comprador encuentre sus boletas si no recuerda el código ni con qué
+  teléfono compró; nunca se publica ni se devuelve en ninguna consulta
+  pública. Está declarada en /privacidad.
 - SQL injection: Prisma parametriza todo; el único `$queryRaw` usa
   parámetros tipados.
 - XSS: React escapa por defecto. El único `dangerouslySetInnerHTML` con datos

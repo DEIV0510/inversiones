@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { IconCandado, IconTicket, IconWhatsApp } from "@/components/icons";
@@ -70,6 +70,27 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
   // Solo se ofrece WhatsApp si la pantalla lo permite y hay número válido.
   const numeroWa = (whatsappNumber ?? "").trim();
   const puedeWhatsApp = !hideWhatsApp && numeroWa !== "";
+
+  const resultadosRef = useRef<HTMLDivElement | null>(null);
+
+  /**
+   * Al llegar el resultado se lleva la vista al bloque: en el móvil queda
+   * debajo del formulario y, si no se baja, el comprador cree que no salió
+   * nada. Se hace en un efecto (nunca durante el render) y se respeta a quien
+   * pidió menos movimiento. El desplazamiento lo separa del encabezado fijo
+   * la clase scroll-mt-24 del contenedor.
+   */
+  useEffect(() => {
+    const nodo = resultadosRef.current;
+    if (!result || !nodo) return;
+    const menosMovimiento = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    nodo.scrollIntoView({
+      behavior: menosMovimiento ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [result]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,123 +171,143 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
           <IconTicket width={18} height={18} />
           {loading ? "Consultando…" : "Consultar mis boletas"}
         </button>
-        {puedeWhatsApp ? (
-          <p className="text-center text-xs leading-relaxed text-fg-faint">
-            ¿No aparecen tus boletas?{" "}
-            <a
-              href={waLink(
-                numeroWa,
-                "Hola, no encuentro mis boletas en la consulta de la página."
-              )}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-fg-soft underline-offset-2 hover:underline"
-            >
-              Escríbenos por WhatsApp
-            </a>
-          </p>
-        ) : (
-          /* Sin WhatsApp: redacción neutra, sin sugerir ningún canal. */
-          <p className="text-center text-xs leading-relaxed text-fg-faint">
-            ¿No aparecen tus boletas? Prueba con el mismo dato que usaste al
-            comprar, o con el código de tu comprobante.
-          </p>
-        )}
       </form>
 
-      {result ? (
-        <div className="flex flex-col gap-3">
-          <TituloSeccion>Tus participaciones</TituloSeccion>
-          <p className="text-sm text-fg-soft">
-            Hola <strong className="text-fg">{result.participant.name}</strong>,
-            toca una participación para ver el detalle.
-          </p>
-          {result.orders.map((o) => {
-            const meta = STATUS_LABELS[o.status] ?? STATUS_LABELS.PENDING;
-            return (
-              <Link
-                key={o.code}
-                href={`/pedido/${o.code}`}
-                className="rounded-2xl border border-line bg-card p-4 transition-colors hover:border-brand/60"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-display text-sm font-extrabold uppercase text-fg">
-                    {o.raffleTitle}
-                  </p>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}
-                  >
-                    {meta.text}
-                  </span>
-                </div>
-                {o.status === "PAID" ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {o.numbers.slice(0, 10).map((n) => (
-                      <span
-                        key={n}
-                        className="rounded-md bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg"
-                      >
-                        {n}
-                      </span>
-                    ))}
-                    {o.numbers.length > 10 ? (
-                      <span className="px-1 py-1 text-xs text-fg-faint">
-                        +{o.numbers.length - 10} más
-                      </span>
-                    ) : null}
+      {/* Los resultados van ANTES de la ayuda: si el "¿no aparecen?" quedara
+          encima, en el móvil el comprador lo lee primero y cree que no salió
+          nada. Región viva siempre presente para que el lector de pantalla
+          alcance a anunciar lo que llega; vacía no ocupa ni deja hueco. */}
+      <div
+        ref={resultadosRef}
+        aria-live="polite"
+        className="scroll-mt-24 empty:hidden"
+      >
+        {result ? (
+          <div className="flex flex-col gap-3">
+            <TituloSeccion>Tus participaciones</TituloSeccion>
+            <p className="text-sm text-fg-soft">
+              Hola{" "}
+              <strong className="text-fg">{result.participant.name}</strong>,
+              toca una participación para ver el detalle.
+            </p>
+            {result.orders.map((o) => {
+              const meta = STATUS_LABELS[o.status] ?? STATUS_LABELS.PENDING;
+              return (
+                <Link
+                  key={o.code}
+                  href={`/pedido/${o.code}`}
+                  className="rounded-2xl border border-line bg-card p-4 transition-colors hover:border-brand/60"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-display text-sm font-extrabold uppercase text-fg">
+                      {o.raffleTitle}
+                    </p>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${meta.cls}`}
+                    >
+                      {meta.text}
+                    </span>
                   </div>
-                ) : (
-                  /* Sin pago confirmado los números van tapados: aquí ni
-                     siquiera llegan desde el servidor. Se muestran fichas del
-                     mismo tamaño para que se vea cuántas boletas son. */
-                  <div className="mt-2">
-                    <div className="flex flex-wrap gap-1.5" aria-hidden="true">
-                      {Array.from({
-                        length: Math.min(10, Math.max(0, o.quantity)),
-                      }).map((_, i) => (
+                  {o.status === "PAID" ? (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {o.numbers.slice(0, 10).map((n) => (
                         <span
-                          key={i}
-                          className="rounded-md border border-dashed border-line-strong bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg-faint"
+                          key={n}
+                          className="rounded-md bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg"
                         >
-                          ••••
+                          {n}
                         </span>
                       ))}
-                      {o.quantity > 10 ? (
+                      {o.numbers.length > 10 ? (
                         <span className="px-1 py-1 text-xs text-fg-faint">
-                          +{o.quantity - 10} más
+                          +{o.numbers.length - 10} más
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1.5 flex items-center gap-1.5 text-xs leading-relaxed text-fg-faint">
-                      <IconCandado width={13} height={13} className="shrink-0" />
-                      {o.quantity === 1
-                        ? "1 número apartado a tu nombre. Lo verás al confirmarse el pago."
-                        : `${o.quantity} números apartados a tu nombre. Los verás al confirmarse el pago.`}
-                    </p>
+                  ) : (
+                    /* Sin pago confirmado los números van tapados: aquí ni
+                       siquiera llegan desde el servidor. Se muestran fichas del
+                       mismo tamaño para que se vea cuántas boletas son. */
+                    <div className="mt-2">
+                      <div className="flex flex-wrap gap-1.5" aria-hidden="true">
+                        {Array.from({
+                          length: Math.min(10, Math.max(0, o.quantity)),
+                        }).map((_, i) => (
+                          <span
+                            key={i}
+                            className="rounded-md border border-dashed border-line-strong bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg-faint"
+                          >
+                            ••••
+                          </span>
+                        ))}
+                        {o.quantity > 10 ? (
+                          <span className="px-1 py-1 text-xs text-fg-faint">
+                            +{o.quantity - 10} más
+                          </span>
+                        ) : null}
+                      </div>
+                      <p className="mt-1.5 flex items-center gap-1.5 text-xs leading-relaxed text-fg-faint">
+                        <IconCandado
+                          width={13}
+                          height={13}
+                          className="shrink-0"
+                        />
+                        {o.quantity === 1
+                          ? "1 número apartado a tu nombre. Lo verás al confirmarse el pago."
+                          : `${o.quantity} números apartados a tu nombre. Los verás al confirmarse el pago.`}
+                      </p>
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center justify-between text-xs text-fg-faint">
+                    <span>Código {o.code}</span>
+                    <span className="font-display text-sm font-black tabular-nums text-fg">
+                      {formatCop(o.total)}
+                    </span>
                   </div>
+                </Link>
+              );
+            })}
+            {puedeWhatsApp ? (
+              <a
+                href={waLink(
+                  numeroWa,
+                  "Hola, tengo una consulta sobre mis boletas."
                 )}
-                <div className="mt-2 flex items-center justify-between text-xs text-fg-faint">
-                  <span>Código {o.code}</span>
-                  <span className="font-display text-sm font-black tabular-nums text-fg">
-                    {formatCop(o.total)}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-          {puedeWhatsApp ? (
-            <a
-              href={waLink(numeroWa, "Hola, tengo una consulta sobre mis boletas.")}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line-strong px-5 text-sm font-bold uppercase tracking-wide text-fg-soft hover:border-brand hover:text-fg"
-            >
-              <IconWhatsApp width={17} height={17} />
-              ¿Dudas? Escríbenos
-            </a>
-          ) : null}
-        </div>
-      ) : null}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-line-strong px-5 text-sm font-bold uppercase tracking-wide text-fg-soft hover:border-brand hover:text-fg"
+              >
+                <IconWhatsApp width={17} height={17} />
+                ¿Dudas? Escríbenos
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      {/* Ayuda, siempre al final: es el último recurso, no el primer mensaje. */}
+      {puedeWhatsApp ? (
+        <p className="text-center text-xs leading-relaxed text-fg-faint">
+          ¿No aparecen tus boletas?{" "}
+          <a
+            href={waLink(
+              numeroWa,
+              "Hola, no encuentro mis boletas en la consulta de la página."
+            )}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="font-semibold text-fg-soft underline-offset-2 hover:underline"
+          >
+            Escríbenos por WhatsApp
+          </a>
+        </p>
+      ) : (
+        /* Sin WhatsApp: redacción neutra, sin sugerir ningún canal. */
+        <p className="text-center text-xs leading-relaxed text-fg-faint">
+          ¿No aparecen tus boletas? Prueba con el mismo dato que usaste al
+          comprar, o con el código de tu comprobante.
+        </p>
+      )}
     </div>
   );
 }

@@ -71,6 +71,14 @@ const alertCls =
 /* Aviso ámbar: no impide guardar, solo advierte de algo que quedaría raro. */
 const warnCls =
   "rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs font-semibold leading-relaxed text-warn";
+/* Aviso rojo grande: se reserva para lo que NO se puede publicar así, no para
+   lo que queda feo. Borde de 2px y más aire que el resto para que se vea a
+   medio metro del celular. */
+const dangerCls =
+  "rounded-xl border-2 border-error/60 bg-error/10 px-4 py-3.5 text-error";
+/* Botón dentro de un aviso rojo: la salida a un toque del problema. */
+const dangerBtnCls =
+  "inline-flex min-h-11 items-center justify-center rounded-full border border-error/50 bg-error/15 px-4 text-[11px] font-bold uppercase tracking-[0.1em] text-error transition-colors hover:bg-error/25";
 /* Etiqueta menuda de campo secundario dentro de una fila repetida. */
 const subLabelCls =
   "mb-1.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-fg-faint";
@@ -350,6 +358,14 @@ const ESTADOS_PUBLICOS = new Set([
   "FINISHED",
 ]);
 
+/**
+ * Estados en los que la rifa está de cara al público y puede terminar con un
+ * comprador delante de la pantalla «Realiza el pago»: ACTIVA vende de verdad y
+ * PRÓXIMAMENTE está a un solo toque de hacerlo. Agotada, finalizada, cancelada
+ * y borrador no toman pedidos nuevos, así que ahí no se frena nada.
+ */
+const ESTADOS_QUE_COBRAN = new Set(["COMING_SOON", "ACTIVE"]);
+
 const SELECTION_MODES = [
   { value: "MANUAL", label: "Solo manual" },
   { value: "RANDOM", label: "Solo al azar" },
@@ -494,9 +510,17 @@ function neededDigits(total: number): number {
 export default function RaffleFormV2({
   mode,
   initial,
+  pasarelaLista,
 }: {
   mode: "create" | "edit";
   initial?: RaffleFormInitial;
+  /**
+   * Si la tienda tiene pasarela de pago configurada. Lo decide el SERVIDOR
+   * (isWompiConfigured, en la página que monta este formulario) y baja al
+   * navegador convertido en un simple sí o no: las llaves de la pasarela no
+   * salen nunca del servidor.
+   */
+  pasarelaLista: boolean;
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -665,6 +689,27 @@ export default function RaffleFormV2({
           : minutosReserva < MIN_RESERVA || minutosReserva > MAX_RESERVA
             ? `Los minutos de reserva van de ${MIN_RESERVA} a ${MAX_RESERVA} (un día entero). Escribe una cantidad dentro de ese rango.`
             : "";
+
+  /**
+   * Sin WhatsApp y sin pasarela no queda NINGUNA forma de cobrar: el comprador
+   * aparta sus números, llega a la pantalla «Realiza el pago» y ahí no le sale
+   * ni un solo botón. Le pasó de verdad al dueño con sus dos rifas activas.
+   */
+  const sinFormaDeCobro = !whatsappCheckout && !pasarelaLista;
+  /* El estado del desplegable (lo que va a quedar guardado), no el de la base. */
+  const estadoCobra = ESTADOS_QUE_COBRAN.has(status);
+  /**
+   * Se FRENA el guardado, no se pide confirmación. Un diálogo de «¿seguro?» es
+   * justo lo que el dueño acepta sin leer cuando va de afán, y el precio de
+   * equivocarse aquí es una rifa vendiendo sin poder cobrar. Además no hay
+   * ningún caso legítimo de rifa pública sin forma de pago, así que no hay nada
+   * que confirmar: se sale encendiendo WhatsApp, dejándola en borrador o
+   * configurando la pasarela, y el aviso lleva los dos primeros a un toque.
+   */
+  const errorCobro =
+    sinFormaDeCobro && estadoCobra
+      ? `No se puede publicar en «${STATUS_META_V2[status].label}» una rifa sin forma de cobrar: WhatsApp está apagado y no hay pasarela de pago configurada. Enciende WhatsApp, déjala en borrador o pide que configuren la pasarela.`
+      : "";
 
   /* Apartados de números premiados, revisados en cada render (sin estado
      duplicado): de aquí salen la vista previa, los avisos y lo que se guarda. */
@@ -856,10 +901,10 @@ export default function RaffleFormV2({
 
   async function save() {
     setError("");
-    /* Las cantidades y los paquetes ya se avisan solos debajo del botón: aquí
-       solo se corta el envío para no llegar a la red con una rifa que nadie
-       podría comprar. */
-    if (errorCantidades || errorPaquetes) return;
+    /* Las cantidades, los paquetes y la falta de cobro ya se avisan solos
+       debajo del botón: aquí solo se corta el envío para no llegar a la red
+       con una rifa que nadie podría comprar ni pagar. */
+    if (errorCantidades || errorPaquetes || errorCobro) return;
     /* Los apartados se revisan antes de salir a la red: el mensaje del
        servidor sería mucho más seco que el nuestro. */
     if (prizedError) {
@@ -1385,6 +1430,49 @@ export default function RaffleFormV2({
               : "Esta rifa no mostrará WhatsApp al cliente por ningún lado. El sistema le entrega los números y el comprobante cuando el pago quede confirmado."
           }
         />
+
+        {/* Aviso rojo pegado al interruptor: sin WhatsApp y sin pasarela, la
+            pantalla de pago del comprador se queda literalmente vacía. Sale
+            siempre que se apaga (aunque la rifa esté en borrador) para que el
+            dueño lo lea en el momento exacto en que toca la palanca. */}
+        {sinFormaDeCobro ? (
+          <div role="alert" className={dangerCls}>
+            <p className="font-display text-sm font-black uppercase leading-tight tracking-[0.06em]">
+              Esta rifa se queda sin forma de cobrar
+            </p>
+            <p className="mt-2 text-xs font-semibold leading-relaxed">
+              Acabas de apagar WhatsApp y esta tienda no tiene pasarela de pago
+              configurada. Tus compradores van a apartar sus números, van a
+              llegar a la pantalla «Realiza el pago»… y ahí no les va a aparecer
+              ni un solo botón para pagarte. Así no se debe publicar.
+            </p>
+            <p className="mt-2 text-xs font-semibold leading-relaxed">
+              Tienes dos salidas: <strong>enciende WhatsApp</strong> otra vez, o
+              pídele a tu desarrollador que <strong>configure la pasarela de
+              pago</strong>. Mientras tanto, déjala en borrador.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setWhatsappCheckout(true)}
+                aria-label="Volver a encender el cierre de compra por WhatsApp"
+                className={dangerBtnCls}
+              >
+                Encender WhatsApp
+              </button>
+              {estadoCobra ? (
+                <button
+                  type="button"
+                  onClick={() => setStatus("DRAFT")}
+                  aria-label="Pasar la rifa a borrador para que el público no la vea"
+                  className={dangerBtnCls}
+                >
+                  Pasarla a borrador
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
 
         {/* Paquetes: cantidad, etiqueta de color y descuento, con la tarjeta
             que verá el comprador debajo de cada uno. */}
@@ -1918,6 +2006,14 @@ export default function RaffleFormV2({
               <option key={s} value={s}>{STATUS_META_V2[s].label}</option>
             ))}
           </select>
+          {/* El interruptor de WhatsApp está en otra tarjeta, muy arriba: aquí,
+              donde de verdad se decide publicar, se repite por qué no va a
+              dejarse guardar. */}
+          {errorCobro ? (
+            <p role="alert" className={`mt-2 ${alertCls}`}>
+              {errorCobro}
+            </p>
+          ) : null}
         </div>
         <div>
           <p className={labelCls}>Porcentaje de avance público</p>
@@ -1974,11 +2070,11 @@ export default function RaffleFormV2({
       </div>
 
       {/* Un solo aviso rojo junto al botón: primero lo que impide guardar y se
-          arregla solo (las cantidades y los paquetes) y después lo que contestó
-          el servidor. */}
-      {errorCantidades || errorPaquetes || error ? (
+          arregla solo (las cantidades, los paquetes y la falta de cobro) y
+          después lo que contestó el servidor. */}
+      {errorCantidades || errorPaquetes || errorCobro || error ? (
         <p role="alert" className={alertCls}>
-          {errorCantidades || errorPaquetes || error}
+          {errorCantidades || errorPaquetes || errorCobro || error}
         </p>
       ) : null}
 

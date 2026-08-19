@@ -341,9 +341,14 @@ export default async function SorteoPage({
             </section>
           ) : null}
 
-          {/* Selección de números */}
+          {/* Selección de números.
+              Los números premiados que se publican arriba bajan también al
+              selector: allí se celebran cuando el comprador busca su número
+              de la suerte, cuando le sale entre las sugerencias y cuando ya
+              lo lleva en el carrito. Es la misma lista que ya está a la
+              vista en esta página, así que no se revela nada nuevo. */}
           {raffle.status === "ACTIVE" ? (
-            <NumberPicker raffle={raffle} />
+            <NumberPicker raffle={raffle} prizedGroups={prizedGroups} />
           ) : (
             <div className="mt-6 rounded-2xl border border-line bg-card p-6 text-center">
               <p className="font-display text-lg font-extrabold uppercase text-fg">

@@ -3,9 +3,9 @@ export function waLink(number: string, message: string): string {
   return `https://wa.me/${digits}?text=${encodeURIComponent(message)}`;
 }
 
-export function waParticipate(number: string, raffleTitle: string): string {
-  return waLink(number, `Hola, quiero participar en el sorteo ${raffleTitle}.`);
-}
+// Aquí había un `waParticipate()` ("quiero participar en el sorteo X"): se
+// quedó sin uso cuando la participación pasó a comprarse en la propia página
+// en vez de por WhatsApp. Los enlaces que siguen vivos son los de CONSULTA.
 
 export function waConsult(number: string, raffleTitle: string): string {
   return waLink(number, `Hola, quiero más información sobre el sorteo ${raffleTitle}.`);
