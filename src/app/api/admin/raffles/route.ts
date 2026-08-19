@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import {
+  invalidarEtiquetas,
+  TAG_RIFAS,
+  tagRifa,
+  tagRifaId,
+} from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { digitsForTotal } from "@/lib/numbers";
 import { statusMetaV2 } from "@/lib/raffle-status";
@@ -149,6 +155,10 @@ export async function POST(req: NextRequest) {
   // transacción; si se llamara antes, la portada se regeneraría con los datos
   // viejos y el cambio no se vería.
   revalidatePath("/");
+  // Y las CONSULTAS cacheadas: el listado público y la rifa por slug. Sin
+  // esto, la página del sorteo (que es dinámica pero lee de la caché de
+  // datos) seguiría sirviendo lo de antes hasta que venciera el tiempo.
+  invalidarEtiquetas(TAG_RIFAS, tagRifa(raffle.slug), tagRifaId(raffle.id));
 
   return NextResponse.json({ raffle }, { status: 201 });
 }

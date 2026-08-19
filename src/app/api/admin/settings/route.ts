@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { invalidarEtiquetas, TAG_AJUSTES } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { correoConfigurado } from "@/lib/email";
 import { settingsSchema } from "@/lib/validation";
@@ -86,6 +87,11 @@ export async function PATCH(req: NextRequest) {
   // ciudad, redes y el aviso de demostración. Se regenera con los ajustes ya
   // guardados.
   revalidatePath("/");
+  // Y la lee la plantilla raíz, así que sale en TODAS las páginas del sitio
+  // (cabecera, pie y barra inferior de la página del sorteo incluidas). Al
+  // invalidar la etiqueta, la siguiente carga de cualquiera de ellas ya
+  // muestra lo recién guardado.
+  invalidarEtiquetas(TAG_AJUSTES);
 
   return NextResponse.json({ ok: true });
 }

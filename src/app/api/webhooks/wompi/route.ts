@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
+import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { confirmOrderPayment } from "@/lib/engine/orders";
 import { logAudit } from "@/lib/audit";
@@ -82,6 +84,15 @@ export async function POST(req: NextRequest) {
     });
     if (!result.ok) {
       console.error(`Webhook Wompi: ${orderCode} → ${result.reason}`);
+    } else {
+      // Un pago confirmado por la pasarela sube el PORCENTAJE de avance
+      // igual que uno confirmado a mano en el panel, así que caduca lo
+      // mismo: la portada cacheada y las consultas cacheadas de esa rifa.
+      // Va después de que el motor haya cerrado su transacción y solo si el
+      // pago se confirmó de verdad.
+      revalidatePath("/");
+      revalidatePath("/sorteo/[slug]", "page");
+      invalidarEtiquetas(TAG_RIFAS, tagRifaId(order.raffleId));
     }
   } else if (["DECLINED", "VOIDED", "ERROR"].includes(tx.status)) {
     // Registro del intento fallido (la orden sigue PENDING hasta expirar).

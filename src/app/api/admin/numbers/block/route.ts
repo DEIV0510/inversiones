@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import {
+  invalidarEtiquetas,
+  TAG_RIFAS,
+  tagRifa,
+  tagRifaId,
+} from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -85,6 +91,12 @@ export async function POST(req: NextRequest) {
       entityId: raffleId,
       detail: { desde: from, hasta: to, bloqueados: result.count },
     });
+    // Bloquear números cambia el bombo de esta rifa. La disponibilidad se
+    // pregunta siempre en vivo (esa no se cachea nunca), pero se invalidan
+    // igual las consultas cacheadas de la rifa: así ninguna pantalla queda
+    // apoyada en una lectura anterior al bloqueo. Va después de la
+    // transacción y solo cuando ya se escribió.
+    invalidarEtiquetas(TAG_RIFAS, tagRifa(raffle.slug), tagRifaId(raffleId));
     return NextResponse.json({
       ok: true,
       blocked: result.count,
@@ -103,5 +115,7 @@ export async function POST(req: NextRequest) {
     entityId: raffleId,
     detail: { desde: from, hasta: to, desbloqueados: result.count },
   });
+  // Mismo motivo que al bloquear: los números vuelven al bombo.
+  invalidarEtiquetas(TAG_RIFAS, tagRifa(raffle.slug), tagRifaId(raffleId));
   return NextResponse.json({ ok: true, unblocked: result.count });
 }

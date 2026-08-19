@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import {
+  invalidarEtiquetas,
+  TAG_RIFAS,
+  tagRifa,
+  tagRifaId,
+} from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
@@ -84,6 +90,9 @@ export async function POST(
   // igualmente para regenerar porque la portada está cacheada y así el listado
   // público nunca depende de en qué estado nazca la copia.
   revalidatePath("/");
+  // Mismo motivo para las consultas cacheadas. Se invalida también el slug de
+  // la copia por si esa dirección estuvo ocupada antes por una rifa borrada.
+  invalidarEtiquetas(TAG_RIFAS, tagRifa(copy.slug), tagRifaId(copy.id));
 
   return NextResponse.json({ raffle: copy }, { status: 201 });
 }

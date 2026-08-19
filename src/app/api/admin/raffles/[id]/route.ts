@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import {
+  invalidarEtiquetas,
+  TAG_RIFAS,
+  tagRifa,
+  tagRifaId,
+} from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { digitsForTotal } from "@/lib/numbers";
 import { deleteImage } from "@/lib/media";
@@ -236,6 +242,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // Y la página del sorteo. Se usa la forma de segmento porque cubre de una
   // vez la dirección nueva y la antigua cuando el dueño cambia el slug.
   revalidatePath("/sorteo/[slug]", "page");
+  // Las consultas cacheadas de esa página: la rifa por slug y sus números
+  // premiados. Se invalidan los DOS slugs (el guardado antes y el nuevo)
+  // porque si el dueño cambia la dirección, la entrada vieja seguiría en
+  // caché con los datos de antes.
+  invalidarEtiquetas(
+    TAG_RIFAS,
+    tagRifa(existing.slug),
+    tagRifa(raffle.slug),
+    tagRifaId(raffle.id)
+  );
 
   return NextResponse.json({ raffle });
 }
@@ -280,6 +296,9 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   // La rifa borrada tiene que desaparecer de la portada cacheada de inmediato.
   revalidatePath("/");
   revalidatePath("/sorteo/[slug]", "page");
+  // Y de las consultas cacheadas: su entrada por slug tiene que caducar ya,
+  // o su página seguiría respondiendo 200 con los datos guardados en caché.
+  invalidarEtiquetas(TAG_RIFAS, tagRifa(existing.slug), tagRifaId(id));
 
   return NextResponse.json({ ok: true });
 }

@@ -1,11 +1,47 @@
+import { unstable_cache } from "next/cache";
 import type { Raffle } from "@prisma/client";
 import { prisma } from "./db";
+import { TAG_GANADORES, TAG_RIFAS, tagRifa, tagRifaId } from "./cache-tags";
 
 /**
  * Consultas públicas. Regla de negocio: al público JAMÁS se le muestran
  * cantidades vendidas/restantes — solo el porcentaje. El tamaño de la rifa
  * (dígitos/rango) sí es público porque es necesario para elegir número.
+ *
+ * CACHÉ DE DATOS: las lecturas públicas de aquí abajo se repetían en CADA
+ * visita contra una base remota (Neon) que se suspende sola; despertarla
+ * costaba segundos y la página del sorteo es justo donde la gente compra. Por
+ * eso van envueltas en la caché de datos de Next con etiquetas (ver
+ * ./cache-tags.ts): el visitante no espera a la base, y cada acción del panel
+ * que cambia esos datos invalida su etiqueta al terminar, así que el dueño ve
+ * el cambio en el acto.
+ *
+ * Lo que sigue SIN cachear, a propósito:
+ *  - getRaffleBySlugForAdmin: devuelve borradores y solo se llama con sesión
+ *    de panel comprobada. Cachearla sería servirle un borrador al público.
+ *  - buscarDuenoDeNumero y buscarPremioDeNumero: se consultan por número
+ *    suelto el día del sorteo y tienen que decir la verdad del momento.
  */
+
+/**
+ * Red de seguridad para los datos de LA PÁGINA DEL SORTEO, por si alguna
+ * invalidación se escapa (un fallo de red al marcar la etiqueta, por
+ * ejemplo). Corto porque de aquí sale el PORCENTAJE de avance, que sube al
+ * confirmar un pago. Lo que mantiene el porcentaje al día no es este número:
+ * es la invalidación por etiqueta de confirmar/cancelar pedido.
+ */
+const SEGUNDOS_CACHE_RIFA = 30;
+
+/**
+ * Misma red de seguridad para lo que alimenta la PORTADA.
+ *
+ * Son 60 y no 30 a propósito: la portada es una página estática regenerada
+ * cada 60 s (`export const revalidate = 60`), y Next recorta ese plazo al de
+ * la consulta cacheada más corta que se lea dentro. Con 30 la portada pasaría
+ * a regenerarse cada 30 s sin que nadie lo hubiera pedido. Su frescura real
+ * la siguen dando las invalidaciones por etiqueta del panel, no este plazo.
+ */
+const SEGUNDOS_CACHE_ESTABLE = 60;
 
 export const PUBLIC_STATUSES = [
   "COMING_SOON",
@@ -205,7 +241,8 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
   };
 }
 
-export async function getPublicRaffles(): Promise<PublicRaffle[]> {
+/** Lectura real del listado público (sin caché). */
+async function leerRifasPublicas(): Promise<PublicRaffle[]> {
   const raffles = await prisma.raffle.findMany({
     where: { status: { in: [...PUBLIC_STATUSES] } },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
@@ -213,12 +250,48 @@ export async function getPublicRaffles(): Promise<PublicRaffle[]> {
   return raffles.map(toPublicRaffle);
 }
 
-export async function getPublicRaffleBySlug(
+/**
+ * Listado de rifas visibles al público. Cacheado bajo la etiqueta general de
+ * rifas: cualquier cambio de rifa en el panel lo invalida.
+ */
+export const getPublicRaffles = unstable_cache(
+  leerRifasPublicas,
+  ["rifas-publicas"],
+  { tags: [TAG_RIFAS], revalidate: SEGUNDOS_CACHE_ESTABLE }
+);
+
+/** Lectura real de una rifa pública por slug (sin caché). */
+async function leerRifaPublicaPorSlug(
   slug: string
 ): Promise<PublicRaffle | null> {
   const raffle = await prisma.raffle.findUnique({ where: { slug } });
   if (!raffle || !PUBLIC_STATUSES.includes(raffle.status as never)) return null;
   return toPublicRaffle(raffle);
+}
+
+/**
+ * Rifa pública por slug. Es la consulta más cara del sitio en visitas: la
+ * hace la página del sorteo y también el buscador de números y las
+ * sugerencias (que solo la usan para saber precio, cifras y total; la
+ * DISPONIBILIDAD la siguen preguntando en vivo a la base, sin caché).
+ *
+ * El envoltorio se construye dentro de la función porque la etiqueta fina
+ * `rifa:<slug>` depende del slug, y las etiquetas se fijan al construirlo. La
+ * clave de caché ya separa cada slug: el slug viaja como argumento y también
+ * en las partes de la clave.
+ *
+ * Sigue filtrando por estado, así que un borrador NUNCA sale de aquí: la
+ * vista previa del dueño pasa por getRaffleBySlugForAdmin, que no se cachea.
+ */
+export async function getPublicRaffleBySlug(
+  slug: string
+): Promise<PublicRaffle | null> {
+  const leer = unstable_cache(
+    leerRifaPublicaPorSlug,
+    ["rifa-publica-por-slug", slug],
+    { tags: [TAG_RIFAS, tagRifa(slug)], revalidate: SEGUNDOS_CACHE_RIFA }
+  );
+  return leer(slug);
 }
 
 /**
@@ -250,7 +323,7 @@ export async function getRaffleBySlugForAdmin(
  * Consulta deliberadamente barata: findFirst con select del id. Nunca carga
  * filas de números ni cuenta nada.
  */
-export async function hayRifasConWhatsApp(): Promise<boolean> {
+async function leerHayRifasConWhatsApp(): Promise<boolean> {
   const rifa = await prisma.raffle.findFirst({
     where: {
       status: { in: [...PUBLIC_STATUSES] },
@@ -261,11 +334,18 @@ export async function hayRifasConWhatsApp(): Promise<boolean> {
   return rifa !== null;
 }
 
+/** Versión cacheada: depende del estado y del WhatsApp de las rifas. */
+export const hayRifasConWhatsApp = unstable_cache(
+  leerHayRifasConWhatsApp,
+  ["hay-rifas-con-whatsapp"],
+  { tags: [TAG_RIFAS], revalidate: SEGUNDOS_CACHE_RIFA }
+);
+
 /**
  * Números premiados de una rifa, agrupados por premio para mostrarlos como
  * en las plataformas de referencia ("50 números premiados con 1 millón").
  */
-export async function getPrizedGroups(
+async function leerNumerosPremiados(
   raffleId: string,
   digits: number
 ): Promise<PrizedGroup[]> {
@@ -285,13 +365,70 @@ export async function getPrizedGroups(
     .sort((a, b) => b.numbers.length - a.numbers.length);
 }
 
-export async function getPublishedWinners() {
+/**
+ * Números premiados de una rifa. Es la tercera consulta que hacía la página
+ * del sorteo en cada visita y solo cambia cuando el dueño edita la lista.
+ *
+ * La etiqueta fina va por id porque la página ya tiene la rifa cargada; el
+ * paraguas `rifas` cubre los cambios en los que solo se conoce el id.
+ */
+export async function getPrizedGroups(
+  raffleId: string,
+  digits: number
+): Promise<PrizedGroup[]> {
+  const leer = unstable_cache(
+    leerNumerosPremiados,
+    ["numeros-premiados", raffleId],
+    { tags: [TAG_RIFAS, tagRifaId(raffleId)], revalidate: SEGUNDOS_CACHE_RIFA }
+  );
+  return leer(raffleId, digits);
+}
+
+/**
+ * Ganador publicado tal como se pinta en la portada.
+ *
+ * Se enumeran las columnas a propósito, en vez de devolver la fila entera:
+ * la caché de datos guarda el resultado como JSON, y una fecha (createdAt)
+ * volvería del caché convertida en texto aunque el tipo dijera que es Date.
+ * Aquí no viaja ninguna fecha, así que lo que sale del caché es idéntico a lo
+ * que sale de la base. La ordenación por createdAt sigue haciéndose en la
+ * base, que es donde importa.
+ */
+export type PublicWinner = {
+  id: string;
+  raffleTitle: string;
+  numberFormatted: string | null;
+  participantName: string;
+  prize: string;
+  drawnAtText: string | null;
+  photoUrl: string | null;
+  isDemo: boolean;
+};
+
+async function leerGanadoresPublicados(): Promise<PublicWinner[]> {
   return prisma.winner.findMany({
     where: { isPublished: true },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
     take: 12,
+    select: {
+      id: true,
+      raffleTitle: true,
+      numberFormatted: true,
+      participantName: true,
+      prize: true,
+      drawnAtText: true,
+      photoUrl: true,
+      isDemo: true,
+    },
   });
 }
+
+/** Ganadores publicados. Solo cambian cuando el dueño toca esa pantalla. */
+export const getPublishedWinners = unstable_cache(
+  leerGanadoresPublicados,
+  ["ganadores-publicados"],
+  { tags: [TAG_GANADORES], revalidate: SEGUNDOS_CACHE_ESTABLE }
+);
 
 // ============================================================
 // CONSULTA "¿QUIÉN GANÓ?" — dueño de un número

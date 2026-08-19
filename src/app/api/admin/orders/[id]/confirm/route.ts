@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { confirmOrderPayment } from "@/lib/engine/orders";
 
 export const runtime = "nodejs";
@@ -38,6 +39,10 @@ export async function POST(
   // transacción del motor ya cerrada y solo si el pago se confirmó de verdad.
   revalidatePath("/");
   revalidatePath("/sorteo/[slug]", "page");
+  // Y la consulta cacheada de donde sale ese porcentaje. Aquí solo se conoce
+  // el id de la rifa (la orden no lleva el slug), así que se tira del
+  // paraguas: cubre la rifa por slug, el listado y los números premiados.
+  invalidarEtiquetas(TAG_RIFAS, tagRifaId(result.order.raffleId));
 
   return NextResponse.json({ ok: true, order: result.order });
 }

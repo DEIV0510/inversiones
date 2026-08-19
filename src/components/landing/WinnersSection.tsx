@@ -1,11 +1,13 @@
 import Image from "next/image";
-import type { Winner } from "@prisma/client";
+import type { PublicWinner } from "@/lib/public";
 import Reveal from "./Reveal";
 import SectionHeading from "./SectionHeading";
 import { IconTrophy } from "@/components/icons";
 
 type Props = {
-  winners: Winner[];
+  // Solo las columnas que se pintan, no la fila entera de la base: así es
+  // como las devuelve getPublishedWinners, que pasa por la caché de datos.
+  winners: PublicWinner[];
 };
 
 export default function WinnersSection({ winners }: Props) {

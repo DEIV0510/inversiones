@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { invalidarEtiquetas, TAG_GANADORES } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { deleteImage } from "@/lib/media";
 import { winnerPatchSchema } from "@/lib/validation";
@@ -82,6 +83,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // Publicar, despublicar, reordenar o cambiarle la foto a un ganador cambia
   // la sección de ganadores de la portada cacheada.
   revalidatePath("/");
+  // Y la consulta cacheada que la alimenta.
+  invalidarEtiquetas(TAG_GANADORES);
 
   return NextResponse.json({ winner });
 }
@@ -109,6 +112,8 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
 
   // El ganador borrado tiene que desaparecer de la portada cacheada.
   revalidatePath("/");
+  // Y de la consulta cacheada que la alimenta.
+  invalidarEtiquetas(TAG_GANADORES);
 
   return NextResponse.json({ ok: true });
 }

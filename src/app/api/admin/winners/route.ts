@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { requireAdminApi } from "@/lib/auth";
 import { logAudit } from "@/lib/audit";
+import { invalidarEtiquetas, TAG_GANADORES } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { formatNumber, parseNumberInput } from "@/lib/numbers";
 import { winnerSchema } from "@/lib/validation";
@@ -94,6 +95,10 @@ export async function POST(req: NextRequest) {
 
   // La portada cacheada lleva la sección de ganadores publicados.
   revalidatePath("/");
+  // La lista de ganadores también se sirve de la caché de datos: sin esta
+  // línea, regenerar la portada volvería a leer del caché y el ganador nuevo
+  // no aparecería.
+  invalidarEtiquetas(TAG_GANADORES);
 
   return NextResponse.json({ winner }, { status: 201 });
 }

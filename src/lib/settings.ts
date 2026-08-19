@@ -1,4 +1,6 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "./db";
+import { TAG_AJUSTES } from "./cache-tags";
 
 export type SiteSettings = {
   company_name: string;
@@ -34,7 +36,8 @@ const FALLBACK: SiteSettings = {
   demo_mode: "0",
 };
 
-export async function getSettings(): Promise<SiteSettings> {
+/** Lectura real de la configuración (sin caché). */
+async function leerAjustes(): Promise<SiteSettings> {
   const rows = await prisma.setting.findMany();
   const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
   const result = { ...FALLBACK };
@@ -45,3 +48,20 @@ export async function getSettings(): Promise<SiteSettings> {
   }
   return result;
 }
+
+/**
+ * Configuración del sitio, cacheada.
+ *
+ * La lee la plantilla raíz, así que se consultaba en CADA página que se pinta
+ * en el servidor —incluida la del sorteo— contra una base remota que se
+ * suspende sola. Son ocho textos que el dueño cambia como mucho una vez al
+ * mes: es la lectura que más se repetía y la que menos cambia.
+ *
+ * Todo lo que devuelve son cadenas de texto, así que pasar por la caché (que
+ * guarda JSON) no altera ni un valor. El PATCH de /api/admin/settings invalida
+ * la etiqueta al guardar, de modo que el pie de página cambia en el acto.
+ */
+export const getSettings = unstable_cache(leerAjustes, ["ajustes-sitio"], {
+  tags: [TAG_AJUSTES],
+  revalidate: 60,
+});
