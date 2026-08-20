@@ -16,6 +16,8 @@ const SENTENCIAS = [
   `UPDATE "Raffle" SET "showDrawDate" = true WHERE "showDrawDate" = false`,
   // Proporcion de la foto del sorteo (4/3, 1/1 o 9/16).
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "imageAspect" TEXT NOT NULL DEFAULT '4/3'`,
+  // Interruptor de la pasarela por rifa (gemelo del de WhatsApp).
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "gatewayCheckout" BOOLEAN NOT NULL DEFAULT true`,
   `CREATE INDEX IF NOT EXISTS "Order_status_paidAt_idx" ON "Order"("status", "paidAt")`,
   `CREATE INDEX IF NOT EXISTS "PrizedNumber_raffleId_claimedAt_idx" ON "PrizedNumber"("raffleId", "claimedAt")`,
 ];
