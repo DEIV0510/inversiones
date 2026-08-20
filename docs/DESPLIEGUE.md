@@ -75,3 +75,20 @@ npx tsx scripts/test-engine.ts    # integración contra la DB del .env:
    política completa de la Ley 1581 de 2012 siguen marcados como
    `[PENDIENTE DE CONFIGURAR]` y los aporta el propietario.
 7. Cambiar la contraseña del super admin desde Usuarios.
+
+## ⚠️ Orden obligatorio cuando se agrega una columna
+
+La portada (`src/app/page.tsx`) se genera **al compilar** (`export const revalidate = 60`),
+y para generarla Vercel consulta la base de datos de producción. Si el código nuevo
+selecciona una columna que todavía no existe allí, **el build falla** con
+`PrismaClientKnownRequestError` al prerenderizar `/`, y el despliegue queda en rojo.
+
+Por eso el orden es siempre este, y no al revés:
+
+1. Añadir la columna al esquema y aplicarla a **producción** con `scripts/prod-migracion.cjs`
+   (sentencias aditivas `ADD COLUMN IF NOT EXISTS`, que no rompen el código que ya está en vivo).
+2. Comprobar que la columna existe.
+3. Recién entonces `git push`, que es lo que dispara el build.
+
+Pasó de verdad al agregar `gatewayCheckout`: se subió el código primero y el
+despliegue se cayó. El siguiente build, ya con la columna creada, pasó sin tocar nada.
