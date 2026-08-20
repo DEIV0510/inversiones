@@ -80,6 +80,21 @@ pueden proponer otro.
 
 # Bold
 
+## Estado en producción (20 de agosto de 2026)
+
+| Paso | Estado |
+|---|---|
+| `BOLD_IDENTITY_KEY` en Vercel (Production) | ✅ cargada |
+| `BOLD_SECRET_KEY` en Vercel (Production, Sensitive) | ✅ cargada por el dueño |
+| Despliegue con las llaves activas | ✅ |
+| Botón renderizando en `/pedido/<código>` | ✅ verificado |
+| Webhook registrado en el panel de Bold | ⬜ **pendiente: lo registra el dueño** |
+
+Mientras el webhook no esté registrado, el cobro SÍ entra a la cuenta de Bold
+pero el pedido no se marca solo como pagado: hay que confirmarlo a mano en el
+panel (Pedidos → Confirmar pago) o el comprador toca "Ya pagué — verificar".
+Por eso registrar el webhook no es opcional en la práctica.
+
 ## Por qué el Botón de Pagos y no un enlace de pago
 
 Los enlaces de `checkout.bold.co/payment/LNK_...` son de **monto fijo**: sirven
