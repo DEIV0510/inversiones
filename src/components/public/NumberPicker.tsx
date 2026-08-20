@@ -1182,7 +1182,6 @@ export default function NumberPicker({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className={inputCls}
-                  placeholder="Ej: Juan Pérez"
                   maxLength={120}
                   autoComplete="name"
                 />
@@ -1200,7 +1199,6 @@ export default function NumberPicker({
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   className={inputCls}
-                  placeholder="Ej: 3001234567"
                   maxLength={15}
                   autoComplete="tel"
                 />
@@ -1215,7 +1213,6 @@ export default function NumberPicker({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className={inputCls}
-                  placeholder="tucorreo@ejemplo.com"
                   maxLength={200}
                   autoComplete="email"
                 />
@@ -1233,7 +1230,6 @@ export default function NumberPicker({
                     setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 15))
                   }
                   className={inputCls}
-                  placeholder="Ej: 1012345678"
                   maxLength={15}
                   autoComplete="off"
                 />
