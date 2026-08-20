@@ -65,7 +65,12 @@ export async function POST(
       terms: original.terms,
       displayOrder: original.displayOrder + 1,
       selectionMode: original.selectionMode,
+      // Las dos cajas viajan juntas: WhatsApp y pasarela. Si la copia naciera
+      // con los valores de fábrica, el dueño duplicaría una rifa que cobra
+      // solo por pasarela y la copia le saldría además con WhatsApp encendido
+      // (o al revés) sin que nadie se lo diga.
       whatsappCheckout: original.whatsappCheckout,
+      gatewayCheckout: original.gatewayCheckout,
       showPrize: original.showPrize,
       showDrawDate: original.showDrawDate,
       imageAspect: original.imageAspect,

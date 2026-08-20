@@ -12,7 +12,7 @@ import { prisma } from "@/lib/db";
 import { digitsForTotal } from "@/lib/numbers";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { raffleSchema } from "@/lib/validation";
-import { isWompiConfigured } from "@/lib/wompi";
+import { hayPasarela, rifaTieneFormaDeCobro } from "@/lib/pasarela";
 
 export const runtime = "nodejs";
 
@@ -32,8 +32,15 @@ const ESTADOS_QUE_COBRAN = new Set(["ACTIVE", "COMING_SOON"]);
  * perdida, así que la regla se repite aquí y aquí es donde manda.
  *
  * Devuelve el mensaje de bloqueo, o "" cuando la combinación es válida.
- * `whatsappCheckout` y `status` deben ser los del estado FINAL, es decir lo
- * que va a quedar guardado, no solo lo que trae la petición.
+ * `whatsappCheckout`, `gatewayCheckout` y `status` deben ser los del estado
+ * FINAL, es decir lo que va a quedar guardado, no solo lo que trae la
+ * petición.
+ *
+ * La pasarela solo cuenta como forma de cobro si se dan las DOS cosas: que el
+ * dueño la haya encendido en esta rifa y que el entorno tenga alguna pasarela
+ * configurada (Wompi o Bold). Encendida en una tienda sin llaves no le pone
+ * ningún botón al comprador, así que aquí vale lo mismo que apagada. Quién
+ * tiene llaves lo dice el servidor; el navegador no manda nada de esto.
  *
  * NO se exporta: Next.js solo admite GET/POST/… y su configuración como
  * exportaciones de un route.ts. Por eso el PATCH de [id]/route.ts lleva su
@@ -41,17 +48,24 @@ const ESTADOS_QUE_COBRAN = new Set(["ACTIVE", "COMING_SOON"]);
  */
 function errorSinFormaDeCobro(
   status: string,
-  whatsappCheckout: boolean
+  whatsappCheckout: boolean,
+  gatewayCheckout: boolean
 ): string {
   if (!ESTADOS_QUE_COBRAN.has(status)) return "";
-  if (whatsappCheckout) return "";
-  if (isWompiConfigured()) return "";
+  // La regla vive en la capa común: aquí no se vuelve a inventar quién cobra.
+  if (rifaTieneFormaDeCobro({ whatsappCheckout, gatewayCheckout })) return "";
+  // Solo para redactar el mensaje: cambia según si la tienda tiene llaves.
+  const pasarelaLista = hayPasarela();
   return (
     `No se puede dejar en «${statusMetaV2(status).label}» una rifa sin forma de cobrar: ` +
-    "el cobro por WhatsApp está apagado y esta tienda no tiene pasarela de pago " +
-    "configurada, así que el comprador apartaría sus números y en la pantalla de pago " +
-    "no le aparecería ningún botón. Hay dos salidas: enciende el cobro por WhatsApp, " +
-    "o déjala en «Borrador» hasta que configuren la pasarela de pago."
+    "el cobro por WhatsApp está apagado y " +
+    (pasarelaLista
+      ? "el cobro con pasarela de pago también"
+      : "esta tienda no tiene pasarela de pago configurada") +
+    ", así que el comprador apartaría sus números y en la pantalla de pago " +
+    "no le aparecería ningún botón. Hay dos salidas: enciende una de las dos " +
+    "formas de cobro, o déjala en «Borrador» " +
+    (pasarelaLista ? "hasta que decidas cómo cobrar." : "hasta que configuren la pasarela de pago.")
   );
 }
 
@@ -114,7 +128,8 @@ export async function POST(req: NextRequest) {
   // mezclarlo.
   const sinCobro = errorSinFormaDeCobro(
     parsed.data.status,
-    parsed.data.whatsappCheckout
+    parsed.data.whatsappCheckout,
+    parsed.data.gatewayCheckout
   );
   if (sinCobro) {
     return NextResponse.json({ error: sinCobro }, { status: 422 });

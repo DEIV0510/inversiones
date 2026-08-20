@@ -65,6 +65,11 @@ model Raffle {
   // Si la compra se cierra por WhatsApp. Apagado, esta rifa no muestra
   // WhatsApp por ningún lado al comprador.
   whatsappCheckout Boolean @default(true)
+  // Si esta rifa ofrece el pago automático por pasarela. Interruptor gemelo
+  // del de WhatsApp: el dueño decide por rifa si cobra a mano, con pasarela,
+  // o con las dos. Solo surte efecto si hay pasarela configurada en el
+  // entorno; si no, no se le ofrece nada al comprador.
+  gatewayCheckout Boolean @default(true)
   // Cantidades de boletas ofrecidas como botones rápidos, ej "[1,2,5,10,20]".
   ticketPacksJson String @default("[1,2,5,10]")
   // Premios adicionales de la rifa (mayor, anticipados por día...).

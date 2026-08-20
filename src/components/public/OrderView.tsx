@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import BoldPayButton, { type BoldButtonData } from "@/components/public/BoldPayButton";
 import { formatCop } from "@/lib/format";
 import {
   IconBanknote,
@@ -998,6 +999,9 @@ export default function OrderView({
   order,
   whatsappUrl,
   wompiUrl,
+  boldButton = null,
+  boldMontoNoSoportado = false,
+  volviendoDePasarela = false,
   contacto,
   autoEnviarWhatsApp = false,
 }: {
@@ -1005,32 +1009,105 @@ export default function OrderView({
   /** null cuando la rifa está configurada sin WhatsApp. */
   whatsappUrl: string | null;
   wompiUrl: string | null;
+  /**
+   * Datos YA FIRMADOS en el servidor para el botón de Bold. null cuando la
+   * rifa tiene la pasarela apagada, cuando Bold no está configurado o cuando
+   * el pedido ya no está pendiente.
+   */
+  boldButton?: BoldButtonData | null;
+  /**
+   * Bold está encendido en esta rifa pero el total se sale de lo que acepta
+   * (mínimo $1.000 COP): al comprador hay que decírselo, no dejarlo mirando
+   * una pantalla sin botón.
+   */
+  boldMontoNoSoportado?: boolean;
+  /**
+   * El comprador acaba de volver de la pasarela. Solo sirve para avisarle de
+   * que estamos confirmando y para preguntar por el estado: el pago lo
+   * confirma el servidor con el webhook, NUNCA un parámetro de la URL.
+   */
+  volviendoDePasarela?: boolean;
   /** Datos del negocio para el respaldo cuando no hay forma de pagar. */
   contacto: ContactoNegocio;
   autoEnviarWhatsApp?: boolean;
 }) {
   const router = useRouter();
   const yaEnviado = useRef(false);
+  // ¿Hay pago en línea en esta pantalla? (Bold o Wompi: la rifa manda con su
+  // interruptor de pasarela y el entorno con las credenciales.)
+  const hayPasarela = Boolean(boldButton) || Boolean(wompiUrl);
   // Sin WhatsApp y sin pasarela no queda ni un botón de pago: la pantalla
   // tiene que darle al comprador un camino de todas formas.
-  const sinFormaDePago = !whatsappUrl && !wompiUrl;
+  const sinFormaDePago = !whatsappUrl && !hayPasarela;
 
   // Rifas que cierran por WhatsApp: apenas se crea el pedido, se abre la
   // conversación con el código, la cantidad y el total (nunca los números).
   // Solo una vez.
+  //
+  // Con la pasarela encendida NO se salta a WhatsApp: el comprador se
+  // quedaría sin ver el botón de pago que el dueño acaba de activar. Ahí las
+  // dos vías conviven en pantalla y elige él.
   useEffect(() => {
-    if (!autoEnviarWhatsApp || !whatsappUrl || yaEnviado.current) return;
+    if (!autoEnviarWhatsApp || !whatsappUrl || hayPasarela) return;
+    if (yaEnviado.current) return;
     yaEnviado.current = true;
     const id = window.setTimeout(() => {
       window.location.href = whatsappUrl;
     }, 1200);
     return () => window.clearTimeout(id);
-  }, [autoEnviarWhatsApp, whatsappUrl]);
+  }, [autoEnviarWhatsApp, whatsappUrl, hayPasarela]);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState("");
   const [copied, setCopied] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [errorDescarga, setErrorDescarga] = useState(false);
+  // Vuelta de la pasarela: el pago lo confirma el webhook, que puede llegar
+  // un instante después que el comprador. Mientras tanto se le dice qué está
+  // pasando y se pregunta el estado unas cuantas veces.
+  const [confirmandoPasarela, setConfirmandoPasarela] = useState(
+    volviendoDePasarela && order.status === "PENDING"
+  );
+
+  // Sin candado de "solo una vez": el propio efecto se cancela al limpiarse,
+  // así que si React lo vuelve a montar (o cambia el pedido) la consulta se
+  // rearma. Con el candado, el segundo montaje se saltaba la consulta entera
+  // y el aviso se quedaba girando para siempre.
+  useEffect(() => {
+    if (!volviendoDePasarela || order.status !== "PENDING") return;
+    let vivo = true;
+    let intentos = 0;
+    let reloj = 0;
+
+    async function consultarEstado() {
+      intentos += 1;
+      try {
+        const res = await fetch(`/api/public/orders/${order.code}/verify`, {
+          method: "POST",
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!vivo) return;
+        if (data.status === "PAID") {
+          setConfirmandoPasarela(false);
+          router.refresh();
+          return;
+        }
+      } catch {
+        // Sin conexión: se vuelve a intentar en unos segundos.
+      }
+      if (!vivo) return;
+      if (intentos >= 5) {
+        setConfirmandoPasarela(false);
+        return;
+      }
+      reloj = window.setTimeout(consultarEstado, 4000);
+    }
+
+    reloj = window.setTimeout(consultarEstado, 1500);
+    return () => {
+      vivo = false;
+      window.clearTimeout(reloj);
+    };
+  }, [volviendoDePasarela, order.status, order.code, router]);
 
   // Números premiados de ESTE pedido (la página solo los envía si el pedido
   // está pagado y el premio quedó a su nombre).
@@ -1341,6 +1418,22 @@ export default function OrderView({
           </p>
         </div>
 
+        {/* Vuelta de la pasarela. Solo dice que estamos comprobando: el
+            "aprobado" lo canta el servidor cuando el webhook confirma el
+            pago, jamás un parámetro que venga en la dirección. */}
+        {confirmandoPasarela ? (
+          <div
+            role="status"
+            className="flex items-center justify-center gap-3 rounded-2xl border border-line-strong bg-well px-4 py-3.5 text-center text-sm leading-relaxed text-fg-soft"
+          >
+            <span
+              aria-hidden
+              className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-line-strong border-t-brand"
+            />
+            Estamos confirmando tu pago. Puede tardar unos segundos…
+          </div>
+        ) : null}
+
         {order.reservedUntil ? (
           <div className="neon-card flex items-center justify-between gap-3 rounded-2xl bg-card px-5 py-4">
             {/* El reloj se nombra por lo que de verdad hace: guardar los
@@ -1392,6 +1485,11 @@ export default function OrderView({
         </div>
 
         <div className="flex flex-col gap-3">
+          {/* La pasarela va PRIMERO: es la que cobra sola, sin que el dueño
+              tenga que confirmar nada a mano. */}
+          {boldButton ? (
+            <BoldPayButton datos={boldButton} hayOtraVia={Boolean(whatsappUrl)} />
+          ) : null}
           {wompiUrl ? (
             <a
               href={wompiUrl}
@@ -1399,6 +1497,27 @@ export default function OrderView({
             >
               Pagar en línea (Nequi, PSE, tarjeta)
             </a>
+          ) : null}
+          {/* Bold no acepta cobros por debajo de $1.000: mejor decirlo que
+              dejar un botón que va a fallar. Solo se nombra WhatsApp si esta
+              rifa de verdad lo tiene encendido. */}
+          {boldMontoNoSoportado ? (
+            <p className="rounded-2xl border border-line bg-well px-4 py-3.5 text-center text-sm leading-relaxed text-fg-soft">
+              El pago en línea no está disponible para este monto.{" "}
+              {whatsappUrl
+                ? "Coordina tu pago por WhatsApp con el botón de abajo."
+                : "Comunícate con el organizador para completarlo."}
+            </p>
+          ) : null}
+          {/* Separador solo cuando de verdad hay dos caminos */}
+          {hayPasarela && whatsappUrl ? (
+            <div className="flex items-center gap-3" aria-hidden>
+              <span className="h-px flex-1 bg-line" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+                o también
+              </span>
+              <span className="h-px flex-1 bg-line" />
+            </div>
           ) : null}
           {whatsappUrl ? (
             <a
@@ -1408,16 +1527,20 @@ export default function OrderView({
               className="glow-wa inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-wa px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-wa-dark active:scale-[0.98]"
             >
               <IconWhatsApp width={20} height={20} />
-              {autoEnviarWhatsApp ? "Enviar mi compra por WhatsApp" : "Coordinar pago por WhatsApp"}
+              {autoEnviarWhatsApp && !hayPasarela
+                ? "Enviar mi compra por WhatsApp"
+                : "Coordinar pago por WhatsApp"}
             </a>
           ) : null}
-          {/* Solo se nombra WhatsApp cuando el canal existe de verdad */}
-          {autoEnviarWhatsApp && whatsappUrl ? (
+          {/* Solo se nombra WhatsApp cuando el canal existe de verdad y
+              cuando de verdad vamos a llevarlo allí (con pasarela en
+              pantalla ya no se salta solo). */}
+          {autoEnviarWhatsApp && whatsappUrl && !hayPasarela ? (
             <p className="text-center text-xs text-fg-soft">
               Te estamos llevando a WhatsApp… si no abre, toca el botón verde.
             </p>
           ) : null}
-          {wompiUrl ? (
+          {hayPasarela ? (
             <button
               type="button"
               onClick={verifyPayment}

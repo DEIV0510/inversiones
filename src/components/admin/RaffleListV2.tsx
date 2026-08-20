@@ -39,6 +39,12 @@ export type AdminRaffleRow = {
   status: string;
   /** Si esta rifa cierra la compra por WhatsApp. */
   whatsappCheckout: boolean;
+  /**
+   * Si esta rifa ofrece el pago con pasarela. Es solo la decisión del dueño:
+   * para que cobre de verdad hace falta además que la tienda tenga pasarela
+   * configurada (`pasarelaLista`).
+   */
+  gatewayCheckout: boolean;
   progressPct: number;
   progressMode: string;
   pricePerNumber: number;
@@ -57,9 +63,10 @@ export default function RaffleListV2({
   raffles: AdminRaffleRow[];
   canManage: boolean;
   /**
-   * Si la tienda tiene pasarela de pago configurada. Lo decide el SERVIDOR
-   * (isWompiConfigured, en la página) y baja al navegador como un simple sí o
-   * no: las llaves de la pasarela no salen nunca del servidor.
+   * Si la tienda tiene ALGUNA pasarela de pago configurada (Wompi o Bold). Lo
+   * decide el SERVIDOR (hayPasarela, de src/lib/pasarela.ts, en la
+   * página) y baja al navegador como un simple sí o no: las llaves de la
+   * pasarela no salen nunca del servidor.
    */
   pasarelaLista: boolean;
 }) {
@@ -146,13 +153,15 @@ export default function RaffleListV2({
         const verTitulo = esPublica
           ? "Abrir la página del sorteo en el sitio"
           : "Solo tú puedes verla: el público todavía no";
-        // Rifa de cara al público, con WhatsApp apagado y sin pasarela: sus
-        // compradores llegan a la pantalla de pago sin un solo botón. Se marca
-        // en rojo para que se vea de un vistazo, sin entrar a editarla.
+        // Rifa de cara al público sin ninguna caja abierta: sus compradores
+        // llegan a la pantalla de pago sin un solo botón. Se marca en rojo
+        // para que se vea de un vistazo, sin entrar a editarla. La pasarela
+        // cuenta solo si el dueño la encendió en la rifa Y la tienda la tiene
+        // configurada: encendida sin configurar no cobra nada.
         const sinFormaDeCobro =
           ESTADOS_QUE_COBRAN.has(raffle.status) &&
           !raffle.whatsappCheckout &&
-          !pasarelaLista;
+          !(raffle.gatewayCheckout && pasarelaLista);
         return (
           <article
             key={raffle.id}

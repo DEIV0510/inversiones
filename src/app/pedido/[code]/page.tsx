@@ -4,6 +4,7 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 import BottomBar from "@/components/landing/BottomBar";
 import OrderView from "@/components/public/OrderView";
+import { boldAmountSupported, boldButtonConfig } from "@/lib/bold";
 import { prisma } from "@/lib/db";
 import {
   confirmOrderPayment,
@@ -13,6 +14,7 @@ import {
 } from "@/lib/engine/orders";
 import { formatNumber, formatNumbers } from "@/lib/numbers";
 import { orderWhatsAppMessage } from "@/lib/notifications";
+import { pasarelaDeRifa } from "@/lib/pasarela";
 import { getSettings } from "@/lib/settings";
 import {
   checkoutUrl,
@@ -24,8 +26,22 @@ import {
 
 export const dynamic = "force-dynamic";
 
+/**
+ * La descripción se escribe aquí a propósito. Sin ella esta página heredaba la
+ * del sitio entero ("…participa directamente por WhatsApp…"), así que en una
+ * rifa que cobra SOLO por pasarela WhatsApp seguía nombrado en el código de la
+ * pantalla de pago aunque el comprador no viera ni un botón. Una página de
+ * pedido es privada (noindex): no tiene por qué llevar el reclamo comercial de
+ * la portada, y menos uno que nombra un canal de cobro que esta rifa puede
+ * tener apagado.
+ */
 export const metadata: Metadata = {
   title: "Tu pedido",
+  description: "Detalle de tu pedido y estado de tu pago.",
+  openGraph: {
+    title: "Tu pedido",
+    description: "Detalle de tu pedido y estado de tu pago.",
+  },
   robots: { index: false, follow: false },
 };
 
@@ -34,10 +50,18 @@ export default async function PedidoPage({
   searchParams,
 }: {
   params: Promise<{ code: string }>;
-  searchParams: Promise<{ enviar?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { code } = await params;
-  const { enviar } = await searchParams;
+  const consulta = await searchParams;
+  const enviar = typeof consulta.enviar === "string" ? consulta.enviar : undefined;
+  // Bold devuelve al comprador con sus propios parámetros (bold-order-id,
+  // bold-tx-status…). Solo se usan para saber que VIENE DE VOLVER y avisarle
+  // de que estamos confirmando: el dinero lo decide el servidor con el
+  // webhook, nunca lo que traiga la dirección.
+  const volviendoDePasarela = Object.keys(consulta).some((clave) =>
+    clave.startsWith("bold-")
+  );
 
   let order = await prisma.order.findUnique({
     where: { code },
@@ -133,21 +157,58 @@ export default async function PedidoPage({
   };
 
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:5236";
+  const urlRetorno = `${siteUrl}/pedido/${order.code}`;
+
+  // ── Pago en línea ────────────────────────────────────────────────────
+  // Quién cobra lo decide la capa común de pasarelas: hacen falta las dos
+  // cosas, llaves configuradas en el entorno Y el interruptor `gatewayCheckout`
+  // encendido en esta rifa (el gemelo del de WhatsApp). Con las dos pasarelas
+  // configuradas manda Bold, que es la cuenta que el dueño tiene de verdad;
+  // nunca se pintan los dos botones a la vez.
+  const pasarela =
+    order.status === "PENDING" ? pasarelaDeRifa(order.raffle) : null;
+
+  // El monto SIEMPRE sale de la orden guardada, jamás del navegador. La firma
+  // de integridad la calcula el servidor en src/lib/bold.ts: al navegador solo
+  // bajan la llave de IDENTIDAD y ese hash.
+  const boldButton =
+    pasarela === "bold" && boldAmountSupported(order.total)
+      ? boldButtonConfig({
+          orderCode: order.code,
+          totalCop: order.total,
+          redirectUrl: urlRetorno,
+          // Es lo que el comprador lee en el checkout de Bold (2 a 100).
+          description: `Pedido ${order.code} - ${order.raffle.title}`,
+          customerName: order.participant.name,
+          customerPhone: order.participant.phone,
+          customerEmail: order.participant.email,
+        })
+      : null;
+
   const wompiUrl =
-    order.status === "PENDING" && isWompiConfigured()
+    pasarela === "wompi"
       ? checkoutUrl({
           orderCode: order.code,
           totalCop: order.total,
-          redirectUrl: `${siteUrl}/pedido/${order.code}`,
+          redirectUrl: urlRetorno,
           customerName: order.participant.name,
           customerPhone: order.participant.phone,
         })
       : null;
 
+  // Bold no cobra por debajo de $1.000 COP (ni por encima de sus topes). Sin
+  // botón y sin explicación, el comprador se quedaría mirando la pantalla.
+  const boldMontoNoSoportado = pasarela === "bold" && !boldButton;
+
   return (
     <>
       <Header
-        whatsappNumber={settings.whatsapp_number}
+        /* El número solo viaja al navegador si esta pantalla puede ofrecerlo
+           (misma regla que LookupForm en /boletas): con el cobro por WhatsApp
+           apagado no queda ni rastro suyo en el HTML de la página. */
+        whatsappNumber={
+          order.raffle.whatsappCheckout ? settings.whatsapp_number : ""
+        }
         companyName={settings.company_name}
         hideWhatsApp={!order.raffle.whatsappCheckout}
       />
@@ -177,13 +238,18 @@ export default async function PedidoPage({
           }}
           whatsappUrl={order.raffle.whatsappCheckout ? whatsappUrl : null}
           wompiUrl={wompiUrl}
+          boldButton={boldButton}
+          boldMontoNoSoportado={boldMontoNoSoportado}
+          volviendoDePasarela={volviendoDePasarela}
           contacto={contacto}
           autoEnviarWhatsApp={enviar === "1" && order.raffle.whatsappCheckout}
         />
       </main>
       <Footer settings={settings} hideWhatsApp={!order.raffle.whatsappCheckout} />
       <BottomBar
-        whatsappNumber={settings.whatsapp_number}
+        whatsappNumber={
+          order.raffle.whatsappCheckout ? settings.whatsapp_number : ""
+        }
         hideWhatsApp={!order.raffle.whatsappCheckout}
       />
     </>

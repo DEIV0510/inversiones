@@ -4,7 +4,7 @@ import { requirePanelAuth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { can } from "@/lib/rbac";
 import { progressPctOf } from "@/lib/public";
-import { isWompiConfigured } from "@/lib/wompi";
+import { hayPasarela } from "@/lib/pasarela";
 import RaffleListV2 from "@/components/admin/RaffleListV2";
 import { IconPlus } from "@/components/icons";
 
@@ -62,12 +62,13 @@ export default async function AdminRafflesPage() {
         ) : null}
       </div>
 
-      {/* Solo viaja el sí o el no: las llaves de la pasarela se quedan en el
-          servidor. Con esto el listado marca en rojo la rifa pública que no
-          tiene ninguna forma de cobrarle al comprador. */}
+      {/* Solo viaja el sí o el no (¿hay Wompi o Bold configurados?): las
+          llaves de la pasarela se quedan en el servidor. Con esto el listado
+          marca en rojo la rifa pública que no tiene ninguna forma de cobrarle
+          al comprador. */}
       <RaffleListV2
         canManage={canManage}
-        pasarelaLista={isWompiConfigured()}
+        pasarelaLista={hayPasarela()}
         raffles={raffles.map((r) => ({
           id: r.id,
           slug: r.slug,
@@ -76,6 +77,7 @@ export default async function AdminRafflesPage() {
           imageUrl: r.imageUrl,
           status: r.status,
           whatsappCheckout: r.whatsappCheckout,
+          gatewayCheckout: r.gatewayCheckout,
           progressPct: progressPctOf(r),
           progressMode: r.progressMode,
           pricePerNumber: r.pricePerNumber,

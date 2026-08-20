@@ -27,7 +27,9 @@ export default async function BoletasPage() {
   return (
     <>
       <Header
-        whatsappNumber={settings.whatsapp_number}
+        /* El número solo viaja al navegador si esta pantalla puede ofrecerlo,
+           igual que en LookupForm unas líneas más abajo. */
+        whatsappNumber={ocultarWhatsApp ? "" : settings.whatsapp_number}
         companyName={settings.company_name}
         hideWhatsApp={ocultarWhatsApp}
       />
@@ -64,7 +66,7 @@ export default async function BoletasPage() {
       </main>
       <Footer settings={settings} hideWhatsApp={ocultarWhatsApp} />
       <BottomBar
-        whatsappNumber={settings.whatsapp_number}
+        whatsappNumber={ocultarWhatsApp ? "" : settings.whatsapp_number}
         hideWhatsApp={ocultarWhatsApp}
         activa="boletas"
       />

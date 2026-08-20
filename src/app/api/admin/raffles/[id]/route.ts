@@ -13,7 +13,7 @@ import { digitsForTotal } from "@/lib/numbers";
 import { deleteImage } from "@/lib/media";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { rafflePatchSchema } from "@/lib/validation";
-import { isWompiConfigured } from "@/lib/wompi";
+import { hayPasarela, rifaTieneFormaDeCobro } from "@/lib/pasarela";
 
 export const runtime = "nodejs";
 
@@ -33,22 +33,34 @@ const ESTADOS_QUE_COBRAN = new Set(["ACTIVE", "COMING_SOON"]);
  * líneas y el mensaje es el mismo en las dos puertas.
  *
  * Devuelve el mensaje de bloqueo, o "" cuando la combinación es válida.
- * `status` y `whatsappCheckout` deben ser los del estado FINAL: lo que va a
- * quedar guardado, no solo lo que trae la petición.
+ * `status`, `whatsappCheckout` y `gatewayCheckout` deben ser los del estado
+ * FINAL: lo que va a quedar guardado, no solo lo que trae la petición.
+ *
+ * La pasarela solo cuenta como forma de cobro si se dan las DOS cosas: que el
+ * dueño la haya encendido en esta rifa y que el entorno tenga alguna pasarela
+ * configurada (Wompi o Bold). Encendida en una tienda sin llaves no le pone
+ * ningún botón al comprador, así que aquí vale lo mismo que apagada.
  */
 function errorSinFormaDeCobro(
   status: string,
-  whatsappCheckout: boolean
+  whatsappCheckout: boolean,
+  gatewayCheckout: boolean
 ): string {
   if (!ESTADOS_QUE_COBRAN.has(status)) return "";
-  if (whatsappCheckout) return "";
-  if (isWompiConfigured()) return "";
+  // La regla vive en la capa común: aquí no se vuelve a inventar quién cobra.
+  if (rifaTieneFormaDeCobro({ whatsappCheckout, gatewayCheckout })) return "";
+  // Solo para redactar el mensaje: cambia según si la tienda tiene llaves.
+  const pasarelaLista = hayPasarela();
   return (
     `No se puede dejar en «${statusMetaV2(status).label}» una rifa sin forma de cobrar: ` +
-    "el cobro por WhatsApp está apagado y esta tienda no tiene pasarela de pago " +
-    "configurada, así que el comprador apartaría sus números y en la pantalla de pago " +
-    "no le aparecería ningún botón. Hay dos salidas: enciende el cobro por WhatsApp, " +
-    "o déjala en «Borrador» hasta que configuren la pasarela de pago."
+    "el cobro por WhatsApp está apagado y " +
+    (pasarelaLista
+      ? "el cobro con pasarela de pago también"
+      : "esta tienda no tiene pasarela de pago configurada") +
+    ", así que el comprador apartaría sus números y en la pantalla de pago " +
+    "no le aparecería ningún botón. Hay dos salidas: enciende una de las dos " +
+    "formas de cobro, o déjala en «Borrador» " +
+    (pasarelaLista ? "hasta que decidas cómo cobrar." : "hasta que configuren la pasarela de pago.")
   );
 }
 
@@ -154,12 +166,14 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 
   // Nada de publicar una rifa que no puede cobrar. Lo que se juzga es el
   // estado FINAL, no la petición: un PATCH que solo apaga el WhatsApp no trae
-  // el estado, y uno que solo cambia el estado no trae el WhatsApp. Cualquiera
-  // de los dos, por separado, deja la rifa vendiendo sin caja. Por eso cada
-  // campo se toma de la petición si viene y de lo guardado si no.
+  // el estado, uno que solo cambia el estado no trae el WhatsApp y uno que
+  // solo apaga la pasarela no trae ninguno de los otros dos. Cualquiera de
+  // ellos, por separado, deja la rifa vendiendo sin caja. Por eso cada campo
+  // se toma de la petición si viene y de lo guardado si no.
   const sinCobro = errorSinFormaDeCobro(
     parsed.data.status ?? existing.status,
-    parsed.data.whatsappCheckout ?? existing.whatsappCheckout
+    parsed.data.whatsappCheckout ?? existing.whatsappCheckout,
+    parsed.data.gatewayCheckout ?? existing.gatewayCheckout
   );
   if (sinCobro) {
     return NextResponse.json({ error: sinCobro }, { status: 422 });

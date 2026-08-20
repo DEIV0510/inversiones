@@ -114,6 +114,12 @@ const raffleFields = z.object({
     .optional(),
   selectionMode: z.enum(["MANUAL", "RANDOM", "BOTH"]).default("BOTH"),
   whatsappCheckout: z.boolean().default(true),
+  // Interruptor gemelo del de WhatsApp: si esta rifa ofrece el pago automático
+  // por pasarela. Nace encendido porque una rifa nueva en una tienda con
+  // pasarela debe poder cobrar sola. Si el entorno no tiene pasarela
+  // configurada, este sí no ofrece ningún botón: quien lo decide es el
+  // servidor (src/lib/pasarela.ts), nunca lo que mande el navegador.
+  gatewayCheckout: z.boolean().default(true),
   // Interruptores de la ficha del sorteo: el premio y la fecha suelen ir ya
   // dichos en el titular, así que por defecto no se repiten en la tarjeta.
   // Apagarlos NO borra el dato: sigue guardado y se usa en otras pantallas.
@@ -216,22 +222,64 @@ export const raffleSchema = raffleFields.superRefine((v, ctx) => {
   }
 });
 
-export const rafflePatchSchema = raffleFields.partial().superRefine((v, ctx) => {
-  // El PATCH es parcial, pero las dos cifras llevan valor por defecto, así que
-  // en la práctica siempre llegan (1 y 20 si el panel no las manda). La
-  // comprobación de nulos es solo por si eso dejara de ser así.
-  if (
-    v.minNumbersPerOrder != null &&
-    v.maxNumbersPerOrder != null &&
-    v.minNumbersPerOrder > v.maxNumbersPerOrder
-  ) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["minNumbersPerOrder"],
-      message: MSG_MINIMO_MAYOR_QUE_MAXIMO,
-    });
+/**
+ * Los mismos campos, pero SIN valores por defecto y todos opcionales: es lo
+ * que necesita un PATCH de verdad.
+ *
+ * `.partial()` a secas NO sirve aquí. Hace opcional cada campo, sí, pero deja
+ * intacto su `.default(...)`, y un `.default()` se dispara justo cuando el
+ * campo NO viene. Resultado: un PATCH de `{status}` salía del validador con
+ * `whatsappCheckout: true`, `gatewayCheckout: true`, `gallery: []`,
+ * `ticketPacks: [los de fábrica]`, `prizes: []`… y todo eso se escribía en la
+ * base pisando lo que el dueño tenía guardado. Dos consecuencias reales:
+ *
+ *  1. Publicar una rifa con un PATCH de solo `{status:"ACTIVE"}` volvía a
+ *     encender los dos interruptores de cobro, así que el 422 que protege de
+ *     dejar una rifa vendiendo sin caja no llegaba a saltar nunca.
+ *  2. Cualquier cambio parcial le borraba al dueño la galería, los paquetes,
+ *     los premios y sus decisiones de cobro sin avisar.
+ *
+ * Quitando el `.default` antes de hacer opcional el campo, lo que no viene
+ * llega como `undefined` — que es exactamente lo que el route handler espera
+ * para escribir solo lo enviado y leer el resto de lo ya guardado.
+ */
+type SinValorPorDefecto<T extends z.ZodRawShape> = {
+  [K in keyof T]: z.ZodOptional<T[K] extends z.ZodDefault<infer Interno> ? Interno : T[K]>;
+};
+
+function quitarValoresPorDefecto<T extends z.ZodRawShape>(forma: T): SinValorPorDefecto<T> {
+  const salida: Record<string, z.ZodType> = {};
+  for (const [clave, campo] of Object.entries(forma)) {
+    // `ZodRawShape` está tipado con la interfaz mínima de zod, que no declara
+    // `.optional()`; el tipo preciso lo pone `SinValorPorDefecto` al salir.
+    const original = campo as z.ZodType;
+    // `.unwrap()` devuelve el esquema de dentro con sus validaciones intactas
+    // (formato, mínimos, refinamientos): solo se pierde el valor de relleno.
+    const base =
+      original instanceof z.ZodDefault ? (original.unwrap() as z.ZodType) : original;
+    salida[clave] = base.optional();
   }
-});
+  return salida as SinValorPorDefecto<T>;
+}
+
+export const rafflePatchSchema = z
+  .object(quitarValoresPorDefecto(raffleFields.shape))
+  .superRefine((v, ctx) => {
+    // En un PATCH puede llegar solo una de las dos cifras: la coherencia se
+    // comprueba únicamente cuando vienen ambas (si falta una, el route handler
+    // la toma de lo guardado y ahí ya estaba validada).
+    if (
+      v.minNumbersPerOrder != null &&
+      v.maxNumbersPerOrder != null &&
+      v.minNumbersPerOrder > v.maxNumbersPerOrder
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["minNumbersPerOrder"],
+        message: MSG_MINIMO_MAYOR_QUE_MAXIMO,
+      });
+    }
+  });
 
 // ============================================================
 // ÓRDENES (público)

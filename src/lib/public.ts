@@ -162,6 +162,13 @@ export type PublicRaffle = {
   selectionMode: string;
   /** Si esta rifa cierra la compra por WhatsApp. */
   whatsappCheckout: boolean;
+  /**
+   * Si esta rifa ofrece el pago automático por pasarela. Es solo la decisión
+   * del dueño: que de verdad le aparezca el botón al comprador depende además
+   * de que el entorno tenga pasarela configurada, y eso lo comprueba el
+   * servidor (src/lib/pasarela.ts). Aquí no viaja ninguna llave.
+   */
+  gatewayCheckout: boolean;
   /** Si la ficha del sorteo repite la fila del premio. */
   showPrize: boolean;
   /** Si la ficha del sorteo repite la fila de la fecha. */
@@ -231,6 +238,7 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     terms: raffle.terms,
     selectionMode: raffle.selectionMode,
     whatsappCheckout: raffle.whatsappCheckout,
+    gatewayCheckout: raffle.gatewayCheckout,
     showPrize: raffle.showPrize,
     showDrawDate: raffle.showDrawDate,
     ticketPacks: parseTicketPacks(raffle.ticketPacksJson),

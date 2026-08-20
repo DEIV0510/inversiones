@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { requirePanelAuth } from "@/lib/auth";
-import { isWompiConfigured } from "@/lib/wompi";
+import { hayPasarela } from "@/lib/pasarela";
 import RaffleFormV2 from "@/components/admin/RaffleFormV2";
 
 export const metadata: Metadata = { title: "Nueva rifa" };
@@ -19,10 +19,12 @@ export default async function NuevaRifaPage() {
           millones de números sin cargar nada pesado.
         </p>
       </div>
-      {/* Solo viaja el sí o el no: las llaves de la pasarela se quedan en el
-          servidor. Con esto el formulario puede frenar una rifa que se
-          publicaría sin ninguna forma de cobrarle al comprador. */}
-      <RaffleFormV2 mode="create" pasarelaLista={isWompiConfigured()} />
+      {/* Solo viaja el sí o el no (¿hay Wompi o Bold configurados?): las
+          llaves de la pasarela se quedan en el servidor. Con esto el
+          formulario sabe si puede ofrecer el interruptor de la pasarela y
+          puede frenar una rifa que se publicaría sin ninguna forma de
+          cobrarle al comprador. */}
+      <RaffleFormV2 mode="create" pasarelaLista={hayPasarela()} />
     </div>
   );
 }

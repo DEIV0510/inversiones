@@ -118,7 +118,9 @@ export default async function SorteoPage({
   return (
     <>
       <Header
-        whatsappNumber={settings.whatsapp_number}
+        /* El número solo viaja al navegador si esta pantalla puede ofrecerlo
+           (misma regla que LookupForm en /boletas). */
+        whatsappNumber={raffle.whatsappCheckout ? settings.whatsapp_number : ""}
         companyName={settings.company_name}
         hideWhatsApp={!raffle.whatsappCheckout}
       />
@@ -389,7 +391,7 @@ export default async function SorteoPage({
       <Footer settings={settings} hideWhatsApp={!raffle.whatsappCheckout} />
       {/* Si esta rifa no cierra por WhatsApp, no se le muestra al cliente. */}
       <BottomBar
-        whatsappNumber={settings.whatsapp_number}
+        whatsappNumber={raffle.whatsappCheckout ? settings.whatsapp_number : ""}
         hideWhatsApp={!raffle.whatsappCheckout}
         activa="sorteos"
       />

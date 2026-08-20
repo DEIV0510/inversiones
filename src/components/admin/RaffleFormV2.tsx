@@ -46,6 +46,7 @@ export type RaffleFormInitial = {
   digits: number;
   selectionMode: string;
   whatsappCheckout: boolean;
+  gatewayCheckout: boolean;
   showPrize: boolean;
   showDrawDate: boolean;
   ticketPacks: RaffleTicketPackInitial[];
@@ -113,24 +114,41 @@ function SectionTitle({
 
 /* Interruptor de una línea: etiqueta + ayuda a la izquierda y palanca fucsia a
    la derecha. Todos los del formulario se ven exactamente igual porque salen
-   de aquí. El área que responde al dedo es de 44px de alto. */
+   de aquí. El área que responde al dedo es de 44px de alto.
+
+   `disabled` es para el interruptor que hoy no puede hacer nada (la pasarela
+   sin configurar): se ve apagado, no responde al dedo y se atenúa entero,
+   pero el texto de ayuda sigue legible porque justo ahí está la explicación
+   de por qué no se puede encender. */
 function SwitchRow({
   label,
   help,
   checked,
   ariaLabel,
   onToggle,
+  disabled = false,
 }: {
   label: string;
   help: string;
   checked: boolean;
   ariaLabel: string;
   onToggle: () => void;
+  disabled?: boolean;
 }) {
   return (
-    <label className="flex min-h-11 cursor-pointer select-none items-center justify-between gap-3 rounded-xl border border-line bg-well px-4 py-3">
+    <label
+      className={`flex min-h-11 select-none items-center justify-between gap-3 rounded-xl border border-line bg-well px-4 py-3 ${
+        disabled ? "cursor-not-allowed" : "cursor-pointer"
+      }`}
+    >
       <span className="min-w-0">
-        <span className="block text-sm font-semibold text-fg">{label}</span>
+        <span
+          className={`block text-sm font-semibold ${
+            disabled ? "text-fg-soft" : "text-fg"
+          }`}
+        >
+          {label}
+        </span>
         <span className={helpCls}>{help}</span>
       </span>
       <button
@@ -138,8 +156,12 @@ function SwitchRow({
         role="switch"
         aria-checked={checked}
         aria-label={ariaLabel}
+        aria-disabled={disabled}
+        disabled={disabled}
         onClick={onToggle}
-        className="flex h-11 w-12 shrink-0 items-center justify-center"
+        className={`flex h-11 w-12 shrink-0 items-center justify-center ${
+          disabled ? "cursor-not-allowed opacity-45" : ""
+        }`}
       >
         <span
           className={`relative block h-7 w-12 rounded-full transition-colors ${
@@ -515,10 +537,10 @@ export default function RaffleFormV2({
   mode: "create" | "edit";
   initial?: RaffleFormInitial;
   /**
-   * Si la tienda tiene pasarela de pago configurada. Lo decide el SERVIDOR
-   * (isWompiConfigured, en la página que monta este formulario) y baja al
-   * navegador convertido en un simple sí o no: las llaves de la pasarela no
-   * salen nunca del servidor.
+   * Si la tienda tiene ALGUNA pasarela de pago configurada (Wompi o Bold). Lo
+   * decide el SERVIDOR (hayPasarela, de src/lib/pasarela.ts, en la
+   * página que monta este formulario) y baja al navegador convertido en un
+   * simple sí o no: las llaves de la pasarela no salen nunca del servidor.
    */
   pasarelaLista: boolean;
 }) {
@@ -561,6 +583,14 @@ export default function RaffleFormV2({
   );
   const [whatsappCheckout, setWhatsappCheckout] = useState(
     initial?.whatsappCheckout ?? true
+  );
+  /* Lo que el dueño eligió para el cobro con pasarela. Se guarda tal cual
+     aunque hoy el entorno no tenga pasarela: apagarlo por su cuenta le
+     borraría la decisión al dueño y el día que se configure la pasarela
+     tendría que volver a encenderla rifa por rifa. Lo que de verdad va a
+     pasar es `cobraPorPasarela`, unas líneas más abajo. */
+  const [gatewayCheckout, setGatewayCheckout] = useState(
+    initial?.gatewayCheckout ?? true
   );
   // Filas opcionales de la ficha del sorteo. El premio nace apagado porque el
   // titular ya lo dice y repetirlo abajo recarga la tarjeta; la fecha nace
@@ -691,24 +721,43 @@ export default function RaffleFormV2({
             : "";
 
   /**
+   * ¿Esta rifa va a cobrar de verdad con la pasarela? Hacen falta las dos
+   * cosas: que el dueño la haya encendido AQUÍ y que el entorno tenga una
+   * pasarela configurada. Encendida en una tienda sin pasarela no ofrece
+   * ningún botón, así que para todo lo que sigue cuenta como apagada.
+   */
+  const cobraPorPasarela = gatewayCheckout && pasarelaLista;
+  /**
    * Sin WhatsApp y sin pasarela no queda NINGUNA forma de cobrar: el comprador
    * aparta sus números, llega a la pantalla «Realiza el pago» y ahí no le sale
    * ni un solo botón. Le pasó de verdad al dueño con sus dos rifas activas.
+   * Ahora hay dos maneras de caer en ese hueco: que no haya pasarela en la
+   * tienda, o que la haya y el dueño la haya apagado en esta rifa.
    */
-  const sinFormaDeCobro = !whatsappCheckout && !pasarelaLista;
+  const sinFormaDeCobro = !whatsappCheckout && !cobraPorPasarela;
   /* El estado del desplegable (lo que va a quedar guardado), no el de la base. */
   const estadoCobra = ESTADOS_QUE_COBRAN.has(status);
+  /* La salida corta cambia según por qué se quedó sin caja: si la tienda tiene
+     pasarela, basta con encenderla en esta rifa; si no la tiene, hay que
+     pedirle al desarrollador que la configure. */
+  const salidaPasarela = pasarelaLista
+    ? "enciende el cobro con pasarela de pago"
+    : "pide que configuren la pasarela de pago";
   /**
    * Se FRENA el guardado, no se pide confirmación. Un diálogo de «¿seguro?» es
    * justo lo que el dueño acepta sin leer cuando va de afán, y el precio de
    * equivocarse aquí es una rifa vendiendo sin poder cobrar. Además no hay
    * ningún caso legítimo de rifa pública sin forma de pago, así que no hay nada
-   * que confirmar: se sale encendiendo WhatsApp, dejándola en borrador o
-   * configurando la pasarela, y el aviso lleva los dos primeros a un toque.
+   * que confirmar: se sale encendiendo WhatsApp, encendiendo la pasarela o
+   * dejándola en borrador, y el aviso lleva las tres salidas a un toque.
    */
   const errorCobro =
     sinFormaDeCobro && estadoCobra
-      ? `No se puede publicar en «${STATUS_META_V2[status].label}» una rifa sin forma de cobrar: WhatsApp está apagado y no hay pasarela de pago configurada. Enciende WhatsApp, déjala en borrador o pide que configuren la pasarela.`
+      ? `No se puede publicar en «${STATUS_META_V2[status].label}» una rifa sin forma de cobrar: WhatsApp está apagado y ${
+          pasarelaLista
+            ? "el cobro con pasarela también"
+            : "esta tienda no tiene pasarela de pago configurada"
+        }. Enciende WhatsApp, ${salidaPasarela} o déjala en borrador.`
       : "";
 
   /* Apartados de números premiados, revisados en cada render (sin estado
@@ -854,6 +903,10 @@ export default function RaffleFormV2({
       digits,
       selectionMode,
       whatsappCheckout,
+      /* Se manda la decisión del dueño, no el efecto. Si hoy no hay pasarela
+         en la tienda, el servidor ya sabe que este sí no cobra nada; el día
+         que la configuren, la rifa queda como el dueño la dejó. */
+      gatewayCheckout,
       showPrize,
       showDrawDate,
       /* Los paquetes van en la forma nueva: la cantidad siempre, y la etiqueta
@@ -1431,8 +1484,34 @@ export default function RaffleFormV2({
           }
         />
 
-        {/* Aviso rojo pegado al interruptor: sin WhatsApp y sin pasarela, la
-            pantalla de pago del comprador se queda literalmente vacía. Sale
+        {/* Interruptor gemelo del de WhatsApp: la otra caja de la rifa. El
+            dueño puede dejarla cobrando solo por WhatsApp, solo por pasarela o
+            por las dos. Si la tienda no tiene pasarela configurada sale
+            apagado y sin responder al dedo: encenderlo ahí no le pondría
+            ningún botón al comprador, así que prometerlo sería mentirle. */}
+        <SwitchRow
+          label="Cobrar con pasarela de pago"
+          checked={cobraPorPasarela}
+          disabled={!pasarelaLista}
+          onToggle={() => setGatewayCheckout((v) => !v)}
+          ariaLabel={
+            !pasarelaLista
+              ? "No disponible: esta tienda todavía no tiene pasarela de pago configurada"
+              : cobraPorPasarela
+                ? "Desactivar el cobro con pasarela de pago en esta rifa"
+                : "Activar el cobro con pasarela de pago en esta rifa"
+          }
+          help={
+            !pasarelaLista
+              ? "Todavía no se puede usar: falta configurar la pasarela de pago de la tienda. Pídeselo a tu desarrollador (son unas llaves que se guardan en el servidor, nunca en el celular). Mientras tanto esta rifa cobra por WhatsApp."
+              : cobraPorPasarela
+                ? "El cliente paga en línea desde la misma página y, en cuanto el pago queda aprobado, el sistema le entrega los números solo, sin que tú hagas nada."
+                : "Esta rifa no le mostrará al cliente el botón de pagar en línea, aunque la tienda tenga la pasarela lista. Solo cobrará por lo que dejes encendido arriba."
+          }
+        />
+
+        {/* Aviso rojo pegado a los interruptores: sin WhatsApp y sin pasarela,
+            la pantalla de pago del comprador se queda literalmente vacía. Sale
             siempre que se apaga (aunque la rifa esté en borrador) para que el
             dueño lo lea en el momento exacto en que toca la palanca. */}
         {sinFormaDeCobro ? (
@@ -1441,15 +1520,28 @@ export default function RaffleFormV2({
               Esta rifa se queda sin forma de cobrar
             </p>
             <p className="mt-2 text-xs font-semibold leading-relaxed">
-              Acabas de apagar WhatsApp y esta tienda no tiene pasarela de pago
-              configurada. Tus compradores van a apartar sus números, van a
-              llegar a la pantalla «Realiza el pago»… y ahí no les va a aparecer
-              ni un solo botón para pagarte. Así no se debe publicar.
+              {pasarelaLista
+                ? "Apagaste las dos cajas de esta rifa: ni WhatsApp ni pasarela de pago."
+                : "Acabaste de apagar WhatsApp y esta tienda no tiene pasarela de pago configurada."}{" "}
+              Tus compradores van a apartar sus números, van a llegar a la
+              pantalla «Realiza el pago»… y ahí no les va a aparecer ni un solo
+              botón para pagarte. Así no se debe publicar.
             </p>
             <p className="mt-2 text-xs font-semibold leading-relaxed">
-              Tienes dos salidas: <strong>enciende WhatsApp</strong> otra vez, o
-              pídele a tu desarrollador que <strong>configure la pasarela de
-              pago</strong>. Mientras tanto, déjala en borrador.
+              {pasarelaLista ? (
+                <>
+                  Sales de esto encendiendo <strong>una de las dos</strong>:
+                  WhatsApp o la pasarela de pago. Mientras tanto, déjala en
+                  borrador.
+                </>
+              ) : (
+                <>
+                  Tienes dos salidas: <strong>enciende WhatsApp</strong> otra
+                  vez, o pídele a tu desarrollador que{" "}
+                  <strong>configure la pasarela de pago</strong>. Mientras
+                  tanto, déjala en borrador.
+                </>
+              )}
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -1460,6 +1552,19 @@ export default function RaffleFormV2({
               >
                 Encender WhatsApp
               </button>
+              {/* La pasarela solo se ofrece a un toque cuando de verdad se
+                  puede encender; si la tienda no la tiene configurada, ese
+                  botón no arreglaría nada. */}
+              {pasarelaLista ? (
+                <button
+                  type="button"
+                  onClick={() => setGatewayCheckout(true)}
+                  aria-label="Encender el cobro con pasarela de pago en esta rifa"
+                  className={dangerBtnCls}
+                >
+                  Encender pasarela
+                </button>
+              ) : null}
               {estadoCobra ? (
                 <button
                   type="button"
