@@ -34,6 +34,10 @@ export async function GET(req: NextRequest) {
     // Si esto no es 0, el techo del barrido se quedó corto y hay pedidos sin
     // revisar: se dice, no se calla.
     boldSinRevisar: bold.sinRevisar,
+    // Pedidos vencidos que SÍ tienen pago aprobado: dinero cobrado sin
+    // entregar números. No se confirman solos (sus números pueden estar ya
+    // vendidos); van aquí para revisarlos a mano.
+    boldVencidosConPago: bold.vencidosConPago,
     expiredOrders: expired,
   });
 }

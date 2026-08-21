@@ -88,8 +88,9 @@ pueden proponer otro.
 | `BOLD_SECRET_KEY` en Vercel (Production, Sensitive) | ✅ cargada por el dueño |
 | Despliegue con las llaves activas | ✅ |
 | Botón renderizando en `/pedido/<código>` | ✅ verificado |
-| Webhook registrado en el panel de Bold | ⬜ **pendiente: lo registra el dueño** |
+| Webhook registrado en el panel de Bold | ✅ (21/08/2026, producción, 4 eventos) |
 | Consulta de comprobante como respaldo | ✅ (2026-08-21) |
+| Aviso de vencidos con pago aprobado | ✅ (2026-08-21) |
 | `RESEND_API_KEY` para el correo al comprador | ⬜ **falta: sin ella no sale ningún correo** |
 
 Mientras el webhook no esté registrado, el cobro SÍ entra a la cuenta de Bold

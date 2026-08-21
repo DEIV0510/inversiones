@@ -36,9 +36,17 @@ export async function barrerPagosBoldPendientes(opciones?: {
   confirmados: number;
   /** Pedidos que quedaron sin revisar por el techo (0 = se revisaron todos). */
   sinRevisar: number;
+  /**
+   * Pedidos YA VENCIDOS que sin embargo tienen un pago aprobado en Bold.
+   * Son el caso más feo que existe aquí: el comprador pagó de verdad y se
+   * quedó sin números. NO se confirman solos porque sus números pudieron
+   * venderse a otro; hay que mirarlos a mano y devolver el dinero o
+   * reasignar. Se listan para que no se pierdan en silencio.
+   */
+  vencidosConPago: string[];
 }> {
   if (!isBoldConfigured()) {
-    return { revisados: 0, confirmados: 0, sinRevisar: 0 };
+    return { revisados: 0, confirmados: 0, sinRevisar: 0, vencidosConPago: [] };
   }
 
   const max = opciones?.max ?? 200;
@@ -84,9 +92,35 @@ export async function barrerPagosBoldPendientes(opciones?: {
     }
   }
 
+  // ── Vencidos que en realidad SÍ se pagaron ───────────────────────────
+  // La reserva dura 12 h y este barrido corre una vez al día (tope del plan
+  // Hobby de Vercel), así que un pedido puede vencerse antes de que lleguemos
+  // a mirarlo. Si además falló el webhook, el comprador pagó y se quedó sin
+  // números: es dinero cobrado sin entregar nada. No se confirma solo — sus
+  // números pueden estar ya vendidos a otra persona — pero tampoco se calla.
+  const vencidos = await prisma.order.findMany({
+    where: { status: "EXPIRED", createdAt: { gte: desde } },
+    select: { id: true, code: true, total: true },
+    orderBy: { createdAt: "desc" },
+    take: max,
+  });
+
+  const vencidosConPago: string[] = [];
+  for (const pedido of vencidos) {
+    const voucher = await fetchBoldTransaction(boldOrderId(pedido.code));
+    if (!boldVoucherConfirmaOrden(voucher, pedido)) continue;
+    vencidosConPago.push(pedido.code);
+    console.warn(
+      `[barrido-bold] ATENCIÓN: el pedido ${pedido.code} está VENCIDO pero ` +
+        `tiene un pago APROBADO en Bold por $${pedido.total}. El comprador ` +
+        `pagó y no tiene números. Revisar a mano.`
+    );
+  }
+
   return {
     revisados: pendientes.length,
     confirmados,
+    vencidosConPago,
     sinRevisar: Math.max(0, total - pendientes.length),
   };
 }
