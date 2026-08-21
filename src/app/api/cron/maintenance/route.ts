@@ -1,14 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { barrerPagosBoldPendientes } from "@/lib/engine/barrido-bold";
 import { expireOverdueOrders } from "@/lib/engine/orders";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * Mantenimiento programado (Vercel Cron): marca órdenes vencidas y libera
- * sus números. La corrección del sistema NO depende de este cron — la
- * liberación perezosa en el motor cubre cualquier intervalo — pero mantiene
- * los reportes limpios. Protegido con CRON_SECRET.
+ * Mantenimiento programado (Vercel Cron). Hace dos cosas:
+ *
+ * 1. RESCATA pagos de Bold que se quedaron pendientes. Va PRIMERO a
+ *    propósito: si un pedido se pagó de verdad pero el webhook no llegó,
+ *    tiene que confirmarse ANTES de que el paso siguiente lo dé por vencido
+ *    y le suelte los números a otro comprador.
+ * 2. Marca órdenes vencidas y libera sus números. La corrección del sistema
+ *    NO depende de este paso — la liberación perezosa del motor cubre
+ *    cualquier intervalo — pero mantiene los reportes limpios.
+ *
+ * Protegido con CRON_SECRET.
  */
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
@@ -17,6 +25,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
+  const bold = await barrerPagosBoldPendientes();
   const expired = await expireOverdueOrders();
-  return NextResponse.json({ ok: true, expiredOrders: expired });
+  return NextResponse.json({
+    ok: true,
+    boldRescatados: bold.confirmados,
+    boldRevisados: bold.revisados,
+    // Si esto no es 0, el techo del barrido se quedó corto y hay pedidos sin
+    // revisar: se dice, no se calla.
+    boldSinRevisar: bold.sinRevisar,
+    expiredOrders: expired,
+  });
 }

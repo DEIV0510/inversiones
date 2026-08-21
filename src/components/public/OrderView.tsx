@@ -1004,6 +1004,7 @@ export default function OrderView({
   volviendoDePasarela = false,
   contacto,
   autoEnviarWhatsApp = false,
+  avisaPorCorreo = false,
 }: {
   order: OrderData;
   /** null cuando la rifa está configurada sin WhatsApp. */
@@ -1030,6 +1031,14 @@ export default function OrderView({
   /** Datos del negocio para el respaldo cuando no hay forma de pagar. */
   contacto: ContactoNegocio;
   autoEnviarWhatsApp?: boolean;
+  /**
+   * ¿A ESTE pedido de verdad le va a llegar un correo con sus números al
+   * confirmarse el pago? Hacen falta las tres cosas: el comprador dejó su
+   * dirección, el envío está encendido en Configuración y el servidor tiene
+   * la clave del proveedor. Lo decide el servidor y solo sirve para no
+   * prometer en pantalla un correo que nunca va a salir.
+   */
+  avisaPorCorreo?: boolean;
 }) {
   const router = useRouter();
   const yaEnviado = useRef(false);
@@ -1398,6 +1407,13 @@ export default function OrderView({
   if (order.status === "PENDING") {
     return (
       <div className="flex flex-col gap-5">
+        {/* PANTALLA DELIBERADAMENTE CORTA. El dueño la probó con compradores
+            reales y todos se enredaban: decía demasiadas cosas. Aquí solo
+            queda lo que hace falta para pagar — título, cuánto tiempo le
+            guardamos los números y qué va a pasar, el total, y los botones.
+            La boleta con los números tapados, el desglose por unidad y el
+            código de participación se quitaron a propósito: no ayudaban a
+            pagar y era justo donde la gente se perdía. */}
         <div className="text-center">
           <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-brand-light">
             Paso 3 de 3
@@ -1405,17 +1421,6 @@ export default function OrderView({
           <h1 className="mt-1.5 font-display text-3xl font-black leading-tight text-fg sm:text-4xl">
             Realiza el pago
           </h1>
-          {/* Se le dice de una vez lo que va a pasar: no perdió nada, sus
-              números ya son suyos y los verá al confirmarse el pago.
-              NO se promete el correo: solo sale si el comprador dejó su
-              dirección, el envío está encendido y el servidor tiene la clave
-              del proveedor. Prometerlo aquí sin saberlo era prometer algo que
-              en muchos pedidos no llega. Esta pantalla, en cambio, siempre
-              enseña los números al confirmarse el pago. */}
-          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">
-            Tus números ya están apartados a tu nombre. Los verás aquí en
-            cuanto confirmemos tu pago.
-          </p>
         </div>
 
         {/* Vuelta de la pasarela. Solo dice que estamos comprobando: el
@@ -1434,54 +1439,60 @@ export default function OrderView({
           </div>
         ) : null}
 
-        {order.reservedUntil ? (
-          <div className="neon-card flex items-center justify-between gap-3 rounded-2xl bg-card px-5 py-4">
-            {/* El reloj se nombra por lo que de verdad hace: guardar los
-                números mientras el comprador paga. Nada de "reserva". */}
-            <span className="flex items-center gap-2.5 text-sm font-semibold text-fg-soft">
-              <IconClock width={20} height={20} className="text-brand" />
-              Te guardamos tus números
-            </span>
-            <Countdown
-              until={order.reservedUntil}
-              onExpired={() => router.refresh()}
-            />
-          </div>
-        ) : null}
+        {/* UN SOLO APARTADO con las dos cosas que el comprador necesita: qué
+            va a pasar (y cuánto tiempo le queda) y cuánto tiene que pagar.
+            Antes eran dos tarjetas y la información se repetía tres veces en
+            la pantalla; con compradores reales fue justo donde se atascaron.
 
-        {/* Boleta con los números tapados: se revelan al confirmar el pago */}
-        <BoletaCard
-          title={order.raffleTitle}
-          numbers={[]}
-          cantidad={order.quantity}
-          cifras={cifras}
-          estado="Pendiente de pago"
-          fecha={dateShortFmt.format(new Date(order.createdAt))}
-          tono="espera"
-          nota="Tus números se revelan al confirmar el pago"
-          oculta
-        />
-
-        <div className="rounded-2xl border border-line bg-card p-5">
-          {/* Cuántos números son y cuánto cuestan: lo único que se le sigue
-              mostrando del detalle mientras no haya pagado. */}
-          <div className="flex items-center justify-between gap-3 text-sm">
-            <span className="text-fg-faint">
-              {order.quantity} × {formatCop(order.unitPrice)}
-            </span>
-            <span className="font-semibold text-fg">
-              {order.quantity === 1 ? "1 número" : `${order.quantity} números`}
-            </span>
+            Lo del correo cambia según la verdad de ESTE pedido: solo se
+            nombra si la plataforma puede enviarlo y él dejó su dirección.
+            Prometer un correo que no va a salir es peor que no mencionarlo. */}
+        <div className="neon-card rounded-2xl bg-card p-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <p className="flex items-start gap-2.5 text-sm leading-relaxed text-fg-soft">
+              <IconClock
+                width={20}
+                height={20}
+                className="mt-0.5 shrink-0 text-brand"
+              />
+              <span>
+                {avisaPorCorreo ? (
+                  <>
+                    Tus números llegarán a{" "}
+                    <strong className="font-bold text-fg">tu correo</strong> y
+                    los podrás consultar en{" "}
+                    <strong className="font-bold text-brand-light">
+                      Mis boletas
+                    </strong>{" "}
+                    en cuanto se confirme tu pago.
+                  </>
+                ) : (
+                  <>
+                    Podrás ver tus números aquí y en{" "}
+                    <strong className="font-bold text-brand-light">
+                      Mis boletas
+                    </strong>{" "}
+                    en cuanto se confirme tu pago.
+                  </>
+                )}
+              </span>
+            </p>
+            {order.reservedUntil ? (
+              <Countdown
+                until={order.reservedUntil}
+                onExpired={() => router.refresh()}
+              />
+            ) : null}
           </div>
-          <div className="mt-3 flex items-center justify-between gap-3 border-t border-line pt-3">
+
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
             <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
               Total a pagar
             </span>
-            <span className="font-display text-2xl font-black tabular-nums text-brand">
+            <span className="font-display text-3xl font-black tabular-nums text-brand">
               {formatCop(order.total)}
             </span>
           </div>
-          <div className="mt-4">{codigoBox}</div>
         </div>
 
         <div className="flex flex-col gap-3">
@@ -1562,13 +1573,11 @@ export default function OrderView({
           ) : null}
         </div>
 
-        {/* Con el respaldo en pantalla esta línea sobra: allí ya se le dice
-            que guarde su código y para qué le sirve. */}
-        {sinFormaDePago ? null : (
-          <p className="text-center text-xs leading-relaxed text-fg-faint">
-            Guarda tu código de participación para consultar tus boletas.
-          </p>
-        )}
+        {/* Sin código en pantalla, la línea que pedía guardarlo ya no aplica.
+            El comprador encuentra sus boletas con su celular o su cédula, que
+            ahora son obligatorios en el checkout. El respaldo de contacto sí
+            se mantiene: es la salida cuando la rifa se quedó sin forma de
+            cobrar y el comprador no tiene a dónde ir. */}
       </div>
     );
   }

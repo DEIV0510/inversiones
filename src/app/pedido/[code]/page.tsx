@@ -6,6 +6,7 @@ import BottomBar from "@/components/landing/BottomBar";
 import OrderView from "@/components/public/OrderView";
 import { boldAmountSupported, boldButtonConfig } from "@/lib/bold";
 import { prisma } from "@/lib/db";
+import { leCorreoAlConfirmar } from "@/lib/email";
 import {
   confirmOrderPayment,
   expireOverdueOrders,
@@ -200,6 +201,11 @@ export default async function PedidoPage({
   // botón y sin explicación, el comprador se quedaría mirando la pantalla.
   const boldMontoNoSoportado = pasarela === "bold" && !boldButton;
 
+  // ¿Le prometemos el correo en la pantalla de pago? La regla completa vive
+  // en src/lib/email.ts, que es quien de verdad envía: así la pantalla no
+  // puede prometer un correo que el envío luego no manda.
+  const avisaPorCorreo = await leCorreoAlConfirmar(order.participant.email);
+
   return (
     <>
       <Header
@@ -243,6 +249,7 @@ export default async function PedidoPage({
           volviendoDePasarela={volviendoDePasarela}
           contacto={contacto}
           autoEnviarWhatsApp={enviar === "1" && order.raffle.whatsappCheckout}
+          avisaPorCorreo={avisaPorCorreo}
         />
       </main>
       <Footer settings={settings} hideWhatsApp={!order.raffle.whatsappCheckout} />

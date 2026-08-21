@@ -89,11 +89,44 @@ pueden proponer otro.
 | Despliegue con las llaves activas | ✅ |
 | Botón renderizando en `/pedido/<código>` | ✅ verificado |
 | Webhook registrado en el panel de Bold | ⬜ **pendiente: lo registra el dueño** |
+| Consulta de comprobante como respaldo | ✅ (2026-08-21) |
+| `RESEND_API_KEY` para el correo al comprador | ⬜ **falta: sin ella no sale ningún correo** |
 
 Mientras el webhook no esté registrado, el cobro SÍ entra a la cuenta de Bold
-pero el pedido no se marca solo como pagado: hay que confirmarlo a mano en el
-panel (Pedidos → Confirmar pago) o el comprador toca "Ya pagué — verificar".
-Por eso registrar el webhook no es opcional en la práctica.
+pero la confirmación deja de ser instantánea. Hay tres caminos y conviene
+saber qué da cada uno:
+
+| Vía | Cuándo confirma | Hace falta |
+|---|---|---|
+| **Webhook firmado** | en segundos, solo | registrarlo en el panel de Bold |
+| "Ya pagué — verificar" | cuando el comprador lo toca (~10 min después del pago) | nada, ya funciona |
+| Barrido del cron | una vez al día | nada, ya funciona |
+
+Los dos últimos usan la **consulta de comprobante** (ver abajo) y existen para
+que el dueño no tenga que marcar pagos a mano. Pero el webhook sigue siendo lo
+que hace que el comprador vea sus números al instante, que es lo que evita que
+abandone el carrito. **Regístralo.**
+
+## Consulta de comprobante (respaldo)
+
+```
+GET https://payments.api.bold.co/v2/payment-voucher/{orderId}
+Authorization: x-api-key {LLAVE DE IDENTIDAD}
+```
+
+⚠️ En esa cabecera va la llave de **identidad**, no la secreta (con la secreta
+responde 401). ⚠️ Bold avisa que la consulta puede tardar **~10 minutos** en
+reflejar una venta: hasta entonces devuelve `NO_TRANSACTION_FOUND`. Por eso es
+respaldo y no vía principal.
+
+Estados: `APPROVED`, `REJECTED`, `FAILED`, `VOIDED`, `PROCESSING`, `PENDING`,
+`NO_TRANSACTION_FOUND`. Solo `APPROVED` **y monto exacto** confirman
+(`boldVoucherConfirmaOrden`). "No se pudo saber" (red caída, timeout, JSON
+roto) jamás se traduce como pagado.
+
+Lo usan `/api/public/orders/[code]/verify` (botón "Ya pagué — verificar") y
+`src/lib/engine/barrido-bold.ts` (desde el cron diario, que corre ANTES de
+vencer pedidos para no soltarle a otro los números de alguien que sí pagó).
 
 ## Por qué el Botón de Pagos y no un enlace de pago
 

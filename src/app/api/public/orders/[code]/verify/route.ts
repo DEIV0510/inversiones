@@ -4,6 +4,11 @@ import { confirmOrderPayment } from "@/lib/engine/orders";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
 import { pasarelaActiva } from "@/lib/pasarela";
 import {
+  boldOrderId,
+  boldVoucherConfirmaOrden,
+  fetchBoldTransaction,
+} from "@/lib/bold";
+import {
   findTransactionByReference,
   isWompiConfigured,
   paymentReference,
@@ -14,18 +19,20 @@ export const runtime = "nodejs";
 
 /**
  * Verificación de respaldo tras el redirect de la pasarela. Nunca confía en
- * parámetros del navegador; según la pasarela hace una cosa u otra:
+ * parámetros del navegador; según la pasarela consulta a quien corresponda:
  *
- * - WOMPI: consulta la transacción DIRECTAMENTE en su API por referencia y
- *   confirma la orden si está aprobada y el monto coincide.
- * - BOLD: en la integración del Botón de Pagos, Bold no documenta una
- *   consulta pública equivalente ("dame el estado de la referencia X"), así
- *   que aquí no hay nada legítimo que consultar: la vía de confirmación es su
- *   webhook firmado (/api/webhooks/bold), que llega en segundos. Este
- *   endpoint entonces RELEE el estado de la orden en la base y responde
- *   `esperandoWebhook: true` mientras siga pendiente, para que la pantalla
- *   del pedido pueda volver a preguntar sin inventarse un endpoint que no
- *   existe.
+ * - WOMPI: consulta la transacción por referencia en su API.
+ * - BOLD: consulta el comprobante de la venta por su identificador
+ *   (`DYS-<código>`, el mismo que se firmó en el botón).
+ *
+ * En los dos casos se confirma SOLO con estado aprobado y monto exacto.
+ *
+ * Esto es un RESPALDO. La vía principal sigue siendo el webhook firmado, que
+ * confirma en segundos; la consulta de Bold puede tardar ~10 minutos en
+ * reflejar la venta y hasta entonces responde NO_TRANSACTION_FOUND. Pero
+ * cuando el webhook no llega —no está registrado, se cayó, Bold no
+ * reintentó— este camino es lo único que le queda al comprador para que sus
+ * números aparezcan sin que el dueño confirme a mano.
  *
  * En ningún caso se marca pagado por lo que diga el navegador.
  */
@@ -55,6 +62,28 @@ export async function POST(
     select: { id: true },
   });
   const porBold = Boolean(intentoBold) || pasarelaActiva() === "bold";
+
+  // ── Bold: consulta del comprobante ───────────────────────────────────
+  // Una sola referencia: `boldButtonConfig` siempre firma el botón con la
+  // base `DYS-<código>` (el sufijo de reintento existe en boldOrderId pero
+  // hoy no lo usa nadie). Si algún día se usa, hay que probarlas todas aquí.
+  if (porBold) {
+    const referencia = boldOrderId(code);
+    const voucher = await fetchBoldTransaction(referencia);
+    if (boldVoucherConfirmaOrden(voucher, order)) {
+      const result = await confirmOrderPayment({
+        orderId: order.id,
+        provider: "bold",
+        // Bold no devuelve payment_id en el comprobante; la referencia ES el
+        // identificador único de la venta, así que sirve de idempotencia.
+        providerTxId: referencia,
+        reference: referencia,
+        amount: Math.round(voucher!.total!),
+        raw: voucher,
+      });
+      if (result.ok) return NextResponse.json({ status: "PAID" });
+    }
+  }
 
   if (!intentoBold && isWompiConfigured()) {
     const tx = await findTransactionByReference(paymentReference(code));

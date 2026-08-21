@@ -284,7 +284,111 @@ export function boldTransactionMatchesOrder(
   return amount.total === order.total;
 }
 
-// Nota deliberada: Bold NO documenta una consulta pública "dame el estado de
-// la referencia X" equivalente al /transactions?reference= de Wompi, así que
-// aquí no hay un fetchTransaction(). El webhook firmado es la vía de
-// confirmación; inventarse un endpoint sería peor que no tenerlo.
+// ── Consulta de transacciones ────────────────────────────────────────
+//
+// Bold SÍ publica una consulta por identificador de venta (antes esta nota
+// decía que no existía y era falso):
+//
+//   GET https://payments.api.bold.co/v2/payment-voucher/{orderId}
+//   Authorization: x-api-key {LLAVE DE IDENTIDAD}
+//
+// Ojo con la cabecera: va la llave de IDENTIDAD, no la secreta (con la
+// secreta responde 401). Y ojo con el desfase: Bold avisa que la consulta
+// puede tardar ~10 minutos en reflejar una venta, así que devuelve
+// NO_TRANSACTION_FOUND para pagos recién hechos.
+//
+// Por eso esto es un RESPALDO, no la vía principal: el webhook firmado sigue
+// siendo lo que confirma en segundos. Este respaldo es lo que hace que el
+// botón "Ya pagué — verificar" sirva de algo cuando el webhook no llegó
+// (no está registrado, se cayó, o Bold no reintentó).
+
+const BOLD_API_URL = "https://payments.api.bold.co";
+/** Techo de espera: el comprador está mirando la pantalla. */
+const CONSULTA_TIMEOUT_MS = 8_000;
+
+export type BoldPaymentStatus =
+  | "APPROVED"
+  | "REJECTED"
+  | "FAILED"
+  | "VOIDED"
+  | "PROCESSING"
+  | "PENDING"
+  | "NO_TRANSACTION_FOUND";
+
+export type BoldVoucher = {
+  payment_status?: BoldPaymentStatus;
+  /** Total cobrado EN PESOS. */
+  total?: number;
+  subtotal?: number;
+  reference_id?: string;
+  link_id?: string;
+  description?: string;
+};
+
+/**
+ * Estado de una venta en Bold por su identificador (el mismo `data-order-id`
+ * que firmamos en el botón: `DYS-<código>`).
+ *
+ * Devuelve null si no se puede saber (sin llaves, error de red, respuesta no
+ * válida, 4xx/5xx). NUNCA lanza: quien llama está atendiendo a un comprador y
+ * un fallo de red no puede tumbarle la pantalla. Y "no se pudo saber" jamás
+ * se traduce como "pagado": la confirmación solo ocurre con APPROVED y el
+ * monto exacto.
+ */
+export async function fetchBoldTransaction(
+  orderId: string
+): Promise<BoldVoucher | null> {
+  if (!isBoldConfigured()) return null;
+
+  const control = new AbortController();
+  const reloj = setTimeout(() => control.abort(), CONSULTA_TIMEOUT_MS);
+  try {
+    const res = await fetch(
+      `${BOLD_API_URL}/v2/payment-voucher/${encodeURIComponent(orderId)}`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `x-api-key ${boldIdentityKey()}`,
+          Accept: "application/json",
+        },
+        signal: control.signal,
+        cache: "no-store",
+      }
+    );
+    if (!res.ok) return null;
+    const cuerpo = (await res.json()) as unknown;
+    if (!cuerpo || typeof cuerpo !== "object") return null;
+    // Bold devuelve el comprobante en la raíz o envuelto en `payload`, según
+    // el endpoint. Se aceptan las dos formas y se ignora lo demás.
+    const raiz = cuerpo as Record<string, unknown>;
+    const datos =
+      raiz.payload && typeof raiz.payload === "object"
+        ? (raiz.payload as BoldVoucher)
+        : (raiz as BoldVoucher);
+    return typeof datos.payment_status === "string" ? datos : null;
+  } catch {
+    // Timeout, DNS, TLS, JSON roto… todo es "no se pudo saber".
+    return null;
+  } finally {
+    clearTimeout(reloj);
+  }
+}
+
+/**
+ * ¿Este comprobante de Bold confirma REALMENTE el pago de esta orden?
+ *
+ * Dos condiciones y hacen falta las dos: aprobado y por el monto EXACTO en
+ * pesos. Sin la segunda, alguien podría pagar $1.000 con la referencia de un
+ * pedido de $200.000 y llevarse los números.
+ */
+export function boldVoucherConfirmaOrden(
+  voucher: BoldVoucher | null,
+  order: { total: number }
+): boolean {
+  if (!voucher) return false;
+  if (voucher.payment_status !== "APPROVED") return false;
+  if (typeof voucher.total !== "number" || !Number.isFinite(voucher.total)) {
+    return false;
+  }
+  return Math.round(voucher.total) === order.total;
+}

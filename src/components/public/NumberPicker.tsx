@@ -236,8 +236,9 @@ export default function NumberPicker({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  // Cédula: dato OPCIONAL. Solo sirve para que después pueda encontrar sus
-  // boletas sin el código, así que nunca bloquea la compra.
+  // Cédula: dato OBLIGATORIO. Identifica al ganador junto con el nombre y el
+  // celular, y le sirve al comprador para encontrar sus boletas. El correo,
+  // en cambio, sigue siendo opcional: mucha gente no tiene o lo escribe mal.
   const [idNumber, setIdNumber] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
@@ -461,11 +462,12 @@ export default function NumberPicker({
       );
       return;
     }
-    // La cédula es opcional: solo se revisa si escribió algo, y entonces se
-    // le dice de una vez, porque una cédula a medias no le serviría luego
-    // para encontrar sus boletas.
-    if (idNumber.length > 0 && idNumber.length < 5) {
-      setFormError("La cédula debe tener al menos 5 dígitos, o déjala vacía");
+    // La cédula es OBLIGATORIA: identifica al ganador junto con el nombre y
+    // el celular, y le sirve al comprador para encontrar sus boletas. El
+    // servidor la exige igual (createOrderSchema); esto solo se lo dice antes
+    // de que pierda el viaje.
+    if (idNumber.length < 5) {
+      setFormError("Escribe tu cédula (mínimo 5 dígitos)");
       return;
     }
     setSubmitting(true);
@@ -1219,7 +1221,7 @@ export default function NumberPicker({
               </div>
               <div>
                 <label htmlFor="co-id" className="mb-1.5 block text-sm font-semibold text-fg">
-                  Cédula <span className="font-normal text-fg-faint">(opcional)</span>
+                  Tu cédula
                 </label>
                 <input
                   id="co-id"
@@ -1234,7 +1236,8 @@ export default function NumberPicker({
                   autoComplete="off"
                 />
                 <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
-                  Así puedes encontrar tus boletas aunque pierdas el código.
+                  Con ella identificamos al ganador y tú encuentras tus
+                  boletas en cualquier momento.
                 </p>
               </div>
 

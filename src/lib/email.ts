@@ -61,6 +61,24 @@ async function ajustesDeCorreo(): Promise<{
   }
 }
 
+/**
+ * ¿A ESTE comprador le va a llegar de verdad el correo con sus números?
+ *
+ * Existe para que la pantalla de pago no prometa de más. La regla es la misma
+ * que aplica el envío real (`enviarCorreoDeOrden`) y vive AQUÍ, en un solo
+ * sitio: dirección del comprador + interruptor de Configuración encendido +
+ * clave del proveedor en el servidor. Si alguna falta, la pantalla se limita
+ * a decir que verá sus números en Mis boletas, que eso sí siempre funciona.
+ */
+export async function leCorreoAlConfirmar(
+  correoDelComprador: string | null | undefined
+): Promise<boolean> {
+  if (!correoDelComprador || correoDelComprador.trim() === "") return false;
+  if (!correoConfigurado()) return false;
+  const { activo } = await ajustesDeCorreo();
+  return activo;
+}
+
 /** Escapa texto del comprador antes de meterlo en el HTML del correo. */
 function esc(valor: string): string {
   return valor

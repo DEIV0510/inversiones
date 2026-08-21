@@ -287,26 +287,38 @@ export const rafflePatchSchema = z
 
 export const createOrderSchema = z
   .object({
-    raffleSlug: z.string().trim().min(3).max(80),
-    name: z.string().trim().min(2, "Escribe tu nombre completo").max(120),
-    phone: z.string().trim().min(10, "Escribe tu WhatsApp").max(20),
+    // El `error` de cada campo cubre también el caso "no vino en el cuerpo".
+    // Sin él, un pedido sin el dato responde con el texto por defecto de Zod
+    // ("expected string, received undefined"), en inglés y sin sentido para
+    // un comprador; y esta respuesta se le enseña tal cual en el formulario.
+    raffleSlug: z.string({ error: "Sorteo no válido" }).trim().min(3).max(80),
+    name: z
+      .string({ error: "Escribe tu nombre completo" })
+      .trim()
+      .min(2, "Escribe tu nombre completo")
+      .max(120),
+    phone: z
+      .string({ error: "Escribe tu WhatsApp" })
+      .trim()
+      .min(10, "Escribe tu WhatsApp")
+      .max(20),
     email: z
       .union([z.literal(""), z.string().trim().email("Correo no válido").max(200)])
       .optional(),
-    // Cédula opcional: sirve para que después el comprador encuentre sus
-    // boletas con ese solo dato. Se aceptan "12.345.678" o "12 345 678"
-    // porque así la escribe la gente; los separadores se limpian aquí y a la
-    // base solo llegan dígitos.
+    // Cédula OBLIGATORIA (lo pidió el dueño): cuando salga un ganador quiere
+    // poder identificarlo con nombre + cédula + celular, y así el comprador
+    // encuentra sus boletas con ese solo dato aunque pierda todo lo demás.
+    // Se aceptan "12.345.678" o "12 345 678" porque así la escribe la gente;
+    // los separadores se limpian aquí y a la base solo llegan dígitos.
     idNumber: z
-      .string()
+      .string({ error: "Escribe tu cédula (entre 5 y 15 dígitos)" })
       .trim()
       .max(30, "La cédula es demasiado larga")
       .transform((v) => v.replace(/[\s.]/g, ""))
       .refine(
-        (v) => v === "" || /^\d{5,15}$/.test(v),
-        "La cédula debe tener entre 5 y 15 dígitos"
-      )
-      .optional(),
+        (v) => /^\d{5,15}$/.test(v),
+        "Escribe tu cédula (entre 5 y 15 dígitos)"
+      ),
     // El tope real lo impone maxNumbersPerOrder de cada rifa; aquí solo
     // ponemos el techo absoluto para no aceptar cargas absurdas.
     numbers: z.array(z.number().int().min(0).max(9_999_999)).max(5000).optional(),

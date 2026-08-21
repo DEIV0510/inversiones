@@ -282,3 +282,81 @@ describe("capa común de pasarelas", () => {
     ).toBe(false);
   });
 });
+
+describe("consulta del comprobante (respaldo sin webhook)", () => {
+  const ORDEN = { total: 14000 };
+
+  it("confirma solo con APPROVED y el monto EXACTO", async () => {
+    const { boldVoucherConfirmaOrden } = await import("@/lib/bold");
+    expect(
+      boldVoucherConfirmaOrden({ payment_status: "APPROVED", total: 14000 }, ORDEN)
+    ).toBe(true);
+  });
+
+  it("un monto distinto NO confirma, aunque esté aprobado", async () => {
+    const { boldVoucherConfirmaOrden } = await import("@/lib/bold");
+    // El ataque real: pagar $1.000 con la referencia de un pedido de $14.000.
+    expect(
+      boldVoucherConfirmaOrden({ payment_status: "APPROVED", total: 1000 }, ORDEN)
+    ).toBe(false);
+    expect(
+      boldVoucherConfirmaOrden({ payment_status: "APPROVED", total: 14001 }, ORDEN)
+    ).toBe(false);
+  });
+
+  it("ningún estado que no sea APPROVED confirma", async () => {
+    const { boldVoucherConfirmaOrden } = await import("@/lib/bold");
+    for (const estado of [
+      "PROCESSING",
+      "PENDING",
+      "REJECTED",
+      "FAILED",
+      "VOIDED",
+      "NO_TRANSACTION_FOUND",
+    ] as const) {
+      expect(
+        boldVoucherConfirmaOrden({ payment_status: estado, total: 14000 }, ORDEN)
+      ).toBe(false);
+    }
+  });
+
+  it("'no se pudo saber' nunca es 'pagado'", async () => {
+    const { boldVoucherConfirmaOrden } = await import("@/lib/bold");
+    expect(boldVoucherConfirmaOrden(null, ORDEN)).toBe(false);
+    expect(boldVoucherConfirmaOrden({ payment_status: "APPROVED" }, ORDEN)).toBe(
+      false
+    );
+  });
+
+  it("sin llaves no se consulta nada y devuelve null", async () => {
+    delete process.env.BOLD_SECRET_KEY;
+    const fetchEspia = vi.fn();
+    vi.stubGlobal("fetch", fetchEspia);
+    const { fetchBoldTransaction } = await import("@/lib/bold");
+    expect(await fetchBoldTransaction("DYS-ABC12345")).toBeNull();
+    expect(fetchEspia).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("usa la llave de IDENTIDAD en la cabecera, jamás la secreta", async () => {
+    const fetchEspia = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ payment_status: "APPROVED", total: 14000 }),
+    });
+    vi.stubGlobal("fetch", fetchEspia);
+    const { fetchBoldTransaction } = await import("@/lib/bold");
+    await fetchBoldTransaction("DYS-ABC12345");
+    const [url, opciones] = fetchEspia.mock.calls[0];
+    expect(url).toContain("/v2/payment-voucher/DYS-ABC12345");
+    expect(opciones.headers.Authorization).toBe("x-api-key identidad_de_prueba");
+    expect(opciones.headers.Authorization).not.toContain(SECRETO);
+    vi.unstubAllGlobals();
+  });
+
+  it("un error de red no tumba la pantalla: devuelve null", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("sin red")));
+    const { fetchBoldTransaction } = await import("@/lib/bold");
+    expect(await fetchBoldTransaction("DYS-ABC12345")).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
