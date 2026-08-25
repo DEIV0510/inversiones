@@ -116,3 +116,52 @@ describe("interruptor showRanking", () => {
     if (r.success) expect(r.data).toEqual({ showRanking: true });
   });
 });
+
+describe("el nombre publicado no puede filtrar otro dato", () => {
+  // El campo "nombre" del checkout es texto libre: la gente teclea ahí su
+  // celular, su cédula o su correo. Antes, un nombre de UNA sola palabra
+  // salía tal cual a una página abierta a internet.
+  const publicado = (nombre: string) =>
+    proyectarRanking([fila("x", 1)], new Map([["x", nombre]]))[0].nombre;
+
+  it("un celular tecleado en el campo del nombre NO se publica", () => {
+    expect(publicado("3106930187")).toBe("Participante");
+    expect(publicado("+57 310 693 0187")).toBe("Participante");
+  });
+
+  it("una cédula NO se publica", () => {
+    expect(publicado("1013456789")).toBe("Participante");
+  });
+
+  it("un correo NO se publica", () => {
+    expect(publicado("juanperez@gmail.com")).toBe("Participante");
+  });
+
+  it("publicidad de la competencia NO se publica", () => {
+    expect(publicado("OTRARIFA.COM")).toBe("Participante");
+    expect(publicado("www.otrositio.co")).toBe("Participante");
+  });
+
+  it("un nombre larguísimo de una sola palabra no se publica entero", () => {
+    expect(publicado("a".repeat(120))).toBe("Participante");
+  });
+
+  it("los nombres de verdad SÍ pasan, incluidos los de una sola palabra", () => {
+    expect(publicado("Carmen")).toBe("Carmen");
+    expect(publicado("María Fernanda Pérez")).toBe("María F. P.");
+    expect(publicado("José")).toBe("José");
+    expect(publicado("Ana-María Gómez")).toBe("Ana-María G.");
+    expect(publicado("O'Brien Smith")).toBe("O'Brien S.");
+    expect(publicado("Ñandú Ríos")).toBe("Ñandú R.");
+  });
+
+  it("un emoji no parte un carácter por la mitad", () => {
+    // Con p[0] salía "Ana G. �." — medio par suplente.
+    expect(publicado("Ana Gómez 👑")).not.toContain("\uFFFD");
+    expect(publicado("Ana Gómez 👑")).toBe("Ana G.");
+  });
+
+  it("nunca se publican más de 3 iniciales", () => {
+    expect(publicado("Ana Uno Dos Tres Cuatro Cinco")).toBe("Ana U. D. T.");
+  });
+});

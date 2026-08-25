@@ -49,8 +49,9 @@ export default function PrivacidadPage() {
       <p>
         Únicamente para gestionar tu participación: apartar tus números,
         confirmar tu pago, entregarte tu comprobante, atender tus consultas,
-        avisarte si resultas ganador y cumplir las obligaciones legales y
-        contables del sorteo. Si dejaste tu correo, te enviamos a esa dirección
+        avisarte si resultas ganador, mostrar el listado público de
+        compradores en los sorteos donde el organizador lo active, y cumplir
+        las obligaciones legales y contables del sorteo. Si dejaste tu correo, te enviamos a esa dirección
         tus números y tu código cuando el pago queda confirmado. No vendemos ni
         cedemos tus datos con fines publicitarios de terceros.
       </p>
@@ -81,7 +82,18 @@ export default function PrivacidadPage() {
         su autorización.
       </p>
 
-      <h2>6. Con quién se comparten</h2>
+      <h2>6. Ranking de compradores</h2>
+      <p>
+        En los sorteos donde el organizador active esta opción, la página
+        muestra los diez compradores con más números pagados. De cada uno se
+        publica <strong>únicamente</strong> el nombre abreviado (por ejemplo
+        «Carmen R. P.») y la cantidad de números pagados. Nunca el celular, ni
+        el correo, ni la cédula. Solo cuentan los pedidos con pago confirmado.
+        Si no deseas aparecer en ese listado, escríbenos por los datos de
+        contacto y te retiramos de él.
+      </p>
+
+      <h2>7. Con quién se comparten</h2>
       <p>
         Solo con los proveedores necesarios para que la plataforma funcione:
         alojamiento del sitio, base de datos, pasarela de pagos y proveedor de
@@ -90,14 +102,14 @@ export default function PrivacidadPage() {
         la ley lo exija.
       </p>
 
-      <h2>7. Conservación</h2>
+      <h2>8. Conservación</h2>
       <p>
         Conservamos los datos de tu participación mientras el sorteo esté
         vigente y después durante el tiempo necesario para atender
         reclamaciones y cumplir las obligaciones legales aplicables.
       </p>
 
-      <h2>8. Tus derechos</h2>
+      <h2>9. Tus derechos</h2>
       <p>
         Conforme a la Ley 1581 de 2012, puedes conocer, actualizar y rectificar
         tus datos, solicitar prueba de la autorización, ser informado sobre su
@@ -106,7 +118,7 @@ export default function PrivacidadPage() {
         por los datos de contacto publicados en esta página.
       </p>
 
-      <h2>9. Política completa</h2>
+      <h2>10. Política completa</h2>
       <p className="rounded-xl border border-dashed border-brand/40 bg-brand/5 p-4 text-fg">
         [PENDIENTE DE CONFIGURAR] — Este espacio está reservado para la
         política de tratamiento de datos personales completa (Ley 1581 de 2012
@@ -115,7 +127,7 @@ export default function PrivacidadPage() {
         procedimiento para atender consultas y reclamos.
       </p>
 
-      <h2>10. Contacto</h2>
+      <h2>11. Contacto</h2>
       <p>
         Para consultas sobre tus datos personales, escríbenos por los datos de
         contacto publicados en esta página.

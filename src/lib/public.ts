@@ -551,13 +551,39 @@ export const getPublishedWinners = unstable_cache(
  * que el ganador se reconozca a sí mismo (y para que el dueño lo confirme
  * en el panel, que ahí sí están los datos completos).
  */
+/**
+ * ¿Este trozo parece de verdad parte de un nombre?
+ *
+ * Letras (con tildes y ñ), apóstrofos y guiones: "O'Brien", "Ana-María".
+ * NO se admiten dígitos, arrobas ni puntos. Un punto sobra en un nombre de
+ * pila y en cambio deja pasar cosas como "OTRARIFA.COM", que es publicidad
+ * de la competencia colada en la lista pública.
+ */
+const PARECE_NOMBRE = /^[\p{L}][\p{L}'’-]*$/u;
+
+/** Tope de lo que se publica de un nombre de pila. */
+const LARGO_MAX_NOMBRE = 20;
+
 export function abreviarNombre(nombre: string): string {
   const partes = nombre.trim().split(/\s+/).filter(Boolean);
   if (partes.length === 0) return "Participante";
   const [primero, ...resto] = partes;
-  // Solo la inicial del resto, en mayúscula y con punto.
+
+  // El campo "nombre" del checkout es texto libre y la gente teclea ahí lo
+  // que sea: su celular, su cédula, su correo. Antes, un nombre de UNA sola
+  // palabra se devolvía tal cual, así que "3106930187" salía completo en una
+  // página abierta a internet. Si el primer trozo no parece un nombre no se
+  // publica nada suyo.
+  if (!PARECE_NOMBRE.test(primero) || primero.length > LARGO_MAX_NOMBRE) {
+    return "Participante";
+  }
+
+  // Solo la inicial del resto, en mayúscula y con punto. Se recorre por
+  // puntos de código ([...p]) y no por posición: con `p[0]` un emoji o un
+  // carácter fuera del plano básico se partía por la mitad y salía "�".
   const iniciales = resto
-    .map((p) => `${p[0].toUpperCase()}.`)
+    .filter((p) => PARECE_NOMBRE.test(p))
+    .map((p) => `${[...p][0].toUpperCase()}.`)
     .slice(0, 3)
     .join(" ");
   return iniciales ? `${primero} ${iniciales}` : primero;

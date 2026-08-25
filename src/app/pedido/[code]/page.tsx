@@ -5,6 +5,7 @@ import Footer from "@/components/landing/Footer";
 import BottomBar from "@/components/landing/BottomBar";
 import OrderView from "@/components/public/OrderView";
 import { boldAmountSupported, boldButtonConfig } from "@/lib/bold";
+import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { leCorreoAlConfirmar } from "@/lib/email";
 import {
@@ -83,6 +84,12 @@ export default async function PedidoPage({
         amount: Math.round(tx.amount_in_cents / 100),
         raw: tx,
       });
+      // Este era el TERCER camino de confirmación que no refrescaba nada.
+      // Un pago confirmado aquí cambia el porcentaje de avance y el ranking
+      // de compradores, que son datos cacheados: sin esto el comprador veía
+      // sus números al instante y el resto del sitio seguía con las cifras
+      // viejas hasta que venciera el plazo de la caché.
+      invalidarEtiquetas(TAG_RIFAS, tagRifaId(order.raffleId));
       order = await prisma.order.findUnique({
         where: { code },
         include: { raffle: true, participant: true },

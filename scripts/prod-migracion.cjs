@@ -1,7 +1,32 @@
 // Migración puntual y aditiva de producción: solo agrega lo que falta.
 // No borra ni reescribe nada; cada sentencia es IF NOT EXISTS.
+//
+// ⚠️ ESTE SCRIPT NO SABE SOLO A QUÉ BASE VA. Ejecutado a secas, Prisma carga
+// el .env de la raíz, que apunta a la base DEMO: el script imprimiría "ok:"
+// en verde y producción se quedaría sin la columna. El push posterior tumba
+// el build al prerenderizar la portada. Por eso hay que decirle la URL a
+// propósito y confirmarla:
+//
+//   npx vercel env pull .env.prod --environment=production --yes
+//   node -e "require('dotenv').config({path:'.env.prod'}); \
+//            process.env.MIGRAR_A_PRODUCCION='si'; \
+//            require('./scripts/prod-migracion.cjs')"
+//
+// Y OJO con querer detectar la base preguntándole al servidor: en Neon
+// `inet_server_addr()` devuelve ::1/128 y `current_database()` devuelve
+// "neondb" para CUALQUIER proyecto, porque el proxy habla con el compute por
+// loopback. Lo único que distingue una base de otra es el HOST de la cadena
+// de conexión (y `neon.endpoint_id`, que se lee abajo).
 const { PrismaClient } = require("@prisma/client");
 const p = new PrismaClient();
+
+/** Host de la URL con la que Prisma se va a conectar de verdad. */
+function hostDestino() {
+  const url =
+    process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_URL || "";
+  const m = url.match(/@([^/?]+)/);
+  return m ? m[1] : "(no se pudo leer la URL)";
+}
 
 const SENTENCIAS = [
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "whatsappCheckout" BOOLEAN NOT NULL DEFAULT true`,
@@ -23,8 +48,9 @@ const SENTENCIAS = [
   // Ranking público de compradores por rifa. Nace apagado: publica cantidades
   // por comprador, así que se enciende a conciencia desde el panel.
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "showRanking" BOOLEAN NOT NULL DEFAULT false`,
-  // Índice cubriente del ranking: agrupar los pedidos PAGADOS de una rifa por
-  // participante sin ir a leer la tabla.
+  // Índice del ranking: filtra los pedidos PAGADOS de una rifa y los entrega
+  // ya ordenados por participante, así el GROUP BY se ahorra el Sort. No es
+  // cubriente: el desempate usa MIN(createdAt), que no está aquí.
   `CREATE INDEX IF NOT EXISTS "Order_raffleId_status_participantId_quantity_idx" ON "Order"("raffleId", "status", "participantId", "quantity")`,
 ];
 
@@ -47,11 +73,40 @@ const COLUMNAS_ESPERADAS = [
 ];
 
 (async () => {
+  // 1. DECIR A QUÉ BASE VA, ANTES de escribir nada.
+  const host = hostDestino();
+  let endpoint = "(desconocido)";
+  try {
+    const [f] = await p.$queryRawUnsafe(
+      `SELECT current_setting('neon.endpoint_id', true) AS endpoint`
+    );
+    if (f && f.endpoint) endpoint = f.endpoint;
+  } catch {
+    // Fuera de Neon ese ajuste no existe: no es motivo para abortar.
+  }
+  console.log("destino  host:", host);
+  console.log("destino  neon endpoint:", endpoint);
+
+  // 2. Exigir una confirmación explícita. Sin esto, correr el script a secas
+  //    migra la base DEMO creyendo que migró producción.
+  if (process.env.MIGRAR_A_PRODUCCION !== "si") {
+    console.error(
+      "\nABORTADO: falta la confirmación explícita.\n" +
+        "Comprueba arriba que el host es el de PRODUCCIÓN y vuelve a lanzarlo\n" +
+        "con MIGRAR_A_PRODUCCION=si en el entorno. Ver la cabecera del script."
+    );
+    await p.$disconnect();
+    process.exit(1);
+  }
+
   for (const sql of SENTENCIAS) {
     await p.$executeRawUnsafe(sql);
     console.log("ok:", sql.slice(0, 78));
   }
 
+  // 3. Verificar de verdad lo que se acaba de añadir. Antes se comparaba
+  //    contra una lista escrita a mano dentro del IN (...) que estaba
+  //    desfasada: el script decía "listo" sin comprobar nada nuevo.
   const cols = await p.$queryRawUnsafe(
     `SELECT column_name FROM information_schema.columns
      WHERE table_schema='public' AND table_name='Raffle'`
@@ -59,19 +114,11 @@ const COLUMNAS_ESPERADAS = [
   const existentes = new Set(cols.map((c) => c.column_name));
   const faltan = COLUMNAS_ESPERADAS.filter((c) => !existentes.has(c));
 
-  // A qué base se apuntó de verdad. Correr esto contra la base demo imprime
-  // "ok:" en verde y deja producción sin la columna; el push posterior tumba
-  // el build al prerenderizar la portada. Por eso se dice el host.
-  const [{ host }] = await p.$queryRawUnsafe(
-    `SELECT inet_server_addr()::text AS host`
-  ).catch(() => [{ host: "(desconocido)" }]);
-  console.log("base:", host);
-
   if (faltan.length > 0) {
     console.error("FALTAN COLUMNAS EN Raffle:", faltan.join(", "));
     await p.$disconnect();
     process.exit(1);
   }
-  console.log("Raffle OK, estan las", COLUMNAS_ESPERADAS.length, "columnas esperadas");
+  console.log("Raffle OK en", host, "— estan las", COLUMNAS_ESPERADAS.length, "columnas esperadas");
   await p.$disconnect();
 })();

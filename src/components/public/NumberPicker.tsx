@@ -1241,6 +1241,26 @@ export default function NumberPicker({
                 </p>
               </div>
 
+              {/* Aviso de tratamiento de datos. No existía en ningún punto del
+                  flujo de compra, y sin él la Ley 1581 se queda sin prueba de
+                  que al comprador se le informó. Cuando esta rifa publica el
+                  ranking se le nombra expresamente: ahí su nombre abreviado
+                  puede acabar en una página abierta a internet. */}
+              <p className="text-xs leading-relaxed text-fg-faint">
+                {raffle.showRanking
+                  ? "Al comprar aceptas el tratamiento de tus datos. En este sorteo, si quedas entre los diez que más números llevan, se publica tu nombre abreviado y la cantidad. Nunca tu celular, correo ni cédula. "
+                  : "Al comprar aceptas el tratamiento de tus datos. "}
+                <a
+                  href="/privacidad"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline hover:text-fg"
+                >
+                  Ver política de privacidad
+                </a>
+                .
+              </p>
+
               {formError ? (
                 <p role="alert" className="text-sm font-semibold text-error">
                   {formError}
