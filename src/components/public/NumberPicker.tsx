@@ -240,6 +240,9 @@ export default function NumberPicker({
   // celular, y le sirve al comprador para encontrar sus boletas. El correo,
   // en cambio, sigue siendo opcional: mucha gente no tiene o lo escribe mal.
   const [idNumber, setIdNumber] = useState("");
+  // Ciudad o municipio: OPCIONAL. Le sirve al dueno para saber desde donde
+  // le compran y para coordinar la entrega de un premio fisico.
+  const [city, setCity] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
@@ -474,7 +477,7 @@ export default function NumberPicker({
     setFormError("");
     try {
       // Datos del comprador comunes a las dos formas de compra.
-      const datos = { raffleSlug: raffle.slug, name, phone, email, idNumber };
+      const datos = { raffleSlug: raffle.slug, name, phone, email, idNumber, city };
       const body = usaNumerosElegidos
         ? { ...datos, numbers: [...selected.keys()] }
         : { ...datos, randomCount: randomQty };
@@ -1239,6 +1242,24 @@ export default function NumberPicker({
                   Con ella identificamos al ganador y tú encuentras tus
                   boletas en cualquier momento.
                 </p>
+              </div>
+              <div>
+                <label
+                  htmlFor="co-city"
+                  className="mb-1.5 block text-sm font-semibold text-fg"
+                >
+                  Ciudad o municipio{" "}
+                  <span className="font-normal text-fg-faint">(opcional)</span>
+                </label>
+                <input
+                  id="co-city"
+                  type="text"
+                  value={city}
+                  onChange={(e) => setCity(e.target.value)}
+                  className={inputCls}
+                  maxLength={80}
+                  autoComplete="address-level2"
+                />
               </div>
 
               {/* Aviso de tratamiento de datos. No existía en ningún punto del

@@ -280,18 +280,51 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     return NextResponse.json({ error: "La rifa no existe" }, { status: 404 });
   }
 
-  const orderCount = await prisma.order.count({ where: { raffleId: id } });
-  if (orderCount > 0) {
+  // Antes se bloqueaba el borrado en cuanto la rifa tuviera UN pedido, aunque
+  // fuera un apartado vencido que nadie pagó. Eso dejaba el panel lleno de
+  // rifas viejas imposibles de quitar.
+  //
+  // Ahora la línea se traza donde de verdad importa: en el DINERO. Un pedido
+  // pagado es un registro contable — la contrapartida de un cobro que existe
+  // en Bold y que el comprador puede reclamar — y eso no se borra desde un
+  // botón. Los pedidos SIN pagar (pendientes, vencidos, cancelados) no
+  // documentan nada y se van con la rifa.
+  const pagados = await prisma.order.count({
+    where: { raffleId: id, status: "PAID" },
+  });
+  if (pagados > 0) {
     return NextResponse.json(
       {
         error:
-          "Esta rifa ya tiene pedidos: no puede eliminarse. Usa el estado CANCELADA.",
+          `Esta rifa tiene ${pagados} ${pagados === 1 ? "pedido pagado" : "pedidos pagados"}: ` +
+          "no puede eliminarse porque son el respaldo de un dinero que se cobró " +
+          "de verdad. Usa el estado CANCELADA para que deje de mostrarse.",
       },
       { status: 409 }
     );
   }
 
-  await prisma.raffle.delete({ where: { id } });
+  // Borrado en el orden que exigen las claves foráneas: Payment y Order no
+  // tienen cascada, así que si no se limpian primero, el delete de la rifa
+  // falla. RaffleNumber y PrizedNumber sí cascadean; Winner queda con
+  // raffleId en null.
+  const idsPedidos = (
+    await prisma.order.findMany({ where: { raffleId: id }, select: { id: true } })
+  ).map((o) => o.id);
+
+  await prisma.$transaction(async (tx) => {
+    if (idsPedidos.length > 0) {
+      await tx.payment.deleteMany({ where: { orderId: { in: idsPedidos } } });
+      await tx.order.deleteMany({ where: { id: { in: idsPedidos } } });
+    }
+    await tx.raffle.delete({ where: { id } });
+  });
+
+  // Compradores que se quedaron sin ningún pedido: si no, la lista de
+  // participantes conserva nombres de rifas que ya no existen.
+  const huerfanos = await prisma.participant.deleteMany({
+    where: { orders: { none: {} } },
+  });
   // La portada y TODA la galería: si no, las fotos de la galería quedan
   // huérfanas en el almacenamiento y se siguen pagando.
   await deleteImage(existing.imageUrl);
@@ -304,7 +337,14 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     action: "raffle.delete",
     entity: "Raffle",
     entityId: id,
-    detail: { title: existing.title },
+    // Se deja constancia de CUANTO se llevo por delante: sin esto, el registro
+    // de auditoria no distingue borrar una rifa vacia de borrar una con 58
+    // pedidos sin pagar.
+    detail: {
+      title: existing.title,
+      pedidosBorrados: idsPedidos.length,
+      compradoresHuerfanosBorrados: huerfanos.count,
+    },
   });
 
   // La rifa borrada tiene que desaparecer de la portada cacheada de inmediato.

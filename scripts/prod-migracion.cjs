@@ -52,6 +52,8 @@ const SENTENCIAS = [
   // ya ordenados por participante, así el GROUP BY se ahorra el Sort. No es
   // cubriente: el desempate usa MIN(createdAt), que no está aquí.
   `CREATE INDEX IF NOT EXISTS "Order_raffleId_status_participantId_quantity_idx" ON "Order"("raffleId", "status", "participantId", "quantity")`,
+  // Ciudad o municipio del comprador. Opcional; nunca sale al publico.
+  `ALTER TABLE "Participant" ADD COLUMN IF NOT EXISTS "city" TEXT`,
 ];
 
 // Columnas que este script debe dejar existiendo en Raffle. Se comprueban al

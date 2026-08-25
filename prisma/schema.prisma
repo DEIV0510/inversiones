@@ -162,6 +162,10 @@ model Participant {
   // Cédula: opcional al comprar, sirve para que el comprador encuentre sus
   // boletas si no recuerda el código ni con qué teléfono compró.
   idNumber  String?
+  // Ciudad o municipio donde vive el comprador. OPCIONAL: sirve para que el
+  // dueno sepa desde donde le compran y para coordinar la entrega de un
+  // premio fisico. Nunca sale al publico.
+  city      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

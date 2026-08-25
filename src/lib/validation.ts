@@ -314,6 +314,10 @@ export const createOrderSchema = z
     // encuentra sus boletas con ese solo dato aunque pierda todo lo demás.
     // Se aceptan "12.345.678" o "12 345 678" porque así la escribe la gente;
     // los separadores se limpian aquí y a la base solo llegan dígitos.
+    // Ciudad o municipio: dato OPCIONAL, texto libre corto.
+    city: z
+      .union([z.literal(""), z.string().trim().min(2).max(80)])
+      .optional(),
     idNumber: z
       .string({ error: "Escribe tu cédula (entre 5 y 15 dígitos)" })
       .trim()

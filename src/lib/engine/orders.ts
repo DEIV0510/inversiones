@@ -46,6 +46,8 @@ export type CreateOrderInput = {
   email?: string;
   /** Cédula del comprador: opcional, para reencontrar sus boletas después. */
   idNumber?: string;
+  /** Ciudad o municipio del comprador. Opcional. */
+  city?: string;
   numbers?: number[];
   randomCount?: number;
 };
@@ -208,12 +210,14 @@ export async function createOrder(input: CreateOrderInput): Promise<{
             name,
             email: input.email?.trim() || undefined,
             idNumber: cedula,
+            city: input.city?.trim() || undefined,
           },
           create: {
             phone,
             name,
             email: input.email?.trim() || null,
             idNumber: cedula ?? null,
+            city: input.city?.trim() || null,
           },
         });
 
