@@ -168,8 +168,9 @@ function plantillaHtml(datos: BoletasCorreo): string {
         </tr>
         <tr>
           <td style="padding:8px 24px 26px 24px;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.6;color:#71717a;">
-            Con tu código de participación puedes consultar tus números cuando
-            quieras. Mucha suerte en el sorteo.
+            En <strong>Mis boletas</strong> puedes consultar tus números cuando
+            quieras con tu celular, tu cédula o el código de arriba. Mucha
+            suerte en el sorteo.
           </td>
         </tr>
         <tr>
@@ -194,7 +195,8 @@ function plantillaTexto(datos: BoletasCorreo): string {
     `Código de participación: ${datos.codigo}`,
     `Total pagado: ${formatCop(datos.total)}`,
     "",
-    "Guarda este correo. Mucha suerte.",
+    "En Mis boletas puedes consultar tus números cuando quieras con tu",
+    "celular, tu cédula o el código de arriba. Mucha suerte.",
     MARCA,
   ].join("\n");
 }
