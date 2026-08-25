@@ -19,6 +19,7 @@ export async function GET(req: NextRequest) {
           { name: { contains: search, mode: "insensitive" as const } },
           { phone: { contains: search.replace(/\D/g, "") || search } },
           { email: { contains: search, mode: "insensitive" as const } },
+          { city: { contains: search, mode: "insensitive" as const } },
         ],
       }
     : {};
@@ -49,6 +50,7 @@ export async function GET(req: NextRequest) {
         name: p.name,
         phone: p.phone,
         email: p.email,
+        city: p.city,
         createdAt: p.createdAt,
         ordersCount: p.orders.length,
         paidOrders: paid.length,

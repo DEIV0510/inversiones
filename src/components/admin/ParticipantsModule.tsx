@@ -19,6 +19,8 @@ type ParticipantRow = {
   name: string;
   phone: string;
   email: string | null;
+  /** Ciudad o municipio, si el comprador lo puso (es opcional). */
+  city: string | null;
   createdAt: string;
   ordersCount: number;
   paidOrders: number;
@@ -100,7 +102,7 @@ export default function ParticipantsModule() {
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Nombre, teléfono o email"
+          placeholder="Nombre, teléfono, email o ciudad"
           aria-label="Buscar participante"
           className={`${inputCls} min-w-0`}
         />
@@ -149,6 +151,7 @@ export default function ParticipantsModule() {
               </div>
               <p className="mt-1 truncate text-xs text-fg-faint">
                 {p.email ? `${p.email} · ` : ""}
+                {p.city ? `${p.city} · ` : ""}
                 Registrado {formatDate(p.createdAt)}
               </p>
 
