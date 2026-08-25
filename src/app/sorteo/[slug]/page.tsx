@@ -12,6 +12,7 @@ import {
   getPrizedGroups,
   getPublicRaffleBySlug,
   getRaffleBySlugForAdmin,
+  getTopCompradores,
 } from "@/lib/public";
 import { getSettings } from "@/lib/settings";
 import { statusMetaV2 } from "@/lib/raffle-status";
@@ -112,8 +113,13 @@ export default async function SorteoPage({
   }
 
   const meta = statusMetaV2(raffle.status);
-  // Números premiados publicados, agrupados por premio.
-  const prizedGroups = await getPrizedGroups(raffle.id, raffle.digits);
+  // Números premiados y ranking de compradores, en un solo viaje.
+  // El ranking solo se consulta si esta rifa lo tiene encendido: apagado no
+  // cuesta ni una consulta.
+  const [prizedGroups, ranking] = await Promise.all([
+    getPrizedGroups(raffle.id, raffle.digits),
+    raffle.showRanking ? getTopCompradores(raffle.id) : Promise.resolve([]),
+  ]);
 
   return (
     <>
@@ -340,6 +346,52 @@ export default async function SorteoPage({
                   </p>
                 </div>
               ))}
+            </section>
+          ) : null}
+
+          {/* Ranking de compradores: prueba social justo antes del selector,
+              que es donde la persona decide cuántos números lleva.
+              `getTopCompradores` ya devuelve vacío por debajo del mínimo, así
+              que aquí basta con no pintar nada si la lista viene vacía. */}
+          {ranking.length > 0 ? (
+            <section className="mt-8" aria-labelledby="ranking-compradores">
+              <h2
+                id="ranking-compradores"
+                className="flex items-center gap-2.5 font-display text-sm font-black uppercase tracking-[0.12em] text-fg"
+              >
+                <span
+                  aria-hidden
+                  className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
+                />
+                Top compradores
+              </h2>
+              <ol className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+                {ranking.map((c) => (
+                  <li
+                    key={c.posicion}
+                    className="flex items-center gap-3 px-4 py-3"
+                  >
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-display text-sm font-black tabular-nums ring-1 ${
+                        c.posicion === 1
+                          ? "bg-brand/15 text-brand ring-brand/30"
+                          : "bg-well text-brand-violet ring-line"
+                      }`}
+                    >
+                      {c.posicion}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate font-display text-sm font-extrabold text-fg">
+                      {c.nombre}
+                    </span>
+                    <span className="shrink-0 font-display text-sm font-extrabold tabular-nums text-brand-light">
+                      {c.cantidad} {c.cantidad === 1 ? "número" : "números"}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              <p className="mt-3 text-center text-xs leading-relaxed text-fg-faint">
+                Solo cuenta lo ya pagado. Los nombres se muestran abreviados.
+              </p>
             </section>
           ) : null}
 

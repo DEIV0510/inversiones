@@ -86,6 +86,12 @@ model Raffle {
   showPrize    Boolean @default(false)
   showDrawDate Boolean @default(true)
 
+  // Ranking público de compradores de ESTE sorteo. Nace APAGADO a propósito:
+  // publica cuántos números lleva cada comprador, que es justo lo que el
+  // resto de la página oculta (ver la regla al inicio de src/lib/public.ts).
+  // Se enciende rifa por rifa y a conciencia.
+  showRanking Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -199,6 +205,9 @@ model Order {
   @@index([status, reservedUntil])
   @@index([status, paidAt])
   @@index([createdAt])
+  // Índice cubriente del ranking de compradores: agrupa los pedidos PAGADOS
+  // de una rifa por participante y suma cantidades sin ir a leer la tabla.
+  @@index([raffleId, status, participantId, quantity])
 }
 
 model Payment {

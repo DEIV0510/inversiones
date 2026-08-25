@@ -73,6 +73,7 @@ export async function POST(
       gatewayCheckout: original.gatewayCheckout,
       showPrize: original.showPrize,
       showDrawDate: original.showDrawDate,
+      showRanking: original.showRanking,
       imageAspect: original.imageAspect,
       ticketPacksJson: original.ticketPacksJson,
       prizesJson: original.prizesJson,

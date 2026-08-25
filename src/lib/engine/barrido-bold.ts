@@ -44,9 +44,17 @@ export async function barrerPagosBoldPendientes(opciones?: {
    * reasignar. Se listan para que no se pierdan en silencio.
    */
   vencidosConPago: string[];
+  /** Rifas con algun pago rescatado: hay que invalidar su cache. */
+  rifasConfirmadas: string[];
 }> {
   if (!isBoldConfigured()) {
-    return { revisados: 0, confirmados: 0, sinRevisar: 0, vencidosConPago: [] };
+    return {
+      revisados: 0,
+      confirmados: 0,
+      sinRevisar: 0,
+      vencidosConPago: [],
+      rifasConfirmadas: [],
+    };
   }
 
   const max = opciones?.max ?? 200;
@@ -64,12 +72,15 @@ export async function barrerPagosBoldPendientes(opciones?: {
   const total = await prisma.order.count({ where: donde });
   const pendientes = await prisma.order.findMany({
     where: donde,
-    select: { id: true, code: true, total: true },
+    select: { id: true, code: true, total: true, raffleId: true },
     orderBy: { createdAt: "desc" },
     take: max,
   });
 
   let confirmados = 0;
+  // Rifas cuyo avance y ranking hay que refrescar al terminar. Se acumulan
+  // aqui y se invalidan FUERA del bucle: una sola vez por rifa.
+  const rifasConfirmadas = new Set<string>();
   for (const pedido of pendientes) {
     const referencia = boldOrderId(pedido.code);
     const voucher = await fetchBoldTransaction(referencia);
@@ -85,6 +96,7 @@ export async function barrerPagosBoldPendientes(opciones?: {
     });
     if (res.ok) {
       confirmados += 1;
+      rifasConfirmadas.add(pedido.raffleId);
       console.log(
         `[barrido-bold] pedido ${pedido.code} confirmado por consulta ` +
           `(no había llegado el webhook)`
@@ -121,6 +133,7 @@ export async function barrerPagosBoldPendientes(opciones?: {
     revisados: pendientes.length,
     confirmados,
     vencidosConPago,
+    rifasConfirmadas: [...rifasConfirmadas],
     sinRevisar: Math.max(0, total - pendientes.length),
   };
 }

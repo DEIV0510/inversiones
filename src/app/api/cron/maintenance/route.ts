@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { barrerPagosBoldPendientes } from "@/lib/engine/barrido-bold";
 import { expireOverdueOrders } from "@/lib/engine/orders";
 
@@ -26,6 +27,19 @@ export async function GET(req: NextRequest) {
   }
 
   const bold = await barrerPagosBoldPendientes();
+
+  // Un pago rescatado cambia el porcentaje de avance y el ranking de
+  // compradores, que van cacheados. Se invalida una sola vez por rifa y
+  // fuera de toda transacción.
+  if (bold.rifasConfirmadas.length > 0) {
+    invalidarEtiquetas(
+      TAG_RIFAS,
+      ...bold.rifasConfirmadas.map((id) => tagRifaId(id))
+    );
+  }
+
+  // Expirar no toca ningún pedido PAGADO, así que no hace falta invalidar
+  // por su cuenta.
   const expired = await expireOverdueOrders();
   return NextResponse.json({
     ok: true,

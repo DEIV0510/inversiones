@@ -125,6 +125,10 @@ const raffleFields = z.object({
   // Apagarlos NO borra el dato: sigue guardado y se usa en otras pantallas.
   showPrize: z.boolean().default(false),
   showDrawDate: z.boolean().default(false),
+  // Ranking público de compradores de esta rifa. Apagado por defecto: publica
+  // cuántos números lleva cada quien, que es la excepción a la regla de no
+  // enseñar cantidades al público (ver src/lib/public.ts).
+  showRanking: z.boolean().default(false),
   ticketPacks: z
     .array(ticketPack)
     .max(12, "Máximo 12 paquetes")

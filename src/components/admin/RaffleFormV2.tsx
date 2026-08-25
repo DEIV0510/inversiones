@@ -49,6 +49,7 @@ export type RaffleFormInitial = {
   gatewayCheckout: boolean;
   showPrize: boolean;
   showDrawDate: boolean;
+  showRanking: boolean;
   ticketPacks: RaffleTicketPackInitial[];
   prizes: RafflePrizeInitial[];
   prizedNumbers: RafflePrizedNumberInitial[];
@@ -597,6 +598,8 @@ export default function RaffleFormV2({
   // encendida porque el comprador siempre quiere saber cuándo se juega, y si
   // todavía no hay día en firme la ficha le muestra "Por anunciar".
   const [showPrize, setShowPrize] = useState(initial?.showPrize ?? false);
+  // Nace apagado: publica cantidades por comprador.
+  const [showRanking, setShowRanking] = useState(initial?.showRanking ?? false);
   const [showDrawDate, setShowDrawDate] = useState(
     initial?.showDrawDate ?? true
   );
@@ -909,6 +912,7 @@ export default function RaffleFormV2({
       gatewayCheckout,
       showPrize,
       showDrawDate,
+      showRanking,
       /* Los paquetes van en la forma nueva: la cantidad siempre, y la etiqueta
          y el descuento solo cuando el dueño los puso. */
       ticketPacks: packsParsed
@@ -1306,6 +1310,21 @@ export default function RaffleFormV2({
                 ? "En la página del sorteo aparece la fila «Fecha» con este texto."
                 : "En la página del sorteo aparece la fila «Fecha». Como todavía no escribiste ninguna, el comprador lee «Por anunciar»."
               : "Apagado: la ficha no muestra la fecha por ningún lado. Lo normal es dejarlo encendido, porque sin fecha escrita el comprador lee «Por anunciar»."
+          }
+        />
+        <SwitchRow
+          label="Mostrar el ranking de compradores"
+          checked={showRanking}
+          onToggle={() => setShowRanking((v) => !v)}
+          ariaLabel={
+            showRanking
+              ? "Dejar de mostrar el ranking de compradores"
+              : "Mostrar el ranking de compradores"
+          }
+          help={
+            showRanking
+              ? "En la página aparece el top 10 de compradores con su nombre abreviado («Carmen R.») y cuántos números lleva cada uno. Solo cuenta pedidos YA PAGADOS, y no se pinta hasta que haya al menos 3 compradores: con uno o dos parece que nadie está comprando."
+              : "Apagado: no se publica ninguna lista de compradores. Enciéndelo cuando el sorteo tenga movimiento; anima a comprar más, pero también deja ver cuántos números lleva la gente."
           }
         />
       </div>

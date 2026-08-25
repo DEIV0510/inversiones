@@ -173,6 +173,8 @@ export type PublicRaffle = {
   showPrize: boolean;
   /** Si la ficha del sorteo repite la fila de la fecha. */
   showDrawDate: boolean;
+  /** Si la página publica el ranking de compradores de este sorteo. */
+  showRanking: boolean;
   ticketPacks: PublicTicketPack[];
   prizes: RafflePrize[];
 };
@@ -241,6 +243,7 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     gatewayCheckout: raffle.gatewayCheckout,
     showPrize: raffle.showPrize,
     showDrawDate: raffle.showDrawDate,
+    showRanking: raffle.showRanking,
     ticketPacks: parseTicketPacks(raffle.ticketPacksJson),
     prizes: parseJsonArray<RafflePrize>(
       raffle.prizesJson,
@@ -390,6 +393,103 @@ export async function getPrizedGroups(
     { tags: [TAG_RIFAS, tagRifaId(raffleId)], revalidate: SEGUNDOS_CACHE_RIFA }
   );
   return leer(raffleId, digits);
+}
+
+// ── Ranking de compradores ──────────────────────────────────────────
+//
+// La regla del principio de este archivo dice que al público no se le enseñan
+// cantidades. El ranking es la EXCEPCIÓN deliberada que pidió el dueño: sirve
+// de prueba social y empuja a comprar. Por eso nace apagado (`showRanking`) y
+// se enciende rifa por rifa.
+//
+// Lo que NO se relaja:
+//  - Solo cuentan pedidos PAGADOS. Si contaran los apartados, cualquiera
+//    reservaría 500 números, saldría de primero y no pagaría nunca: un
+//    ranking gratis de manipular.
+//  - El nombre va abreviado (`abreviarNombre`) y NUNCA salen teléfono,
+//    correo, cédula ni el id del participante.
+
+/** Una fila del ranking, tal cual se pinta. */
+export type TopComprador = {
+  posicion: number;
+  /** Nombre abreviado: "Carmen R. P.". */
+  nombre: string;
+  /** Números pagados en esta rifa. */
+  cantidad: number;
+};
+
+/** Cuántos puestos se publican. */
+const TOPE_RANKING = 10;
+
+/**
+ * Mínimo de compradores para que el ranking valga la pena.
+ *
+ * Con uno o dos nombres el ranking dice lo contrario de lo que busca: le
+ * grita al visitante que ahí no está comprando nadie. Por debajo de esto la
+ * sección no se pinta, ni siquiera vacía.
+ */
+export const MINIMO_COMPRADORES_RANKING = 3;
+
+/**
+ * Proyección pura, sin base de datos, para poder probarla.
+ *
+ * La ordenación la hace el motor: aquí solo se numeran las posiciones en el
+ * orden que llegó y se abrevian los nombres.
+ */
+export function proyectarRanking(
+  filas: { participantId: string; _sum: { quantity: number | null } }[],
+  nombresPorId: Map<string, string>
+): TopComprador[] {
+  return filas.map((fila, i) => ({
+    posicion: i + 1,
+    nombre: abreviarNombre(nombresPorId.get(fila.participantId) ?? ""),
+    cantidad: fila._sum.quantity ?? 0,
+  }));
+}
+
+async function leerTopCompradores(raffleId: string): Promise<TopComprador[]> {
+  const filas = await prisma.order.groupBy({
+    by: ["participantId"],
+    where: { raffleId, status: "PAID" },
+    _sum: { quantity: true },
+    // Se declara para poder desempatar por él en el orderBy: Prisma exige que
+    // el agregado usado al ordenar esté también seleccionado.
+    _min: { createdAt: true },
+    // Desempate explícito y estable. Sin él, dos compradores con la misma
+    // cantidad se intercambian entre recargas y con `take` incluso cambia
+    // QUIÉN aparece en el último puesto.
+    orderBy: [
+      { _sum: { quantity: "desc" } },
+      { _min: { createdAt: "asc" } },
+      { participantId: "asc" },
+    ],
+    take: TOPE_RANKING,
+  });
+  if (filas.length < MINIMO_COMPRADORES_RANKING) return [];
+
+  const personas = await prisma.participant.findMany({
+    where: { id: { in: filas.map((f) => f.participantId) } },
+    // Solo el nombre. Ni teléfono, ni correo, ni cédula: esto va a una
+    // página abierta a internet.
+    select: { id: true, name: true },
+  });
+  return proyectarRanking(filas, new Map(personas.map((p) => [p.id, p.name])));
+}
+
+/**
+ * Top de compradores de una rifa, ya listo para pintar.
+ *
+ * Cacheado con la etiqueta de la rifa: cambia cada vez que se confirma un
+ * pago, no solo cuando el dueño edita el sorteo. `createdAt` se usa para
+ * desempatar DENTRO de la consulta y no se devuelve: la caché guarda JSON y
+ * una fecha volvería convertida en texto mintiendo el tipo.
+ */
+export async function getTopCompradores(raffleId: string): Promise<TopComprador[]> {
+  const leer = unstable_cache(leerTopCompradores, ["top-compradores", raffleId], {
+    tags: [TAG_RIFAS, tagRifaId(raffleId)],
+    revalidate: SEGUNDOS_CACHE_RIFA,
+  });
+  return leer(raffleId);
 }
 
 /**

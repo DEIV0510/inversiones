@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { confirmOrderPayment } from "@/lib/engine/orders";
 import { clientIp, isRateLimited } from "@/lib/rate-limit";
@@ -16,6 +17,17 @@ import {
 } from "@/lib/wompi";
 
 export const runtime = "nodejs";
+
+/**
+ * Un pago confirmado por esta vía cambia el porcentaje de avance y el ranking
+ * de compradores, que son datos CACHEADOS. Antes esta ruta no invalidaba nada
+ * (era el único camino de confirmación que no lo hacía), así que el comprador
+ * veía sus números al instante pero el resto de la página seguía enseñando
+ * las cifras viejas hasta que venciera el plazo de la caché.
+ */
+function confirmarYRefrescar(raffleId: string): void {
+  invalidarEtiquetas(TAG_RIFAS, tagRifaId(raffleId));
+}
 
 /**
  * Verificación de respaldo tras el redirect de la pasarela. Nunca confía en
@@ -81,7 +93,10 @@ export async function POST(
         amount: Math.round(voucher!.total!),
         raw: voucher,
       });
-      if (result.ok) return NextResponse.json({ status: "PAID" });
+      if (result.ok) {
+        confirmarYRefrescar(order.raffleId);
+        return NextResponse.json({ status: "PAID" });
+      }
     }
   }
 
@@ -96,7 +111,10 @@ export async function POST(
         amount: Math.round(tx.amount_in_cents / 100),
         raw: tx,
       });
-      if (result.ok) return NextResponse.json({ status: "PAID" });
+      if (result.ok) {
+        confirmarYRefrescar(order.raffleId);
+        return NextResponse.json({ status: "PAID" });
+      }
     }
   }
 

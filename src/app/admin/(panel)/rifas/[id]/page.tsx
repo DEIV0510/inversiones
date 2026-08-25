@@ -99,6 +99,7 @@ export default async function EditarRifaPage({
           gatewayCheckout: raffle.gatewayCheckout,
           showPrize: raffle.showPrize,
           showDrawDate: raffle.showDrawDate,
+          showRanking: raffle.showRanking,
           ticketPacks,
           prizes,
           prizedNumbers,

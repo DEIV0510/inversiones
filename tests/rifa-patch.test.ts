@@ -56,6 +56,7 @@ describe("PATCH de rifa: solo lo que viene", () => {
       "imageAspect",
       "selectionMode",
       "showPrize",
+      "showRanking",
       "showDrawDate",
       "progressMode",
       "manualProgressPct",
