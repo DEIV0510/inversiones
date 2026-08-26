@@ -324,7 +324,22 @@ export async function confirmOrderPayment(params: {
       return { ok: true, order, alreadyPaid: true };
     }
 
-    if (order.status !== "PENDING") {
+    // Se admite PENDING y también EXPIRED.
+    //
+    // POR QUÉ EXPIRED. La reserva empieza a correr al CREAR el pedido, no al
+    // pulsar "pagar". Un comprador que paga por PSE o Nequi tarda de sobra
+    // más que eso entre que sale al banco y vuelve, así que su pago llega
+    // cuando el pedido ya figura vencido. Antes esto cortaba aquí y el
+    // dinero quedaba cobrado sin entregar ni un número: pasó de verdad con
+    // el pedido 9Y45RPNH (pago de Bold 69 segundos después del vencimiento).
+    //
+    // Dejarlo pasar NO regala números: justo debajo está el rescate, que
+    // solo re-reclama los que sigan libres. Si ya se le vendieron a otro,
+    // el pedido cae en REJECTED con el pago registrado y una entrada de
+    // auditoría para devolver la plata o reasignar a mano. Y una orden ya
+    // PAID sale antes, por el corto-circuito de más arriba, así que el
+    // contador de vendidos no se puede inflar dos veces.
+    if (order.status !== "PENDING" && order.status !== "EXPIRED") {
       return {
         ok: false,
         reason: `La orden está en estado ${order.status} y no puede confirmarse`,
@@ -517,8 +532,26 @@ export async function confirmOrderPayment(params: {
  */
 export async function expireOverdueOrders(): Promise<number> {
   const now = new Date();
+  // Un pedido con un intento de pago registrado NO se vence en el acto: se le
+  // dan 30 minutos de gracia. Pagar por PSE o Nequi tarda, y el pago puede
+  // llegar despues del plazo de reserva; vencerlo antes es soltarle los
+  // numeros a otro comprador mientras el dinero de este ya viajaba. Pasados
+  // los 30 minutos sí se vence: para entonces, o Bold ya confirmó, o el
+  // intento se quedó a medias.
+  const GRACIA_CON_INTENTO_MS = 30 * 60_000;
+  const conGracia = new Date(now.getTime() - GRACIA_CON_INTENTO_MS);
+
   const overdue = await prisma.order.findMany({
-    where: { status: "PENDING", reservedUntil: { lt: now } },
+    where: {
+      status: "PENDING",
+      reservedUntil: { lt: now },
+      OR: [
+        // Sin ningún intento de pago: se vence en cuanto pasa el plazo.
+        { payments: { none: {} } },
+        // Con intento de pago: solo tras la gracia.
+        { payments: { some: {} }, reservedUntil: { lt: conGracia } },
+      ],
+    },
     select: { id: true },
     take: 500,
   });

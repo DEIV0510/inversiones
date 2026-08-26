@@ -315,9 +315,20 @@ export const createOrderSchema = z
     // Se aceptan "12.345.678" o "12 345 678" porque así la escribe la gente;
     // los separadores se limpian aquí y a la base solo llegan dígitos.
     // Ciudad o municipio: dato OPCIONAL, texto libre corto.
+    //
+    // Se limpia ANTES de juzgarlo. Con la union anterior, un espacio suelto
+    // (o el autocompletado del navegador dejando basura) no era ni cadena
+    // vacia ni texto de 2 caracteres, asi que tumbaba la compra entera con
+    // el mensaje por defecto de Zod, en ingles. Un campo opcional jamas
+    // puede impedir pagar.
     city: z
-      .union([z.literal(""), z.string().trim().min(2).max(80)])
-      .optional(),
+      .string()
+      .max(80, "La ciudad es demasiado larga")
+      .optional()
+      .transform((v) => {
+        const limpio = (v ?? "").trim();
+        return limpio.length >= 2 ? limpio : undefined;
+      }),
     idNumber: z
       .string({ error: "Escribe tu cédula (entre 5 y 15 dígitos)" })
       .trim()

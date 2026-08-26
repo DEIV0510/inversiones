@@ -23,6 +23,8 @@ type OrderRow = {
   quantity: number;
   total: number;
   status: string;
+  /** Reserva vencida. Es una marca, no un estado: el pedido sigue PENDING. */
+  vencida?: boolean;
   paymentMethod: string | null;
   reservedUntil: string | null;
   paidAt: string | null;
@@ -294,7 +296,14 @@ export default function OrdersModule({
                       {order.participant.phone}
                     </p>
                   </div>
-                  <Tag tone={tag.tone}>{tag.text}</Tag>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <Tag tone={tag.tone}>{tag.text}</Tag>
+                    {/* Un PENDING con la reserva pasada se marca aparte, sin
+                        mentir sobre su estado: sigue siendo confirmable. */}
+                    {order.vencida && order.status === "PENDING" ? (
+                      <Tag tone="muted">Plazo vencido</Tag>
+                    ) : null}
+                  </div>
                 </div>
 
                 <p className="mt-1.5 truncate text-xs text-fg-faint">
@@ -362,7 +371,12 @@ export default function OrdersModule({
                       Cancelar
                     </button>
                   ) : null}
-                  {canConfirm && order.status === "PENDING" ? (
+                  {/* Tambien en los VENCIDOS: es justo el caso de alguien que
+                      pago tarde y hay que entregarle sus numeros. El motor solo
+                      recupera los que sigan libres; si ya se vendieron, deja el
+                      pedido en RECHAZADO para devolver la plata. */}
+                  {canConfirm &&
+                  (order.status === "PENDING" || order.status === "EXPIRED") ? (
                     <button
                       type="button"
                       onClick={() => confirmPayment(order)}

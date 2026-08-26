@@ -108,7 +108,13 @@ export async function GET(req: NextRequest) {
       numbers: formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits),
       quantity: o.quantity,
       total: o.total,
-      status: isOrderExpired(o) ? "EXPIRED" : o.status,
+      // El estado va CRUDO. Antes se le pintaba "EXPIRED" a un pedido que en
+      // la base sigue PENDING, y el panel colgaba de ese estado el boton de
+      // confirmar: al dueno le desaparecia justo en el pedido de alguien que
+      // pago tarde, que es cuando mas falta hace. La caducidad se manda
+      // aparte para poder seguir marcandola en la lista.
+      status: o.status,
+      vencida: isOrderExpired(o),
       paymentMethod: o.paymentMethod,
       reservedUntil: o.reservedUntil,
       paidAt: o.paidAt,

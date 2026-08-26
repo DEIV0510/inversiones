@@ -244,6 +244,11 @@ export default function NumberPicker({
   // le compran y para coordinar la entrega de un premio fisico.
   const [city, setCity] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Cerrojo contra el doble toque.  no basta: entre que llega la
+  // respuesta y el navegador cambia de pagina hay una ventana en la que el
+  // boton vuelve a estar activo, y un segundo toque creaba OTRO pedido que
+  // apartaba mas numeros a nombre del mismo comprador.
+  const enviandoRef = useRef(false);
   const [formError, setFormError] = useState("");
   const [notice, setNotice] = useState("");
   const panelRef = useModalA11y(checkoutOpen, () => setCheckoutOpen(false));
@@ -473,6 +478,11 @@ export default function NumberPicker({
       setFormError("Escribe tu cédula (mínimo 5 dígitos)");
       return;
     }
+    // Cerrojo: un segundo toque no crea otro pedido. Se suelta solo en los
+    // caminos de FALLO; si la compra sale bien, el boton se queda bloqueado
+    // hasta que el navegador cambie de pagina.
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setSubmitting(true);
     setFormError("");
     try {
@@ -505,6 +515,8 @@ export default function NumberPicker({
           setLoadingSuggestions(true);
           loadSuggestions();
           setFormError("");
+          enviandoRef.current = false;
+          setSubmitting(false);
           setNotice(
             perdidos.length > 0
               ? `Otra persona tomó ${perdidos.length === 1 ? "el número" : "los números"} ${perdidos.join(", ")} antes que tú. Los quitamos de tu selección: elige otros y continúa.`
@@ -515,6 +527,8 @@ export default function NumberPicker({
         // Cualquier otro rechazo del servidor (por ejemplo el 422 de compra
         // mínima) se muestra tal cual en el modal: el mensaje ya viene
         // redactado para el comprador.
+        enviandoRef.current = false;
+        setSubmitting(false);
         setFormError(data.error || "No fue posible crear tu pedido");
         return;
       }
@@ -527,10 +541,12 @@ export default function NumberPicker({
           : `/pedido/${data.code}`
       );
     } catch {
-      setFormError("Error de conexión. Intenta de nuevo.");
-    } finally {
+      enviandoRef.current = false;
       setSubmitting(false);
+      setFormError("Error de conexión. Intenta de nuevo.");
     }
+    // Sin : reactivaba el boton entre la respuesta y el cambio de
+    // pagina, que es justo la ventana del doble toque.
   }
 
   // ¿El número que acaba de buscar está premiado? Solo se celebra si además

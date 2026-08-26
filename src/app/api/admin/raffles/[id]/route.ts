@@ -289,16 +289,28 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   // en Bold y que el comprador puede reclamar — y eso no se borra desde un
   // botón. Los pedidos SIN pagar (pendientes, vencidos, cancelados) no
   // documentan nada y se van con la rifa.
+  // Se cuenta el DINERO, no el estado del pedido. Mirar solo status PAID
+  // dejaba pasar el caso peor: un pago de Bold que entro sobre un pedido que
+  // ya no se pudo cumplir queda como Payment APPROVED con la orden en
+  // EXPIRED o REJECTED. Borrar esa rifa habria destruido la unica prueba de
+  // un cobro real que aun hay que devolver o reasignar.
   const pagados = await prisma.order.count({
-    where: { raffleId: id, status: "PAID" },
+    where: {
+      raffleId: id,
+      OR: [
+        { status: "PAID" },
+        { payments: { some: { status: { in: ["APPROVED", "PENDING"] } } } },
+      ],
+    },
   });
   if (pagados > 0) {
     return NextResponse.json(
       {
         error:
-          `Esta rifa tiene ${pagados} ${pagados === 1 ? "pedido pagado" : "pedidos pagados"}: ` +
-          "no puede eliminarse porque son el respaldo de un dinero que se cobró " +
-          "de verdad. Usa el estado CANCELADA para que deje de mostrarse.",
+          `Esta rifa tiene ${pagados} ${pagados === 1 ? "pedido con dinero" : "pedidos con dinero"} ` +
+          "de por medio: no puede eliminarse porque son el respaldo de cobros " +
+          "reales. Revísalos en Pagos y usa el estado CANCELADA para que la " +
+          "rifa deje de mostrarse.",
       },
       { status: 409 }
     );
@@ -308,9 +320,13 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
   // tienen cascada, así que si no se limpian primero, el delete de la rifa
   // falla. RaffleNumber y PrizedNumber sí cascadean; Winner queda con
   // raffleId en null.
-  const idsPedidos = (
-    await prisma.order.findMany({ where: { raffleId: id }, select: { id: true } })
-  ).map((o) => o.id);
+  // Se guardan los pedidos ENTEROS, no solo sus ids: el codigo es lo unico
+  // que despues permite cruzar con el historial de Bold si alguien reclama.
+  const pedidos = await prisma.order.findMany({
+    where: { raffleId: id },
+    select: { id: true, code: true, total: true, status: true },
+  });
+  const idsPedidos = pedidos.map((o) => o.id);
 
   await prisma.$transaction(async (tx) => {
     if (idsPedidos.length > 0) {
@@ -342,7 +358,10 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     // pedidos sin pagar.
     detail: {
       title: existing.title,
-      pedidosBorrados: idsPedidos.length,
+      pedidosBorrados: pedidos.length,
+      // Codigo, monto y estado de cada uno: sin esto no hay como responderle
+      // a un comprador que reclame despues de borrada la rifa.
+      pedidos: pedidos.map((o) => `${o.code}:${o.status}:${o.total}`),
       compradoresHuerfanosBorrados: huerfanos.count,
     },
   });

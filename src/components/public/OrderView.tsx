@@ -1106,6 +1106,14 @@ export default function OrderView({
       if (!vivo) return;
       if (intentos >= 5) {
         setConfirmandoPasarela(false);
+        // Antes se apagaba el aviso y no se decia nada: el comprador se
+        // quedaba mirando una pantalla que no habia cambiado y lo primero
+        // que hace uno ahi es volver a pagar. Eso es cobrarle dos veces.
+        setVerifyMsg(
+          "Todavia no nos llega la confirmacion de tu pago. Si el banco te lo " +
+            "aprobo, NO vuelvas a pagar: puede tardar unos minutos. Toca " +
+            "«Ya pagué — verificar» o busca tus números en Mis boletas."
+        );
         return;
       }
       reloj = window.setTimeout(consultarEstado, 4000);

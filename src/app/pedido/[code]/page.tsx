@@ -4,7 +4,13 @@ import Header from "@/components/landing/Header";
 import Footer from "@/components/landing/Footer";
 import BottomBar from "@/components/landing/BottomBar";
 import OrderView from "@/components/public/OrderView";
-import { boldAmountSupported, boldButtonConfig } from "@/lib/bold";
+import {
+  boldAmountSupported,
+  boldButtonConfig,
+  boldOrderId,
+  boldVoucherConfirmaOrden,
+  fetchBoldTransaction,
+} from "@/lib/bold";
 import { invalidarEtiquetas, TAG_RIFAS, tagRifaId } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
 import { leCorreoAlConfirmar } from "@/lib/email";
@@ -98,7 +104,38 @@ export default async function PedidoPage({
     }
   }
 
+  // PRIMERO se le pregunta a Bold, DESPUÉS se vence.
+  //
+  // Al revés —que es como estaba— esta misma página mataba el pedido del
+  // comprador justo cuando volvía del banco: la reserva corre desde que se
+  // crea el pedido, y pagar por PSE o Nequi tarda más que eso. El resultado
+  // era dinero cobrado y cero números.
+  if (order.status === "PENDING" && pasarelaDeRifa(order.raffle) === "bold") {
+    const referencia = boldOrderId(code);
+    const voucher = await fetchBoldTransaction(referencia);
+    if (boldVoucherConfirmaOrden(voucher, order)) {
+      const res = await confirmOrderPayment({
+        orderId: order.id,
+        provider: "bold",
+        providerTxId: referencia,
+        reference: referencia,
+        amount: Math.round(voucher!.total!),
+        raw: voucher,
+      });
+      if (res.ok) {
+        invalidarEtiquetas(TAG_RIFAS, tagRifaId(order.raffleId));
+        order = await prisma.order.findUnique({
+          where: { code },
+          include: { raffle: true, participant: true },
+        });
+        if (!order) notFound();
+      }
+    }
+  }
+
   // Expiración oportunista: si esta orden ya venció, ejecutar el barrido.
+  // Ya no puede pisar un pago recién confirmado, porque la consulta a Bold
+  // va antes y un pedido PAID no entra aquí.
   if (isOrderExpired(order)) {
     await expireOverdueOrders();
     order = await prisma.order.findUnique({
