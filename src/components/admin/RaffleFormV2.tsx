@@ -3,6 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
+import {
+  comprimirImagen,
+  enMegas,
+  MAX_SUBIDA_BYTES,
+} from "@/lib/comprimir-imagen";
 import { slugify } from "@/lib/slug";
 import { formatCop } from "@/lib/format";
 import { RAFFLE_STATUSES_V2, STATUS_META_V2, type RaffleStatusV2 } from "@/lib/raffle-status";
@@ -876,12 +881,35 @@ export default function RaffleFormV2({
     setUploading(true);
     setError("");
     try {
+      // Se encoge ANTES de mandarla. Vercel corta las peticiones por encima
+      // de ~4,5 MB en su borde: la función no llega a ejecutarse y responde
+      // texto plano, así que el formulario se quedaba sin motivo que enseñar
+      // y el dueño solo veía "No fue posible subir la imagen" al intentar
+      // publicar el flyer de su sorteo.
+      const aSubir = await comprimirImagen(file);
+
+      if (aSubir.size > MAX_SUBIDA_BYTES) {
+        setError(
+          `Esa imagen pesa ${enMegas(aSubir.size)} MB y el máximo son ` +
+            `${enMegas(MAX_SUBIDA_BYTES)} MB. Tómale una captura de pantalla ` +
+            `o mándatela por WhatsApp y sube esa, que pesa mucho menos.`
+        );
+        return;
+      }
+
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", aSubir);
       const res = await fetch("/api/admin/upload", { method: "POST", body: formData });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || "No fue posible subir la imagen");
+        // El 413 puede venir del borde de Vercel, que NO responde JSON: sin
+        // este caso el usuario se quedaba sin explicación.
+        setError(
+          data.error ||
+            (res.status === 413
+              ? `La imagen es demasiado pesada (${enMegas(aSubir.size)} MB). Prueba con una captura de pantalla.`
+              : `No fue posible subir la imagen (error ${res.status}).`)
+        );
         return;
       }
       onDone(data.url);

@@ -5,7 +5,14 @@ import { saveImage } from "@/lib/media";
 
 export const runtime = "nodejs";
 
-const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+// Techo REAL de subida. Antes decia 10 MB y era mentira: Vercel corta
+// cualquier peticion a una funcion serverless por encima de ~4,5 MB en su
+// BORDE — la funcion ni se ejecuta y la respuesta es texto plano
+// (FUNCTION_PAYLOAD_TOO_LARGE), no el JSON que el panel espera. Medido en
+// produccion: 2,03 MB -> 201; 4,46 MB -> 413; 7,03 MB -> 413. El panel ahora
+// encoge la foto antes de mandarla (src/lib/comprimir-imagen.ts); esto es el
+// respaldo por si llega igual algo grande.
+const MAX_SIZE = 4 * 1024 * 1024;
 
 export async function POST(req: NextRequest) {
   const auth = await requireAdminApi("raffles.manage");
@@ -13,9 +20,9 @@ export async function POST(req: NextRequest) {
 
   // Rechazar antes de bufferizar el body: formData() carga todo en memoria.
   const contentLength = parseInt(req.headers.get("content-length") || "0", 10);
-  if (contentLength > MAX_SIZE + 1024 * 1024) {
+  if (contentLength > MAX_SIZE + 512 * 1024) {
     return NextResponse.json(
-      { error: "La imagen es muy pesada (máximo 10 MB)" },
+      { error: "La imagen es muy pesada (máximo 4 MB)" },
       { status: 413 }
     );
   }
@@ -33,7 +40,7 @@ export async function POST(req: NextRequest) {
   }
   if (file.size > MAX_SIZE) {
     return NextResponse.json(
-      { error: "La imagen es muy pesada (máximo 10 MB)" },
+      { error: "La imagen es muy pesada (máximo 4 MB)" },
       { status: 413 }
     );
   }
@@ -65,7 +72,10 @@ export async function POST(req: NextRequest) {
   try {
     const url = await saveImage(optimized);
     return NextResponse.json({ url }, { status: 201 });
-  } catch {
+  } catch (err) {
+    // Se registra el motivo real: sin esto, un token de Blob caducado o una
+    // cuota agotada se veian igual que cualquier otro fallo.
+    console.error("Fallo guardando la imagen:", err);
     return NextResponse.json(
       { error: "No fue posible guardar la imagen. Intenta de nuevo." },
       { status: 500 }
