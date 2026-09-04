@@ -442,6 +442,24 @@ export const settingsSchema = z.object({
     .min(2, "La ubicación no puede quedar vacía")
     .max(160)
     .optional(),
+  // Píxel de Meta: SOLO dígitos, nada más.
+  //
+  // No es tiquismiquis: este valor acaba dentro de una llamada de JavaScript
+  // en el navegador. Aceptar texto libre sería dejar que quien entre al panel
+  // inyecte código en todas las páginas públicas. La cadena vacía apaga el
+  // píxel.
+  meta_pixel_id: z
+    .union([
+      z.literal(""),
+      z
+        .string()
+        .trim()
+        .regex(
+          /^\d{5,20}$/,
+          "El píxel de Meta son solo números (por ejemplo 2211697406447993)"
+        ),
+    ])
+    .optional(),
   facebook_url: socialUrl.optional(),
   instagram_url: socialUrl.optional(),
   tiktok_url: socialUrl.optional(),

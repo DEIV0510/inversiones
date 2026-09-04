@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PrizedGroup, PublicRaffle } from "@/lib/public";
 import { formatCop, formatearPlazo } from "@/lib/format";
 import { formatNumber } from "@/lib/numbers";
+import { eventoMeta } from "@/components/public/MetaPixel";
 import { useModalA11y } from "@/components/useModalA11y";
 import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
 
@@ -1058,6 +1059,14 @@ export default function NumberPicker({
                 onClick={() => {
                   setFormError("");
                   setCheckoutOpen(true);
+                  // Aviso a Meta de que empezo el checkout: es la senal que
+                  // deja medir cuanta gente llega hasta aqui y luego no paga.
+                  // Solo viaja el valor, nunca datos del comprador.
+                  eventoMeta("InitiateCheckout", {
+                    value: total,
+                    currency: "COP",
+                    num_items: quantity,
+                  });
                 }}
                 disabled={!canContinue}
                 aria-describedby={

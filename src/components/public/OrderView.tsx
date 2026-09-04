@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { eventoMeta } from "@/components/public/MetaPixel";
 import { useEffect, useRef, useState } from "react";
 import BoldPayButton, { type BoldButtonData } from "@/components/public/BoldPayButton";
 import { formatCop } from "@/lib/format";
@@ -1067,6 +1068,25 @@ export default function OrderView({
   }, [autoEnviarWhatsApp, whatsappUrl, hayPasarela]);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState("");
+
+  // Compra confirmada -> se avisa a Meta. Es EL evento que hace que las
+  // campanas puedan optimizar hacia gente que compra de verdad; sin el, Meta
+  // solo ve clics.
+  //
+  // Solo se manda el valor y la moneda: ni nombre, ni telefono, ni correo, ni
+  // cedula, ni los numeros comprados. Y va con el codigo del pedido como
+  // identificador, que es lo que usa Meta para no contar dos veces la misma
+  // venta si el comprador recarga esta pantalla.
+  const compraAvisada = useRef(false);
+  useEffect(() => {
+    if (order.status !== "PAID" || compraAvisada.current) return;
+    compraAvisada.current = true;
+    eventoMeta(
+      "Purchase",
+      { value: order.total, currency: "COP", num_items: order.quantity },
+      order.code
+    );
+  }, [order.status, order.total, order.quantity, order.code]);
   const [copied, setCopied] = useState(false);
   const [descargando, setDescargando] = useState(false);
   const [errorDescarga, setErrorDescarga] = useState(false);

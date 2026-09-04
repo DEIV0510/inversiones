@@ -17,6 +17,7 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
   const [facebookUrl, setFacebookUrl] = useState(initial.facebook_url);
   const [instagramUrl, setInstagramUrl] = useState(initial.instagram_url);
   const [tiktokUrl, setTiktokUrl] = useState(initial.tiktok_url);
+  const [metaPixelId, setMetaPixelId] = useState(initial.meta_pixel_id);
   const [demoMode, setDemoMode] = useState(initial.demo_mode === "1");
 
   // Correo automático. Vive en Configuración pero no viaja en SiteSettings:
@@ -68,6 +69,7 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
           facebook_url: facebookUrl.trim(),
           instagram_url: instagramUrl.trim(),
           tiktok_url: tiktokUrl.trim(),
+          meta_pixel_id: metaPixelId.replace(/D/g, ""),
           demo_mode: demoMode ? "1" : "0",
           // Las claves que no viajan se quedan como están en la base.
           ...(correoCargado
@@ -215,6 +217,27 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
         <p className={helpCls}>
           Las redes son opcionales; déjalas vacías para no mostrarlas.
         </p>
+        <div>
+          <label htmlFor="cf-pixel" className={labelCls}>
+            Píxel de Meta (Facebook e Instagram)
+          </label>
+          <input
+            id="cf-pixel"
+            type="text"
+            inputMode="numeric"
+            value={metaPixelId}
+            onChange={(e) => setMetaPixelId(e.target.value.replace(/D/g, ""))}
+            className={inputCls}
+            placeholder="2211697406447993"
+            maxLength={20}
+          />
+          <p className={helpCls}>
+            Solo el número que da Meta. Sirve para saber qué anuncio trae
+            compras de verdad. Déjalo vacío para apagarlo: así no se manda
+            nada a Meta. Nunca se envían nombres, teléfonos, correos ni
+            cédulas de tus compradores, y no se activa en este panel.
+          </p>
+        </div>
       </div>
 
       <div className="rounded-2xl border border-line bg-card p-4">

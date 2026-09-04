@@ -31,11 +31,12 @@ export default function PrivacidadPage() {
 
       <h2>1. Datos que recogemos</h2>
       <p>
-        Al comprar te pedimos tu <strong>nombre</strong> y tu{" "}
-        <strong>número de celular</strong>. El <strong>correo</strong> y la{" "}
-        <strong>cédula</strong> son opcionales: sirven para enviarte tus
-        números y para que puedas encontrar tus boletas si no recuerdas con qué
-        celular compraste. Junto a eso guardamos el detalle de tu compra: los
+        Al comprar te pedimos tu <strong>nombre</strong>, tu{" "}
+        <strong>número de celular</strong> y tu <strong>cédula</strong>: con
+        esos tres datos identificamos al ganador y tú encuentras tus boletas
+        en cualquier momento. El <strong>correo</strong> y la{" "}
+        <strong>ciudad</strong> son opcionales; si dejas el correo te enviamos
+        ahí tus números. Junto a eso guardamos el detalle de tu compra: los
         números, la cantidad, el valor, la fecha, el estado del pedido y tu
         código de participación.
       </p>
@@ -102,14 +103,27 @@ export default function PrivacidadPage() {
         la ley lo exija.
       </p>
 
-      <h2>8. Conservación</h2>
+      <h2>8. Medición de nuestra publicidad</h2>
+      <p>
+        Cuando tenemos campañas activas, esta página usa el píxel de Meta
+        (Facebook e Instagram) para saber qué anuncio trajo una compra y no
+        gastar en publicidad que no funciona. A Meta se le envía{" "}
+        <strong>únicamente</strong> qué página se visitó y el valor de la
+        compra. Nunca tu nombre, tu teléfono, tu correo, tu cédula ni los
+        números que compraste. Meta usa cookies para esto; puedes bloquearlas
+        desde la configuración de tu navegador o con cualquier bloqueador de
+        anuncios, y la página seguirá funcionando igual: comprar y consultar
+        tus boletas no depende de ellas.
+      </p>
+
+      <h2>9. Conservación</h2>
       <p>
         Conservamos los datos de tu participación mientras el sorteo esté
         vigente y después durante el tiempo necesario para atender
         reclamaciones y cumplir las obligaciones legales aplicables.
       </p>
 
-      <h2>9. Tus derechos</h2>
+      <h2>10. Tus derechos</h2>
       <p>
         Conforme a la Ley 1581 de 2012, puedes conocer, actualizar y rectificar
         tus datos, solicitar prueba de la autorización, ser informado sobre su
@@ -118,7 +132,7 @@ export default function PrivacidadPage() {
         por los datos de contacto publicados en esta página.
       </p>
 
-      <h2>10. Política completa</h2>
+      <h2>11. Política completa</h2>
       <p className="rounded-xl border border-dashed border-brand/40 bg-brand/5 p-4 text-fg">
         [PENDIENTE DE CONFIGURAR] — Este espacio está reservado para la
         política de tratamiento de datos personales completa (Ley 1581 de 2012
@@ -127,7 +141,7 @@ export default function PrivacidadPage() {
         procedimiento para atender consultas y reclamos.
       </p>
 
-      <h2>11. Contacto</h2>
+      <h2>12. Contacto</h2>
       <p>
         Para consultas sobre tus datos personales, escríbenos por los datos de
         contacto publicados en esta página.

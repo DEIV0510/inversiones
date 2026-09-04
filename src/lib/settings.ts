@@ -12,6 +12,11 @@ export type SiteSettings = {
   tiktok_url: string;
   /** "1" muestra el aviso de sitio en demostración. */
   demo_mode: string;
+  /**
+   * Píxel de Meta (Facebook/Instagram). Solo dígitos. Vacío = apagado, y
+   * entonces no se carga ni una petición a Meta.
+   */
+  meta_pixel_id: string;
 };
 
 export const SETTING_KEYS: (keyof SiteSettings)[] = [
@@ -23,6 +28,7 @@ export const SETTING_KEYS: (keyof SiteSettings)[] = [
   "instagram_url",
   "tiktok_url",
   "demo_mode",
+  "meta_pixel_id",
 ];
 
 const FALLBACK: SiteSettings = {
@@ -34,6 +40,7 @@ const FALLBACK: SiteSettings = {
   instagram_url: "",
   tiktok_url: "",
   demo_mode: "0",
+  meta_pixel_id: "",
 };
 
 /** Lectura real de la configuración (sin caché). */

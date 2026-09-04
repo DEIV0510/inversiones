@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, Inter } from "next/font/google";
 import DemoBanner from "@/components/landing/DemoBanner";
+import MetaPixel from "@/components/public/MetaPixel";
 import { getSettings } from "@/lib/settings";
 import "./globals.css";
 
@@ -99,6 +100,11 @@ export default async function RootLayout({
           }}
         />
         {children}
+        {/* Píxel de Meta. Va aquí porque esta plantilla la comparten todas
+            las pantallas, pero el propio componente se apaga en /admin: la
+            medición es de los compradores, no del trabajo del dueño. Sin id
+            configurado no carga nada. */}
+        <MetaPixel pixelId={settings.meta_pixel_id} />
         <DemoBanner active={settings.demo_mode === "1"} />
       </body>
     </html>
