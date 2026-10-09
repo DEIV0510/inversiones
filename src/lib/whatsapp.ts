@@ -33,6 +33,12 @@ export function normalizeWhatsApp(input: string): string | null {
   // de menos: rechazar en vez de interpretarlo como otro país (31 = Países
   // Bajos).
   if (digits.length === 11 && digits.startsWith("3")) return null;
+  // El 57 es SOLO Colombia, y en Colombia todo número tiene 10 dígitos: con
+  // el indicativo son 12 exactos. Un "57" con 11 o 13 dígitos es un número
+  // al que le sobra o le falta uno. Pasó de verdad: se guardó en el panel
+  // "57310693018" (sin el 7 final) y todos los botones de WhatsApp del sitio
+  // quedaron apuntando a un número que no existe.
+  if (digits.startsWith("57")) return null;
   if (digits.length >= 11 && digits.length <= 15) return digits;
   return null;
 }

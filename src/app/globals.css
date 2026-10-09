@@ -99,6 +99,9 @@ html {
 :root {
   --barra-inferior-h: 4rem; /* navegación inferior del móvil */
   --aviso-demo-h: 0px; /* lo escribe DemoBanner cuando se muestra */
+  /* Barra de compra/reserva del sorteo (useAltoPublicado). El pie de página
+     deja al final un hueco de este alto para no quedar tapado. */
+  --barra-compra-h: 0px;
 }
 
 @media (min-width: 1024px) {

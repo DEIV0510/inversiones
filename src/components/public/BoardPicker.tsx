@@ -18,6 +18,7 @@ import { descuentoPorCantidad, precioConDescuento } from "@/lib/precio";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
 import { eventoMeta } from "@/components/public/MetaPixel";
 import { useModalA11y } from "@/components/useModalA11y";
+import { useAltoPublicado } from "@/components/useAltoPublicado";
 import { IconCheck, IconClock, IconWhatsApp, IconX } from "@/components/icons";
 
 /**
@@ -110,10 +111,14 @@ type Aviso = { texto: string; importante: boolean; vez: number };
  *
  * En las rifas de 3 cifras cada bloque lleva `content-visibility: auto`: el
  * navegador no dibuja los bloques que están fuera de la pantalla. El
- * `contain-intrinsic-size` es la altura que se le supone mientras tanto
- * (~17 filas de 6 en el móvil, 10 de 10 desde sm) y `auto` hace que recuerde
- * la real en cuanto lo pinta una vez. El `p-1` deja sitio al anillo de foco:
- * con la contención de pintado, lo que se sale del bloque no se ve.
+ * `contain-intrinsic-size` es la altura que se le supone mientras tanto, y
+ * tiene que ser la REAL: las casillas son cuadradas, así que un bloque mide
+ * 875 px a 360 de ancho y 960 a 390. Con una altura fija, al pintarse los
+ * bloques de arriba empujaban el destino del salto por centena hasta 150 px.
+ * Por eso el primer bloque se pinta siempre y su alto medido se publica en
+ * `--alto-bloque` (ver BoardPicker); `auto` hace además que cada bloque
+ * recuerde su alto real en cuanto se pinta una vez. El `p-1` deja sitio al
+ * anillo de foco: con la contención de pintado, lo que se sale no se ve.
  *
  * Mientras el buscador filtra NO se aplica: un bloque que se quedó con dos
  * filas seguiría ocupando, fuera de la pantalla, la altura que recordaba de
@@ -226,9 +231,10 @@ const Bloque = memo(function Bloque({
         </h3>
       ) : null}
       <div
+        data-bloque={inicio}
         className={`grid grid-cols-6 gap-1.5 p-1 sm:grid-cols-10 sm:gap-2 ${
-          conEncabezado && !filtro
-            ? "[contain-intrinsic-size:auto_880px] [content-visibility:auto] sm:[contain-intrinsic-size:auto_680px]"
+          conEncabezado && !filtro && inicio > 0
+            ? "[contain-intrinsic-size:auto_var(--alto-bloque,880px)] [content-visibility:auto]"
             : ""
         }`}
       >
@@ -287,6 +293,29 @@ export default function BoardPicker({
 
   const [aviso, setAviso] = useState<Aviso | null>(null);
   const vecesAvisoRef = useRef(0);
+  // Pie fijo (aviso + barra de RESERVAR): su alto se publica para el pie de
+  // página (useAltoPublicado).
+  const pieRef = useRef<HTMLDivElement | null>(null);
+
+  // Alto real de un bloque de 100 casillas, medido en el primero (que se
+  // pinta siempre) y publicado para que los bloques sin pintar supongan ese
+  // mismo alto. Ver la explicación en Bloque.
+  const contenedorRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    const contenedor = contenedorRef.current;
+    const primero = contenedor?.querySelector<HTMLElement>('[data-bloque="0"]');
+    if (!contenedor || !primero) return;
+    const medir = () => {
+      // Un bloque incompleto (rifa de menos de 100) o filtrado no sirve de
+      // medida: se deja la suposición por defecto.
+      if (primero.childElementCount < 100) return;
+      contenedor.style.setProperty("--alto-bloque", `${primero.offsetHeight}px`);
+    };
+    medir();
+    const observador = new ResizeObserver(medir);
+    observador.observe(primero);
+    return () => observador.disconnect();
+  }, []);
   const avisar = useCallback((texto: string, importante: boolean) => {
     vecesAvisoRef.current += 1;
     setAviso({ texto, importante, vez: vecesAvisoRef.current });
@@ -573,6 +602,35 @@ export default function BoardPicker({
       block: "start",
     });
     destino.focus({ preventScroll: true });
+
+    // Los bloques de en medio no están pintados (content-visibility) y el
+    // navegador calcula el destino con su alto SUPUESTO. Ese alto cambia con
+    // el ancho del celular (875 px a 360, 960 px a 390), así que al pintarse
+    // empujan el destino y el salto se quedaba hasta 150 px corto. Cuando
+    // termina el desplazamiento se mira dónde quedó y, si no está arriba, se
+    // reajusta sin animación (dos veces: el reajuste pinta otros bloques).
+    const reajustar = (vueltas: number) => {
+      const margen = parseFloat(getComputedStyle(destino).scrollMarginTop) || 0;
+      const desvio = destino.getBoundingClientRect().top - margen;
+      if (Math.abs(desvio) <= 4) return;
+      window.scrollBy({ top: desvio, behavior: "auto" });
+      if (vueltas > 1) {
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() => reajustar(vueltas - 1))
+        );
+      }
+    };
+    // Safari anterior a la 18 no tiene "scrollend": ahí se espera un tiempo
+    // fijo. (Se guarda en una variable para que TypeScript, que da el evento
+    // por existente, no deje el otro camino como inalcanzable.)
+    const hayScrollend = "onscrollend" in document.documentElement;
+    if (sinMovimiento) {
+      requestAnimationFrame(() => requestAnimationFrame(() => reajustar(2)));
+    } else if (hayScrollend) {
+      window.addEventListener("scrollend", () => reajustar(2), { once: true });
+    } else {
+      window.setTimeout(() => reajustar(2), 900);
+    }
   }
 
   function abrirReserva() {
@@ -723,6 +781,8 @@ export default function BoardPicker({
 
   const destinatario = companyName.trim();
   const verPie = hayPedido || Boolean(aviso);
+  // Con el pie fijo a la vista, el pie de página le deja su hueco.
+  useAltoPublicado(pieRef, "--barra-compra-h", verPie);
 
   return (
     <section id="elegir" className="mt-6 flex flex-col gap-5">
@@ -849,6 +909,7 @@ export default function BoardPicker({
       {/* El tablero. El clic se recoge aquí, una sola vez, y no en cada
           casilla (ver Bloque). */}
       <div
+        ref={contenedorRef}
         role="group"
         aria-label="Tablero de números"
         onClick={alTocarTablero}
@@ -888,6 +949,7 @@ export default function BoardPicker({
           la navegación inferior y del aviso de demostración, igual que la
           barra de la rifa grande, para que el botón nunca quede tapado. */}
       <div
+        ref={pieRef}
         style={{ bottom: "calc(var(--barra-inferior-h) + var(--aviso-demo-h))" }}
         className={`fixed inset-x-0 z-30 transition-all duration-300 motion-reduce:transition-none ${
           verPie

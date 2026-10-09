@@ -146,6 +146,14 @@ export default function Footer({ settings, hideWhatsApp }: Props) {
           </Link>
         </div>
       </div>
+      {/* Hueco para las franjas fijas del borde inferior que se publican
+          solas: el aviso de demostración y la barra de compra/reserva del
+          sorteo. Sin ellas mide 0; con ellas, el final del pie se puede leer
+          en vez de quedar escondido detrás. */}
+      <div
+        aria-hidden="true"
+        style={{ height: "calc(var(--aviso-demo-h) + var(--barra-compra-h))" }}
+      />
     </footer>
   );
 }

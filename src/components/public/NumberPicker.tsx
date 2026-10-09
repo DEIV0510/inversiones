@@ -8,6 +8,7 @@ import { formatNumber } from "@/lib/numbers";
 import { descuentoPorCantidad, precioConDescuento } from "@/lib/precio";
 import { eventoMeta } from "@/components/public/MetaPixel";
 import { useModalA11y } from "@/components/useModalA11y";
+import { useAltoPublicado } from "@/components/useAltoPublicado";
 import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
 
 type Suggestion = { value: number; label: string };
@@ -245,6 +246,7 @@ export default function NumberPicker({
   const panelRef = useModalA11y(checkoutOpen, () => setCheckoutOpen(false));
   const abortRef = useRef<AbortController | null>(null);
   const noticeRef = useRef<HTMLDivElement | null>(null);
+  const barraRef = useRef<HTMLDivElement | null>(null);
 
   // El aviso vive arriba del bloque de selección, pero se dispara cuando el
   // comprador está abajo (en el modal o en la cuadrícula). Si queda fuera de
@@ -281,6 +283,8 @@ export default function NumberPicker({
   );
   const ahorro = totalLista - total;
   const hayPedido = quantity > 0;
+  // Con la barra de resumen a la vista, el pie de página le deja su hueco.
+  useAltoPublicado(barraRef, "--barra-compra-h", hayPedido);
   // Cuántos números le faltan para llegar a la compra mínima. En la práctica
   // solo pasa eligiendo a mano: los paquetes y el contador ya salen del
   // mínimo. Con 0 no hay pedido todavía, así que no falta nada.
@@ -1021,6 +1025,7 @@ export default function NumberPicker({
           navegación inferior y del aviso de demostración para que
           "Comprar" quede siempre destapado y se pueda pulsar. */}
       <div
+        ref={barraRef}
         style={{ bottom: "calc(var(--barra-inferior-h) + var(--aviso-demo-h))" }}
         className={`fixed inset-x-0 z-30 transition-all duration-300 ${
           hayPedido

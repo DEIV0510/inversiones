@@ -66,6 +66,34 @@ export async function PATCH(req: NextRequest) {
     data.whatsapp_number = normalized;
   }
 
+  // El número que se MUESTRA y el que ABRE WhatsApp tienen que ser el mismo.
+  // Son dos casillas separadas en el panel y se escriben a mano: si una
+  // queda con un dígito de menos, el comprador ve un número y el botón lo
+  // manda a otro. Se comparan los dígitos del visible con el final del real
+  // (el visible no lleva el 57). Si la petición trae solo uno de los dos, el
+  // otro se toma de lo guardado.
+  if (data.whatsapp_number !== undefined || data.whatsapp_display !== undefined) {
+    const guardados = await prisma.setting.findMany({
+      where: { key: { in: ["whatsapp_number", "whatsapp_display"] } },
+    });
+    const guardado = (clave: string) =>
+      guardados.find((s) => s.key === clave)?.value ?? "";
+    const numero = data.whatsapp_number ?? guardado("whatsapp_number");
+    const visible = (data.whatsapp_display ?? guardado("whatsapp_display")).replace(
+      /\D/g,
+      ""
+    );
+    if (numero && visible && !numero.endsWith(visible)) {
+      return NextResponse.json(
+        {
+          error:
+            "El «WhatsApp visible» no coincide con el «Número de WhatsApp». Revisa que a ninguno le falte o le sobre un dígito.",
+        },
+        { status: 422 }
+      );
+    }
+  }
+
   for (const [key, value] of Object.entries(data)) {
     if (value === undefined) continue;
     await prisma.setting.upsert({

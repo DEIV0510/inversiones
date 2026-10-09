@@ -684,6 +684,16 @@ export async function cancelOrder(orderId: string): Promise<Order> {
       where: { id: orderId },
       data: { status: "CANCELLED", reservedUntil: null },
     });
+    // Un pago MANUAL es solo la constancia que dejó el dueño al marcar el
+    // pedido como pagado: si anula la venta, esa constancia ya no vale y se
+    // anula con ella. Antes se quedaba "Aprobado" en el módulo de Pagos junto
+    // a un pedido cancelado (pasó con un pedido marcado por error y anulado
+    // 41 segundos después). Los pagos de PASARELA no se tocan: ese dinero
+    // entró de verdad y su rastro tiene que seguir ahí hasta que se devuelva.
+    await tx.payment.updateMany({
+      where: { orderId, provider: "manual", status: "APPROVED" },
+      data: { status: "VOIDED" },
+    });
     if (wasPaid) {
       const rifa = await tx.raffle.update({
         where: { id: order.raffleId },

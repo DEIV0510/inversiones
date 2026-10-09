@@ -215,20 +215,37 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
                       {meta.text}
                     </span>
                   </div>
-                  {o.status === "PAID" ? (
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {o.numbers.slice(0, 10).map((n) => (
-                        <span
-                          key={n}
-                          className="rounded-md bg-well px-2 py-1 font-display text-xs font-bold tracking-wider text-fg"
-                        >
-                          {n}
-                        </span>
-                      ))}
-                      {o.numbers.length > 10 ? (
-                        <span className="px-1 py-1 text-xs text-fg-faint">
-                          +{o.numbers.length - 10} más
-                        </span>
+                  {/* Los números llegan del servidor solo cuando se pueden
+                      ver: pagados, o la reserva viva de una rifa de
+                      cuadrícula (ahí los escogió él sobre el tablero). Por
+                      eso se pinta lo que llegue, en amarillo si aún falta
+                      el pago. */}
+                  {o.numbers.length > 0 ? (
+                    <div className="mt-2">
+                      <div className="flex flex-wrap gap-1.5">
+                        {o.numbers.slice(0, 10).map((n) => (
+                          <span
+                            key={n}
+                            className={`rounded-md px-2 py-1 font-display text-xs font-bold tracking-wider ${
+                              o.status === "PAID"
+                                ? "bg-well text-fg"
+                                : "bg-cell-reserved text-cell-ink"
+                            }`}
+                          >
+                            {n}
+                          </span>
+                        ))}
+                        {o.numbers.length > 10 ? (
+                          <span className="px-1 py-1 text-xs text-fg-faint">
+                            +{o.numbers.length - 10} más
+                          </span>
+                        ) : null}
+                      </div>
+                      {o.status !== "PAID" ? (
+                        <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
+                          Reservados a tu nombre. Quedan tuyos cuando se
+                          confirme el pago.
+                        </p>
                       ) : null}
                     </div>
                   ) : (
