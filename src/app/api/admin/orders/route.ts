@@ -68,6 +68,9 @@ export async function GET(req: NextRequest) {
   const perPage = Math.min(100, Math.max(10, parseInt(sp.get("perPage") ?? "25", 10) || 25));
   const status = sp.get("status");
   const raffleId = sp.get("raffleId");
+  // Pedidos de un comprador concreto ("Ver sus pedidos" en Participantes).
+  // Por id, no por celular: en la cuadrícula hay compradores sin celular.
+  const participantId = (sp.get("participantId") ?? "").trim();
   const search = (sp.get("q") ?? "").trim();
 
   // Cada filtro es una condición independiente y se combinan con AND: así el
@@ -76,6 +79,7 @@ export async function GET(req: NextRequest) {
   const porEstado = filtroDeEstado(status, new Date());
   if (porEstado) condiciones.push(porEstado);
   if (raffleId) condiciones.push({ raffleId });
+  if (participantId) condiciones.push({ participantId });
   const porBusqueda = filtroDeBusqueda(search);
   if (porBusqueda) condiciones.push(porBusqueda);
 

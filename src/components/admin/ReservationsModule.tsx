@@ -15,8 +15,10 @@ type ReservationRow = {
   id: string;
   number: string;
   raffleTitle: string;
+  orderId: string | null;
   orderCode: string | null;
-  participant: { name: string; phone: string } | null;
+  /* Sin celular cuando la rifa de cuadrícula solo pide el nombre. */
+  participant: { name: string; phone: string | null } | null;
   createdAt: string;
   reservedUntil: string;
 };
@@ -40,7 +42,12 @@ const alertCls =
 const btnDanger =
   "inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-error/45 bg-error/10 px-4 text-xs font-bold uppercase tracking-[0.1em] text-error transition-colors hover:bg-error/20 disabled:opacity-50";
 
-export default function ReservationsModule() {
+export default function ReservationsModule({
+  canCancel,
+}: {
+  /** Liberar = cancelar el pedido (orders.cancel). Lo decide la página. */
+  canCancel: boolean;
+}) {
   const [page, setPage] = useState(1);
   const [raffleId, setRaffleId] = useState("");
   const [raffles, setRaffles] = useState<RaffleOption[]>([]);
@@ -48,8 +55,6 @@ export default function ReservationsModule() {
   const [version, setVersion] = useState(0);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
-  // Si el servidor contesta 403 se ocultan los botones: este rol solo mira.
-  const [puedeLiberar, setPuedeLiberar] = useState(true);
 
   const requestKey = `${page}|${raffleId}|${version}`;
 
@@ -120,15 +125,17 @@ export default function ReservationsModule() {
    * Libera una reserva. Un número reservado pertenece siempre a un pedido, así
    * que liberarlo es cancelar ese pedido completo: se avisa en el aviso previo
    * para que nadie suelte por error los demás números del mismo comprador.
-   * Se reutiliza el mismo endpoint de cancelación que usa Pedidos, buscando
-   * antes el pedido por su código.
+   * Se reutiliza el mismo endpoint de cancelación que usa Pedidos, con el id
+   * del pedido que ya trae la fila.
    */
   async function liberar(row: ReservationRow) {
-    const codigo = row.orderCode;
-    if (!codigo) return;
+    const { orderId, orderCode } = row;
+    if (!orderId) return;
     if (
       !window.confirm(
-        `¿Liberar el número ${row.number}? Se cancela el pedido ${codigo} completo y todos sus números vuelven a quedar libres.`
+        `¿Liberar el número ${row.number}? Se cancela ${
+          orderCode ? `el pedido ${orderCode}` : "su pedido"
+        } completo y todos sus números vuelven a quedar libres.`
       )
     ) {
       return;
@@ -136,27 +143,11 @@ export default function ReservationsModule() {
     setBusyId(row.id);
     setActionError("");
     try {
-      const busqueda = await fetch(
-        `/api/admin/orders?q=${encodeURIComponent(codigo)}&perPage=10`
-      );
-      const datos = await busqueda.json().catch(() => ({}));
-      if (!busqueda.ok) {
-        setActionError(datos.error || "No fue posible encontrar el pedido");
-        return;
-      }
-      const pedido = (datos.items ?? []).find(
-        (o: { id: string; code: string }) => o.code === codigo
-      );
-      if (!pedido) {
-        setActionError(`No se encontró el pedido ${codigo}`);
-        return;
-      }
-      const res = await fetch(`/api/admin/orders/${pedido.id}/cancel`, {
+      const res = await fetch(`/api/admin/orders/${orderId}/cancel`, {
         method: "POST",
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 403) setPuedeLiberar(false);
         setActionError(data.error || "No fue posible liberar la reserva");
         return;
       }
@@ -226,7 +217,7 @@ export default function ReservationsModule() {
                   </div>
                   <p className="mt-1 truncate text-sm text-fg-soft">
                     {row.participant
-                      ? `${row.participant.name} · ${row.participant.phone}`
+                      ? `${row.participant.name} · ${row.participant.phone || "Sin celular"}`
                       : "Sin participante asociado"}
                   </p>
                   <p className="mt-1 text-xs tabular-nums text-fg-faint">
@@ -244,7 +235,7 @@ export default function ReservationsModule() {
                   </p>
                 </div>
               </div>
-              {puedeLiberar && row.orderCode ? (
+              {canCancel && row.orderId ? (
                 <div className="mt-3 flex justify-end border-t border-line pt-3">
                   <button
                     type="button"

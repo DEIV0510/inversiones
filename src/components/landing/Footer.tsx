@@ -69,9 +69,9 @@ export default function Footer({ settings, hideWhatsApp }: Props) {
               href={waGeneral(settings.whatsapp_number)}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-fg transition-colors hover:text-wa"
+              className="mt-2 inline-flex items-center gap-2 text-sm font-semibold text-fg transition-colors hover:text-wa-ink"
             >
-              <IconWhatsApp width={16} height={16} className="shrink-0 text-wa" />
+              <IconWhatsApp width={16} height={16} className="shrink-0 text-wa-ink" />
               WhatsApp: {settings.whatsapp_display}
             </a>
           )}

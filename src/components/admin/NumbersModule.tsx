@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatNumber } from "@/lib/numbers";
+import NumbersGrid from "./NumbersGrid";
 import {
   EmptyState,
   LoadingRows,
@@ -16,15 +18,26 @@ import {
 /**
  * Gestión de números a escala: jamás se carga el universo completo.
  * Consulta puntual por número, lista paginada de tomados y bloqueo de rangos.
+ * En las rifas de cuadrícula (1.000 números o menos) va además, arriba, el
+ * tablero completo con el dueño de cada casilla.
  */
 
+/* Fila de GET /api/admin/raffles (trae la rifa entera; aquí se usa esto). */
 type RaffleOption = {
   id: string;
   title: string;
   totalNumbers: number;
+  digits: number;
+  status: string;
+  pricePerNumber: number;
+  reservationMinutes: number;
+  boardMode?: boolean;
 };
 
 type NumberStatus = "AVAILABLE" | "RESERVED" | "PAID" | "BLOCKED";
+
+/* El celular puede faltar: en la cuadrícula se reserva solo con el nombre. */
+type Persona = { name: string; phone: string | null };
 
 type SingleResult = {
   number: string;
@@ -32,7 +45,7 @@ type SingleResult = {
   status: NumberStatus;
   reservedUntil: string | null;
   orderCode: string | null;
-  participant: { name: string; phone: string } | null;
+  participant: Persona | null;
 };
 
 type NumberRow = {
@@ -45,20 +58,27 @@ type NumberRow = {
   createdAt: string;
   orderCode: string | null;
   orderStatus: string | null;
-  participant: { name: string; phone: string } | null;
+  participant: Persona | null;
 };
+
+/** "Ana · 3001234567", o "Ana · Sin celular": nunca "Ana · null". */
+function personaTexto(p: Persona): string {
+  return `${p.name} · ${p.phone || "Sin celular"}`;
+}
 
 /* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
 const cardCls = "rounded-2xl border border-line bg-card p-4 shadow-card";
 /* Aviso de error: rosa sobre violeta, igual en todos los módulos. */
 const alertCls =
   "rounded-xl border border-error/35 bg-error/10 px-4 py-3 text-sm font-medium text-error";
-/* Fichas de estado: verde libre, ámbar reservado, fucsia vendido, gris resto. */
+/* Fichas de estado con el mismo código del tablero: verde pagado, ámbar
+   reservado, gris bloqueado o vencido y neutro (sin color) lo disponible. */
 const TAG_TONES = {
   ok: "border-wa/45 bg-wa/12 text-wa",
   warn: "border-warn/45 bg-warn/12 text-warn",
   bad: "border-error/45 bg-error/10 text-error",
   info: "border-brand/45 bg-brand/15 text-brand-light",
+  neutral: "border-fg-soft/40 bg-transparent text-fg",
   muted: "border-line-strong bg-well text-fg-faint",
 } as const;
 
@@ -95,9 +115,9 @@ const STATUS_CHIP: Record<
   NumberStatus,
   { text: string; tone: keyof typeof TAG_TONES }
 > = {
-  AVAILABLE: { text: "Disponible", tone: "ok" },
+  AVAILABLE: { text: "Disponible", tone: "neutral" },
   RESERVED: { text: "Reservado", tone: "warn" },
-  PAID: { text: "Vendido", tone: "info" },
+  PAID: { text: "Vendido", tone: "ok" },
   BLOCKED: { text: "Bloqueado", tone: "muted" },
 };
 
@@ -119,9 +139,15 @@ function rowChip(row: NumberRow) {
 export default function NumbersModule({
   initialRaffleId,
   canBlock,
+  canConfirm,
+  canCancel,
 }: {
   initialRaffleId: string;
   canBlock: boolean;
+  /** Marcar pagos y apartar a mano desde el tablero (orders.confirm). */
+  canConfirm: boolean;
+  /** Liberar reservas y anular ventas desde el tablero (orders.cancel). */
+  canCancel: boolean;
 }) {
   const [raffles, setRaffles] = useState<RaffleOption[]>([]);
   const [loadingRaffles, setLoadingRaffles] = useState(true);
@@ -151,6 +177,9 @@ export default function NumbersModule({
   const [blockMsg, setBlockMsg] = useState("");
   // Bloqueo desde la ficha de consulta puntual (un solo número).
   const [singleBusy, setSingleBusy] = useState(false);
+  // Sube cuando las herramientas de abajo cambian algo, para que el tablero
+  // de arriba lo pinte sin esperar a su refresco de cada 20 s.
+  const [recargaTablero, setRecargaTablero] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -246,6 +275,10 @@ export default function NumbersModule({
     setListKey((k) => k + 1);
   }
 
+  const raffleActual = raffles.find((r) => r.id === raffleId) ?? null;
+  const esCuadricula = Boolean(raffleActual?.boardMode);
+  const cifras = raffleActual?.digits ?? 5;
+
   async function lookupNumber(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!raffleId || lookup.trim() === "") return;
@@ -339,8 +372,18 @@ export default function NumbersModule({
     } else {
       await refreshSingle(single.value);
       refreshList();
+      setRecargaTablero((k) => k + 1);
     }
     setSingleBusy(false);
+  }
+
+  /**
+   * El tablero cambió algo (un pago, una reserva liberada, un bloqueo): la
+   * lista de tomados y la ficha consultada se ponen al día con él.
+   */
+  function alCambiarTablero() {
+    refreshList();
+    if (single) void refreshSingle(single.value);
   }
 
   async function runBlock(action: "block" | "unblock") {
@@ -386,6 +429,7 @@ export default function NumbersModule({
         : `${data.unblocked} desbloqueados`
     );
     refreshList();
+    setRecargaTablero((k) => k + 1);
     // Si el número que muestra la ficha de arriba entra en el rango que
     // acaba de cambiar, se refresca para que no quede mostrando lo viejo.
     const afectado = to ?? from;
@@ -411,7 +455,7 @@ export default function NumbersModule({
           Rifa
         </label>
         {loadingRaffles ? (
-          <div className="h-12 animate-pulse rounded-xl bg-well" aria-hidden="true" />
+          <div className="h-12 animate-pulse rounded-xl bg-well motion-reduce:animate-none" aria-hidden="true" />
         ) : (
           <select
             id="numbers-raffle"
@@ -423,6 +467,7 @@ export default function NumbersModule({
             {raffles.map((r) => (
               <option key={r.id} value={r.id}>
                 {r.title} · {r.totalNumbers.toLocaleString("es-CO")} números
+                {r.boardMode ? " · cuadrícula" : ""}
               </option>
             ))}
           </select>
@@ -433,6 +478,25 @@ export default function NumbersModule({
         <EmptyState text="Selecciona una rifa para consultar y gestionar sus números." />
       ) : (
         <>
+          {/* Tablero de la cuadrícula: lo primero que se ve, porque desde
+              ahí se lleva la rifa entera. Las herramientas de siempre siguen
+              debajo. La key lo reinicia al cambiar de rifa: nada de lo
+              escogido en una se arrastra a la otra. */}
+          {esCuadricula && raffleActual ? (
+            <section className={cardCls}>
+              <SectionTitle>Tablero</SectionTitle>
+              <NumbersGrid
+                key={raffleActual.id}
+                raffle={raffleActual}
+                canConfirm={canConfirm}
+                canCancel={canCancel}
+                canBlock={canBlock}
+                recarga={recargaTablero}
+                onCambio={alCambiarTablero}
+              />
+            </section>
+          ) : null}
+
           {/* Consulta puntual */}
           <section className={cardCls}>
             <SectionTitle>Consultar un número</SectionTitle>
@@ -443,7 +507,7 @@ export default function NumbersModule({
                 pattern="[0-9]*"
                 value={lookup}
                 onChange={(e) => setLookup(e.target.value)}
-                placeholder="Ej: 00042"
+                placeholder={`Ej: ${formatNumber(42, cifras)}`}
                 aria-label="Número a consultar"
                 className={`${inputCls} min-w-0 font-mono tabular-nums`}
               />
@@ -470,7 +534,7 @@ export default function NumbersModule({
                 </div>
                 {single.participant ? (
                   <p className="mt-2 text-sm text-fg-soft">
-                    {single.participant.name} · {single.participant.phone}
+                    {personaTexto(single.participant)}
                   </p>
                 ) : null}
                 {single.orderCode ? (
@@ -629,7 +693,7 @@ export default function NumbersModule({
                       </div>
                       {row.participant ? (
                         <p className="mt-1.5 text-sm text-fg-soft">
-                          {row.participant.name} · {row.participant.phone}
+                          {personaTexto(row.participant)}
                           {row.orderCode ? ` · Pedido ${row.orderCode}` : ""}
                         </p>
                       ) : null}

@@ -17,6 +17,10 @@ export const metadata: Metadata = {
  * en línea, y esta página es común a todos. Se remite siempre a "la página de
  * tu pedido", que es la única que sabe la verdad de esa rifa.
  *
+ * Los sorteos de CUADRÍCULA (2 y 3 cifras) funcionan distinto y se nombran
+ * aparte: el comprador escoge en un tablero público, RESERVA (puede bastar su
+ * nombre), envía la reserva por WhatsApp y ve sus números desde ese momento.
+ *
  * El reglamento definitivo lo tiene que aportar el propietario: ese bloque
  * sigue marcado como pendiente y no se afirma ninguna autorización que no
  * exista.
@@ -39,6 +43,12 @@ export default function TerminosPage() {
         número, la cantidad mínima y máxima por pedido y los paquetes
         disponibles; los descuentos por paquete los calcula siempre nuestro
         sistema a partir de lo publicado en ese sorteo.
+      </p>
+      <p>
+        En los sorteos de 2 y 3 cifras escoges tus números en un tablero que
+        muestra cuáles están libres, reservados o pagados. Los reservas con tu
+        nombre y los demás datos que pida ese sorteo, y nos envías la reserva
+        por WhatsApp para coordinar el pago.
       </p>
 
       <h2>2. Números guardados mientras pagas</h2>
@@ -65,8 +75,10 @@ export default function TerminosPage() {
         Tus números se muestran cuando el pago está confirmado. Antes de eso
         ves cuántos números tienes apartados, el total y tu código de
         participación, pero los números permanecen ocultos: es la forma de
-        evitar que alguien se quede con ellos sin pagar. Guarda tu código: con
-        él (o con tu celular, tu correo o tu cédula) puedes consultar tus
+        evitar que alguien se quede con ellos sin pagar. En los sorteos de 2 y
+        3 cifras, en cambio, tú mismo escoges tus números en el tablero y los
+        ves desde que los reservas. Guarda tu código: con él (o con tu
+        celular, tu correo o tu cédula, si los diste) puedes consultar tus
         boletas en la sección &ldquo;Mis boletas&rdquo;, y es el dato con el que
         te identificamos ante cualquier reclamación.
       </p>
@@ -81,18 +93,20 @@ export default function TerminosPage() {
       <h2>6. Sorteo y resultados</h2>
       <p>
         Cada sorteo indica su premio, su precio por número, su fecha y su
-        porcentaje de avance. Los resultados se anuncian por nuestros canales
-        oficiales y se publican en la sección de ganadores de esta página; el
-        día del sorteo también puedes escribir el número que salió en
-        &ldquo;Consultar número ganador&rdquo;. Ahí solo se muestra el nombre
-        abreviado y el celular parcialmente oculto de quien compró ese número.
+        porcentaje de avance (los de 2 y 3 cifras muestran en su lugar el
+        tablero con el estado de cada número). Los resultados se anuncian por
+        nuestros canales oficiales y se publican en la sección de ganadores de
+        esta página; el día del sorteo también puedes escribir el número que
+        salió en &ldquo;Consultar número ganador&rdquo;. Ahí solo se muestra el
+        nombre abreviado de quien compró ese número y, si lo dio, su celular
+        parcialmente oculto.
       </p>
 
       <h2>7. Entrega de premios</h2>
       <p>
         Nos comunicamos con la persona ganadora por los datos de contacto que
-        dejó al comprar, y ahí se acuerdan las condiciones de entrega del
-        premio.
+        dejó al comprar o por el WhatsApp desde el que nos envió su reserva, y
+        ahí se acuerdan las condiciones de entrega del premio.
       </p>
 
       <h2>8. Cambios y cancelaciones</h2>

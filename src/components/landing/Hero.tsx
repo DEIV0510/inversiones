@@ -66,8 +66,9 @@ export default function Hero({ whatsappNumber, location, featured }: Props) {
   return (
     <section id="inicio" className="relative overflow-hidden">
       <div className="dot-grid absolute inset-0" aria-hidden="true" />
+      {/* halo-brand lo atenúa en el tema claro: sobre blanco sería niebla rosa. */}
       <div
-        className="absolute -top-44 left-1/2 h-[480px] w-[780px] -translate-x-1/2 rounded-full bg-brand/20 blur-[150px]"
+        className="halo-brand absolute -top-44 left-1/2 h-[480px] w-[780px] -translate-x-1/2 rounded-full bg-brand/20 blur-[150px]"
         aria-hidden="true"
       />
 

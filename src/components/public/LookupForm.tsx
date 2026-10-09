@@ -6,9 +6,11 @@ import { formatCop } from "@/lib/format";
 import { waLink } from "@/lib/whatsapp";
 import { IconCandado, IconTicket, IconWhatsApp } from "@/components/icons";
 
-/* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. */
+/* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. En el
+   tema claro el ejemplo va sin transparencia: al 70 % daba 2.9:1 sobre well
+   (entero, 5.4:1). */
 const inputCls =
-  "min-h-13 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg transition-colors placeholder:text-fg-faint/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/35";
+  "min-h-13 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg transition-colors placeholder:text-fg-faint/70 light:placeholder:text-fg-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/35";
 
 type LookupOrder = {
   code: string;
@@ -22,12 +24,15 @@ type LookupOrder = {
   paidAt: string | null;
 };
 
+/* Texto verde con text-wa-ink (en claro el verde de WhatsApp no se lee sobre
+   blanco). "En revisión": en claro el tinte violeta dejaba el rojo en 2.6:1;
+   light:bg-error/10 lo sube a 5.0:1 y el oscuro no cambia. */
 const STATUS_LABELS: Record<string, { text: string; cls: string }> = {
-  PAID: { text: "Pagada", cls: "bg-wa/15 text-wa" },
+  PAID: { text: "Pagada", cls: "bg-wa/15 text-wa-ink" },
   PENDING: { text: "Pendiente de pago", cls: "bg-well text-fg-soft" },
   EXPIRED: { text: "Expirada", cls: "bg-well text-fg-faint" },
   CANCELLED: { text: "Cancelada", cls: "bg-well text-fg-faint" },
-  REJECTED: { text: "En revisión", cls: "bg-brand-deep/40 text-error" },
+  REJECTED: { text: "En revisión", cls: "bg-brand-deep/40 text-error light:bg-error/10" },
 };
 
 /** Etiqueta de sección: punto fucsia encendido + título display en mayúsculas. */
@@ -58,7 +63,8 @@ type Props = {
 
 export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
   // Un solo campo: el comprador escribe lo que tenga a mano (celular, correo,
-  // cédula o código de compra) y el servidor deduce qué es.
+  // cédula o código) y el servidor deduce qué es. "Código", sin "de compra":
+  // en las rifas de 2 y 3 cifras la gente reserva, no compra.
   const [dato, setDato] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -128,7 +134,7 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
             htmlFor="lk-dato"
             className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
           >
-            Tu celular, tu correo, tu cédula o el código de tu compra
+            Tu celular, tu correo, tu cédula o tu código
           </label>
           <input
             id="lk-dato"
@@ -155,7 +161,8 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
             <span className="text-fg-soft">3001234567</span> (celular),{" "}
             <span className="break-all text-fg-soft">correo@ejemplo.com</span>,{" "}
             <span className="text-fg-soft">1098765432</span> (cédula) o{" "}
-            <span className="text-fg-soft">ABC12345</span> (código de tu compra).
+            <span className="text-fg-soft">ABC12345</span> (código de
+            participación o de reserva).
           </p>
         </div>
         {error ? (
@@ -305,7 +312,7 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
         /* Sin WhatsApp: redacción neutra, sin sugerir ningún canal. */
         <p className="text-center text-xs leading-relaxed text-fg-faint">
           ¿No aparecen tus boletas? Prueba con el mismo dato que usaste al
-          comprar, o con el código de tu comprobante.
+          participar, o con tu código de participación o de reserva.
         </p>
       )}
     </div>

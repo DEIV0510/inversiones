@@ -42,7 +42,13 @@ export default function LoginForm() {
   }
 
   return (
-    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-bg px-4 py-10">
+    /* Oscuro siempre, como el resto del panel (data-theme="dark" + text-fg:
+       ver AdminShell). El neón, los puntos y el halo leen variables --fx-*,
+       así que aquí dentro quedan oscuros solos. */
+    <main
+      data-theme="dark"
+      className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-bg px-4 py-10 text-fg"
+    >
       <div className="dot-grid absolute inset-0" aria-hidden="true" />
       <div
         className="absolute -top-32 left-1/2 h-[420px] w-[680px] -translate-x-1/2 rounded-full bg-brand/25 blur-[130px]"

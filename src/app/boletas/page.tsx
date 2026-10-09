@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Mis boletas",
   description:
-    "Consulta tus boletas con tu celular, tu correo, tu cédula o el código de tu compra.",
+    "Consulta tus boletas con tu celular, tu correo, tu cédula o tu código de participación o de reserva.",
 };
 
 export default async function BoletasPage() {
@@ -34,11 +34,12 @@ export default async function BoletasPage() {
         hideWhatsApp={ocultarWhatsApp}
       />
       <main className="relative mx-auto w-full max-w-2xl px-4 pb-28 pt-24 sm:px-6 lg:pt-32">
-        {/* Trama de puntos + halo fucsia: profundidad como en el sorteo. */}
+        {/* Trama de puntos + halo fucsia: profundidad como en el sorteo.
+            halo-brand lo atenúa en el tema claro. */}
         <div className="dot-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[520px] max-w-full -translate-x-1/2 rounded-full bg-brand/20 blur-[120px]"
+          className="halo-brand pointer-events-none absolute -top-24 left-1/2 h-64 w-[520px] max-w-full -translate-x-1/2 rounded-full bg-brand/20 blur-[120px]"
         />
         <div className="relative">
           <div className="text-center">
@@ -54,7 +55,7 @@ export default async function BoletasPage() {
             </h1>
             <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-fg-soft">
               Con un solo dato basta: escribe tu celular, tu correo, tu cédula o
-              el código de tu compra y te mostramos todas tus boletas.
+              tu código y te mostramos todas tus boletas.
             </p>
           </div>
           <LookupForm

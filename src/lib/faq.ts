@@ -9,9 +9,12 @@ export type FaqItem = { question: string; answer: string };
  *  - al comprador no se le nombra "manual" ni "aleatorio": elige cuántos
  *    números quiere o busca el suyo;
  *  - no se habla de "reserva": los números se le guardan un rato mientras
- *    paga, que es lo que dice el checkout;
+ *    paga, que es lo que dice el checkout. La excepción son los sorteos de
+ *    2 y 3 cifras, donde la pantalla dice justo eso, "reservar";
  *  - ningún medio de pago se promete por nombre, porque cada rifa decide si
- *    cobra por WhatsApp y esta portada es común a todas.
+ *    cobra por WhatsApp y esta portada es común a todas. Los sorteos de 2 y
+ *    3 cifras sí pueden nombrarlo: ahí el servidor deja WhatsApp siempre
+ *    encendido (AJUSTES_FORZADOS_CUADRICULA en src/lib/cuadricula.ts).
  */
 export function getFaqItems(settings: SiteSettings): FaqItem[] {
   return [
@@ -23,7 +26,7 @@ export function getFaqItems(settings: SiteSettings): FaqItem[] {
     {
       question: "¿Cómo selecciono mis números?",
       answer:
-        "En la página del sorteo puedes tocar directamente la cantidad que quieras comprar, elegir entre los números sugeridos o buscar tu número de la suerte y verificar si está disponible. Tú decides.",
+        "En la página del sorteo puedes tocar directamente la cantidad que quieras comprar, elegir entre los números sugeridos o buscar tu número de la suerte y verificar si está disponible. Tú decides. En los sorteos de 2 y 3 cifras ves todos los números en un tablero y tocas los que quieras.",
     },
     {
       question: "¿Qué pasa con mis números mientras pago?",
@@ -33,12 +36,12 @@ export function getFaqItems(settings: SiteSettings): FaqItem[] {
     {
       question: "¿Cuándo veo mis números?",
       answer:
-        "Tus números se muestran cuando confirmamos tu pago. Antes de eso ves cuántos tienes guardados, tu total y tu código de participación, pero los números siguen tapados: así nadie puede quedarse con ellos sin haber pagado.",
+        "Tus números se muestran cuando confirmamos tu pago. Antes de eso ves cuántos tienes guardados, tu total y tu código de participación, pero los números siguen tapados: así nadie puede quedarse con ellos sin haber pagado. En los sorteos de 2 y 3 cifras, en cambio, tú escoges tus números en el tablero y los ves desde que los reservas.",
     },
     {
       question: "¿Cómo realizo el pago?",
       answer:
-        "Al terminar tu compra, la pantalla de tu pedido te muestra las formas de pago de ese sorteo. Tu participación queda confirmada cuando verificamos el pago.",
+        "Al terminar tu compra, la pantalla de tu pedido te muestra las formas de pago de ese sorteo. Tu participación queda confirmada cuando verificamos el pago. En los sorteos de 2 y 3 cifras nos envías tu reserva por WhatsApp y por ahí te pasamos los datos para pagar.",
     },
     {
       question: "¿Dónde consulto mis números?",

@@ -212,7 +212,9 @@ export async function POST(req: NextRequest) {
   const orders = await prisma.order.findMany({
     where: { participantId: { in: [...participantIds] } },
     include: {
-      raffle: { select: { title: true, digits: true, drawDateText: true } },
+      raffle: {
+        select: { title: true, digits: true, drawDateText: true, boardMode: true },
+      },
       participant: { select: { name: true } },
     },
     orderBy: { createdAt: "desc" },
@@ -233,14 +235,20 @@ export async function POST(req: NextRequest) {
       // pendiente se manda la cantidad (para pintar las fichas tapadas) pero
       // NINGÚN número: si no, bastaba con mirar la respuesta de esta consulta
       // para verlos sin haber pagado.
+      //
+      // Excepción: la reserva VIVA de una rifa de cuadrícula. Ahí el comprador
+      // escogió sus números sobre el tablero público y la pantalla del pedido
+      // ya se los enseña; ocultarlos aquí solo lo confundiría. Una reserva
+      // vencida o liberada no los enseña: esos números ya no son suyos.
+      const muestraNumeros =
+        estado === "PAID" || (o.raffle.boardMode && estado === "PENDING");
       return {
         code: o.code,
         raffleTitle: o.raffle.title,
         drawDateText: o.raffle.drawDateText,
-        numbers:
-          estado === "PAID"
-            ? formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits)
-            : [],
+        numbers: muestraNumeros
+          ? formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits)
+          : [],
         quantity: o.quantity,
         total: o.total,
         status: estado,

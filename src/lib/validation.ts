@@ -490,6 +490,13 @@ export const settingsSchema = z.object({
   instagram_url: socialUrl.optional(),
   tiktok_url: socialUrl.optional(),
   demo_mode: z.enum(["0", "1"]).optional(),
+  /**
+   * Colores del sitio público ("light" = fondo blanco). Lista cerrada: con
+   * este valor la plantilla raíz decide el tema de TODAS las páginas. Sin
+   * esta línea el PATCH lo descartaría en silencio, porque el esquema quita
+   * las claves que no conoce.
+   */
+  public_theme: z.enum(["dark", "light"]).optional(),
   /** "1" envía al comprador sus números por correo al confirmarse el pago. */
   email_enabled: z.enum(["0", "1"]).optional(),
   /** Dirección desde la que salen los correos; vacío usa la del entorno. */

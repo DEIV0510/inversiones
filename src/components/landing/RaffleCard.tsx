@@ -141,9 +141,11 @@ export default function RaffleCard({ raffle, whatsappNumber }: Props) {
           ) : (
             <Link
               href={`/sorteo/${raffle.slug}`}
+              /* Agotada: en claro el tinte violeta dejaba el rojo en 2.6:1;
+                 light:bg-error/10 lo sube a 5.0:1 y el oscuro no cambia. */
               className={`inline-flex min-h-12 items-center justify-center rounded-xl px-5 text-sm font-bold uppercase tracking-wide ${
                 raffle.status === "SOLD_OUT"
-                  ? "bg-brand-deep/40 text-error"
+                  ? "bg-brand-deep/40 text-error light:bg-error/10"
                   : "bg-well text-fg-faint"
               }`}
             >

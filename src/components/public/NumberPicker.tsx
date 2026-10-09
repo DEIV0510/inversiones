@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PrizedGroup, PublicRaffle } from "@/lib/public";
 import { formatCop, formatearPlazo } from "@/lib/format";
 import { formatNumber } from "@/lib/numbers";
+import { descuentoPorCantidad, precioConDescuento } from "@/lib/precio";
 import { eventoMeta } from "@/components/public/MetaPixel";
 import { useModalA11y } from "@/components/useModalA11y";
 import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
@@ -17,7 +18,7 @@ type SearchResult = {
 };
 
 const inputCls =
-  "min-h-12 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 focus:border-brand focus:outline-none";
+  "min-h-12 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg placeholder:text-fg-soft/70 light:placeholder:text-fg-soft focus:border-brand focus:outline-none";
 
 /**
  * Lista vacía compartida para cuando la rifa no publica números premiados.
@@ -55,26 +56,6 @@ function TituloSeccion({
 }
 
 /**
- * Lo que cuesta una cantidad con el descuento del paquete ya aplicado.
- *
- * EL DINERO LO DECIDE EL SERVIDOR: esta cuenta es solo para que el comprador
- * vea de antemano lo que le van a cobrar, y por eso tiene que ser la MISMA
- * fórmula que aplica el motor de pedidos al crear la orden —precio de lista
- * por la cantidad, menos el porcentaje del paquete, redondeado al peso—. Si
- * las dos cuentas no dieran igual, el comprador vería un precio y pagaría
- * otro.
- */
-function precioConDescuento(
-  cantidad: number,
-  precioUnitario: number,
-  descuentoPct: number
-): number {
-  const lista = cantidad * precioUnitario;
-  if (descuentoPct <= 0) return lista;
-  return Math.round((lista * (100 - descuentoPct)) / 100);
-}
-
-/**
  * Colores de la pastilla de cada etiqueta.
  *
  * El dueño escribe el texto ("Más vendido", "VIP", "Personalizado"…) pero no
@@ -94,6 +75,9 @@ const TONOS_ETIQUETA = {
     tarjeta: "glow-brand-sm border-brand bg-brand/5",
   },
   rebaja: {
+    // text-bg y NO text-ink: en el tema claro el ámbar pasa a #92400e,
+    // oscuro, y la tinta negra fija encima daba 2.8:1; text-bg allí es blanco
+    // (7.1:1) y en oscuro es casi negro sobre el ámbar vivo.
     pastilla: "bg-warn text-bg",
     tarjeta: "border-warn/70 bg-warn/5",
   },
@@ -237,15 +221,21 @@ export default function NumberPicker({
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
-  // Cédula: dato OBLIGATORIO. Identifica al ganador junto con el nombre y el
-  // celular, y le sirve al comprador para encontrar sus boletas. El correo,
-  // en cambio, sigue siendo opcional: mucha gente no tiene o lo escribe mal.
+  // Cédula: OBLIGATORIA cuando la rifa la pide (toda rifa nace pidiéndola).
+  // Identifica al ganador junto con el nombre y el celular, y le sirve al
+  // comprador para encontrar sus boletas. El correo, en cambio, sigue siendo
+  // opcional: mucha gente no tiene o lo escribe mal.
+  //
+  // Qué casillas se pintan lo decide la rifa (askPhone, askIdNumber,
+  // askEmail, askCity); con las cuatro encendidas el formulario es el de
+  // siempre. Quien de verdad exige los datos es el servidor, con la misma
+  // configuración.
   const [idNumber, setIdNumber] = useState("");
   // Ciudad o municipio: OPCIONAL. Le sirve al dueno para saber desde donde
   // le compran y para coordinar la entrega de un premio fisico.
   const [city, setCity] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  // Cerrojo contra el doble toque.  no basta: entre que llega la
+  // Cerrojo contra el doble toque. `submitting` no basta: entre que llega la
   // respuesta y el navegador cambia de pagina hay una ventana en la que el
   // boton vuelve a estar activo, y un segundo toque creaba OTRO pedido que
   // apartaba mas numeros a nombre del mismo comprador.
@@ -282,10 +272,7 @@ export default function NumberPicker({
   // eligiendo los números a mano—. Se busca sobre TODOS los paquetes de la
   // rifa y quedándose con el mayor, calcado de lo que hace el servidor al
   // cobrar (calcularTotalPedido); por eso lo que se ve aquí es lo que se paga.
-  const descuentoPct = raffle.ticketPacks.reduce(
-    (mayor, p) => (p.qty === quantity && p.discountPct > mayor ? p.discountPct : mayor),
-    0
-  );
+  const descuentoPct = descuentoPorCantidad(quantity, raffle.ticketPacks);
   const totalLista = quantity * raffle.pricePerNumber;
   const total = precioConDescuento(
     quantity,
@@ -463,7 +450,7 @@ export default function NumberPicker({
       setFormError("Escribe tu nombre completo");
       return;
     }
-    if (phone.replace(/\D/g, "").length < 10) {
+    if (raffle.askPhone && phone.replace(/\D/g, "").length < 10) {
       setFormError(
         raffle.whatsappCheckout
           ? "Escribe tu número de WhatsApp"
@@ -471,11 +458,11 @@ export default function NumberPicker({
       );
       return;
     }
-    // La cédula es OBLIGATORIA: identifica al ganador junto con el nombre y
-    // el celular, y le sirve al comprador para encontrar sus boletas. El
-    // servidor la exige igual (createOrderSchema); esto solo se lo dice antes
-    // de que pierda el viaje.
-    if (idNumber.length < 5) {
+    // La cédula es OBLIGATORIA cuando la rifa la pide: identifica al ganador
+    // junto con el nombre y el celular, y le sirve al comprador para
+    // encontrar sus boletas. El servidor la exige igual (createOrder, según
+    // la rifa); esto solo se lo dice antes de que pierda el viaje.
+    if (raffle.askIdNumber && idNumber.length < 5) {
       setFormError("Escribe tu cédula (mínimo 5 dígitos)");
       return;
     }
@@ -487,8 +474,18 @@ export default function NumberPicker({
     setSubmitting(true);
     setFormError("");
     try {
-      // Datos del comprador comunes a las dos formas de compra.
-      const datos = { raffleSlug: raffle.slug, name, phone, email, idNumber, city };
+      // Datos del comprador comunes a las dos formas de compra. Solo viajan
+      // los que esta rifa pide: el servidor descarta los demás de todas
+      // formas, y así no sale del navegador un dato que nadie pidió. Con los
+      // cuatro encendidos el cuerpo es exactamente el de siempre.
+      const datos = {
+        raffleSlug: raffle.slug,
+        name,
+        ...(raffle.askPhone ? { phone } : {}),
+        ...(raffle.askEmail ? { email } : {}),
+        ...(raffle.askIdNumber ? { idNumber } : {}),
+        ...(raffle.askCity ? { city } : {}),
+      };
       const body = usaNumerosElegidos
         ? { ...datos, numbers: [...selected.keys()] }
         : { ...datos, randomCount: randomQty };
@@ -546,7 +543,7 @@ export default function NumberPicker({
       setSubmitting(false);
       setFormError("Error de conexión. Intenta de nuevo.");
     }
-    // Sin : reactivaba el boton entre la respuesta y el cambio de
+    // Sin `finally`: reactivaba el boton entre la respuesta y el cambio de
     // pagina, que es justo la ventana del doble toque.
   }
 
@@ -577,7 +574,7 @@ export default function NumberPicker({
   // Un número que otra persona está pagando se nombra "Pendiente de pago", no
   // "Reservado": aquí no se aparta nada, se compra.
   const statusChip: Record<SearchResult["status"], { text: string; cls: string }> = {
-    DISPONIBLE: { text: "Disponible", cls: "bg-wa/15 text-wa" },
+    DISPONIBLE: { text: "Disponible", cls: "bg-wa/15 text-wa-ink" },
     RESERVADO: { text: "Pendiente de pago", cls: "bg-warn/15 text-warn" },
     VENDIDO: { text: "Vendido", cls: "bg-brand/20 text-brand-light" },
     BLOQUEADO: { text: "No disponible", cls: "bg-well text-fg-faint" },
@@ -818,7 +815,7 @@ export default function NumberPicker({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <span
                     className={`font-display text-xl font-black tracking-[0.15em] ${
-                      celebraBuscado ? "text-wa" : "text-brand"
+                      celebraBuscado ? "text-wa-ink" : "text-brand"
                     }`}
                   >
                     {searchResult.label}
@@ -850,7 +847,7 @@ export default function NumberPicker({
                 {celebraBuscado ? (
                   <p
                     role="status"
-                    className="mt-2.5 border-t border-wa/30 pt-2.5 text-sm font-black leading-snug text-wa"
+                    className="mt-2.5 border-t border-wa/30 pt-2.5 text-sm font-black leading-snug text-wa-ink"
                   >
                     <span aria-hidden="true">★ </span>¡Este número tiene premio:{" "}
                     {premioBuscadoTexto} Agrégalo antes de que se lo lleven.
@@ -902,7 +899,7 @@ export default function NumberPicker({
                       aria-pressed={isSelected}
                       className={`flex min-h-11 flex-col items-center justify-center overflow-hidden rounded-full px-1 font-display text-[13px] font-black leading-none tracking-wider tabular-nums transition-all sm:text-sm ${
                         premio
-                          ? `ticket-chip-win text-bg ${
+                          ? `ticket-chip-win text-ink ${
                               isSelected
                                 ? "outline-2 outline-offset-2 outline-brand"
                                 : ""
@@ -939,7 +936,7 @@ export default function NumberPicker({
             {/* Qué significa el verde de la cuadrícula. Solo se dice si la
                 rifa publica números premiados, y nunca cuántos hay. */}
             {hayPremiados ? (
-              <p className="mt-3 text-center text-xs font-bold leading-relaxed text-wa">
+              <p className="mt-3 text-center text-xs font-bold leading-relaxed text-wa-ink">
                 <span aria-hidden="true">★ </span>Los números en verde tienen
                 premio al instante.
               </p>
@@ -991,7 +988,7 @@ export default function NumberPicker({
                       }
                       className={`group inline-flex min-h-11 items-center gap-1.5 rounded-full px-3.5 font-display text-sm font-black tracking-wider tabular-nums ${
                         premio
-                          ? "ticket-chip-win text-bg"
+                          ? "ticket-chip-win text-ink"
                           : "ticket-chip text-white"
                       }`}
                     >
@@ -1006,7 +1003,7 @@ export default function NumberPicker({
                   propio carrito. Se le recuerda porque es su mejor razón para
                   rematar la compra. */}
               {premiadosElegidos > 0 ? (
-                <p className="mt-3 text-sm font-black leading-snug text-wa">
+                <p className="mt-3 text-sm font-black leading-snug text-wa-ink">
                   <span aria-hidden="true">★ </span>
                   {premiadosElegidos === 1
                     ? "¡Llevas un número premiado!"
@@ -1170,7 +1167,7 @@ export default function NumberPicker({
                           key={value}
                           className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-display text-xs font-black tracking-wider tabular-nums ${
                             premio
-                              ? "ticket-chip-win text-bg"
+                              ? "ticket-chip-win text-ink"
                               : "ticket-chip text-white"
                           }`}
                         >
@@ -1186,7 +1183,7 @@ export default function NumberPicker({
                     })}
                   </div>
                   {premiadosElegidos > 0 ? (
-                    <p className="mt-2.5 text-xs font-black leading-snug text-wa">
+                    <p className="mt-2.5 text-xs font-black leading-snug text-wa-ink">
                       <span aria-hidden="true">★ </span>
                       {premiadosElegidos === 1
                         ? "Llevas un número premiado."
@@ -1216,76 +1213,85 @@ export default function NumberPicker({
                   autoComplete="name"
                 />
               </div>
-              <div>
-                <label htmlFor="co-phone" className="mb-1.5 block text-sm font-semibold text-fg">
-                  {/* Si esta rifa no cierra por WhatsApp, aquí tampoco se
-                      nombra: se le pide el teléfono y ya. */}
-                  {raffle.whatsappCheckout ? "Tu WhatsApp" : "Tu teléfono"}
-                </label>
-                <input
-                  id="co-phone"
-                  type="tel"
-                  inputMode="numeric"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className={inputCls}
-                  maxLength={15}
-                  autoComplete="tel"
-                />
-              </div>
-              <div>
-                <label htmlFor="co-email" className="mb-1.5 block text-sm font-semibold text-fg">
-                  Correo <span className="font-normal text-fg-faint">(opcional)</span>
-                </label>
-                <input
-                  id="co-email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className={inputCls}
-                  maxLength={200}
-                  autoComplete="email"
-                />
-              </div>
-              <div>
-                <label htmlFor="co-id" className="mb-1.5 block text-sm font-semibold text-fg">
-                  Tu cédula
-                </label>
-                <input
-                  id="co-id"
-                  type="text"
-                  inputMode="numeric"
-                  value={idNumber}
-                  onChange={(e) =>
-                    setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 15))
-                  }
-                  className={inputCls}
-                  maxLength={15}
-                  autoComplete="off"
-                />
-                <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
-                  Con ella identificamos al ganador y tú encuentras tus
-                  boletas en cualquier momento.
-                </p>
-              </div>
-              <div>
-                <label
-                  htmlFor="co-city"
-                  className="mb-1.5 block text-sm font-semibold text-fg"
-                >
-                  Ciudad o municipio{" "}
-                  <span className="font-normal text-fg-faint">(opcional)</span>
-                </label>
-                <input
-                  id="co-city"
-                  type="text"
-                  value={city}
-                  onChange={(e) => setCity(e.target.value)}
-                  className={inputCls}
-                  maxLength={80}
-                  autoComplete="address-level2"
-                />
-              </div>
+              {/* Cada casilla solo se pinta si esta rifa pide ese dato. */}
+              {raffle.askPhone ? (
+                <div>
+                  <label htmlFor="co-phone" className="mb-1.5 block text-sm font-semibold text-fg">
+                    {/* Si esta rifa no cierra por WhatsApp, aquí tampoco se
+                        nombra: se le pide el teléfono y ya. */}
+                    {raffle.whatsappCheckout ? "Tu WhatsApp" : "Tu teléfono"}
+                  </label>
+                  <input
+                    id="co-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className={inputCls}
+                    maxLength={15}
+                    autoComplete="tel"
+                  />
+                </div>
+              ) : null}
+              {raffle.askEmail ? (
+                <div>
+                  <label htmlFor="co-email" className="mb-1.5 block text-sm font-semibold text-fg">
+                    Correo <span className="font-normal text-fg-faint">(opcional)</span>
+                  </label>
+                  <input
+                    id="co-email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className={inputCls}
+                    maxLength={200}
+                    autoComplete="email"
+                  />
+                </div>
+              ) : null}
+              {raffle.askIdNumber ? (
+                <div>
+                  <label htmlFor="co-id" className="mb-1.5 block text-sm font-semibold text-fg">
+                    Tu cédula
+                  </label>
+                  <input
+                    id="co-id"
+                    type="text"
+                    inputMode="numeric"
+                    value={idNumber}
+                    onChange={(e) =>
+                      setIdNumber(e.target.value.replace(/\D/g, "").slice(0, 15))
+                    }
+                    className={inputCls}
+                    maxLength={15}
+                    autoComplete="off"
+                  />
+                  <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
+                    Con ella identificamos al ganador y tú encuentras tus
+                    boletas en cualquier momento.
+                  </p>
+                </div>
+              ) : null}
+              {raffle.askCity ? (
+                <div>
+                  <label
+                    htmlFor="co-city"
+                    className="mb-1.5 block text-sm font-semibold text-fg"
+                  >
+                    Ciudad o municipio{" "}
+                    <span className="font-normal text-fg-faint">(opcional)</span>
+                  </label>
+                  <input
+                    id="co-city"
+                    type="text"
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    className={inputCls}
+                    maxLength={80}
+                    autoComplete="address-level2"
+                  />
+                </div>
+              ) : null}
 
               {/* Aviso de tratamiento de datos. No existía en ningún punto del
                   flujo de compra, y sin él la Ley 1581 se queda sin prueba de

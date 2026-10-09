@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { cifrasDeCuadricula } from "@/lib/cuadricula";
 import { formatCop } from "@/lib/format";
+import { formatNumber } from "@/lib/numbers";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { btnOutline } from "./ui";
 import { IconEye, IconImage, IconPencil } from "@/components/icons";
@@ -53,7 +55,23 @@ export type AdminRaffleRow = {
   reserved: number;
   blocked: number;
   displayOrder: number;
+  /**
+   * Rifa de cuadrícula (2 o 3 cifras): lleva su insignia y el botón al
+   * tablero. Opcionales para que una página que todavía no los mande siga
+   * pintando la lista como siempre.
+   */
+  boardMode?: boolean;
+  digits?: number;
 };
+
+/** "Cuadrícula 00-99", "Cuadrícula 000-999" (o el rango que tenga). */
+function etiquetaCuadricula(raffle: AdminRaffleRow): string {
+  const cifras = raffle.digits ?? cifrasDeCuadricula(raffle.totalNumbers);
+  return `Cuadrícula ${formatNumber(0, cifras)}-${formatNumber(
+    Math.max(0, raffle.totalNumbers - 1),
+    cifras
+  )}`;
+}
 
 export default function RaffleListV2({
   raffles,
@@ -206,6 +224,11 @@ export default function RaffleListV2({
                   >
                     {meta.label}
                   </span>
+                  {raffle.boardMode ? (
+                    <span className="rounded-full border border-cell-reserved/60 bg-cell-reserved/15 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cell-reserved">
+                      {etiquetaCuadricula(raffle)}
+                    </span>
+                  ) : null}
                   {sinFormaDeCobro ? (
                     <span
                       title="WhatsApp apagado y sin pasarela de pago: el comprador llega a «Realiza el pago» y no le aparece ningún botón. Ábrela y enciende WhatsApp, o déjala en borrador."
@@ -241,9 +264,26 @@ export default function RaffleListV2({
                 <IconEye width={15} height={15} />
                 {verTexto}
               </Link>
-              <Link href={`/admin/numeros?raffleId=${raffle.id}`} className={btnOutline}>
-                Números
-              </Link>
+              {/* En la cuadrícula, "Números" es su tablero: ahí se marcan los
+                  pagos y se liberan las reservas. */}
+              {raffle.boardMode ? (
+                <Link href={`/admin/numeros?rifa=${raffle.id}`} className={btnOutline}>
+                  <span
+                    aria-hidden="true"
+                    className="grid h-3.5 w-3.5 grid-cols-2 gap-px"
+                  >
+                    <span className="bg-cell-free" />
+                    <span className="bg-cell-paid" />
+                    <span className="bg-cell-reserved" />
+                    <span className="bg-cell-free" />
+                  </span>
+                  Tablero
+                </Link>
+              ) : (
+                <Link href={`/admin/numeros?raffleId=${raffle.id}`} className={btnOutline}>
+                  Números
+                </Link>
+              )}
               {canManage ? (
                 <>
                   <button

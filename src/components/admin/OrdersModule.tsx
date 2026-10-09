@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { formatCop } from "@/lib/format";
-import { IconCheck, IconTicket, IconX } from "@/components/icons";
+import { IconCheck, IconTicket, IconWhatsApp, IconX } from "@/components/icons";
 import {
   EmptyState,
   LoadingRows,
@@ -18,7 +19,8 @@ type OrderRow = {
   id: string;
   code: string;
   raffleTitle: string;
-  participant: { name: string; phone: string };
+  /* Sin celular cuando la rifa de cuadrícula solo pide el nombre. */
+  participant: { name: string; phone: string | null };
   numbers: string[];
   quantity: number;
   total: number;
@@ -100,6 +102,7 @@ const MAX_NUMBERS_VISIBLE = 8;
 function methodLabel(method: string | null): string {
   if (!method) return "Sin definir";
   if (method === "wompi") return "Wompi";
+  if (method === "bold") return "Bold";
   if (method === "whatsapp") return "WhatsApp";
   if (method === "manual") return "Manual";
   return method;
@@ -114,16 +117,25 @@ export default function OrdersModule({
   canConfirm: boolean;
   canCancel: boolean;
 }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
+  // Pedidos de UN comprador: llega en la URL desde Participantes ("Ver sus
+  // pedidos"). Va por id y no por celular porque en la cuadrícula hay
+  // compradores sin celular, y dos personas pueden llamarse igual. Se lee de
+  // la URL en cada render, sin copiarlo a un estado: la página no se vuelve a
+  // montar al ir a /admin/pedidos desde el menú, y una copia dejaba el filtro
+  // puesto con la URL ya limpia.
+  const participantId = (searchParams.get("participantId") ?? "").trim();
   const [version, setVersion] = useState(0);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [actionError, setActionError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  const requestKey = `${page}|${status}|${query}|${version}`;
+  const requestKey = `${page}|${status}|${query}|${participantId}|${version}`;
 
   useEffect(() => {
     let alive = true;
@@ -131,6 +143,7 @@ export default function OrdersModule({
     const params = new URLSearchParams({ page: String(page) });
     if (status) params.set("status", status);
     if (query) params.set("q", query);
+    if (participantId) params.set("participantId", participantId);
 
     fetch(`/api/admin/orders?${params.toString()}`)
       .then(async (res) => {
@@ -164,7 +177,7 @@ export default function OrdersModule({
     return () => {
       alive = false;
     };
-  }, [requestKey, page, status, query]);
+  }, [requestKey, page, status, query, participantId]);
 
   const current = loaded && loaded.key === requestKey ? loaded : null;
   const loading = !current;
@@ -176,6 +189,17 @@ export default function OrdersModule({
     setPage(1);
     setQuery(search.trim());
   }
+
+  /** Quita el filtro por comprador: basta con limpiar la URL, que es de donde se lee. */
+  function verTodos() {
+    setActionError("");
+    setPage(1);
+    router.replace("/admin/pedidos", { scroll: false });
+  }
+
+  // Nombre del comprador filtrado, tomado de sus propios pedidos.
+  const nombreFiltrado =
+    participantId && current?.items[0] ? current.items[0].participant.name : "";
 
   async function confirmPayment(order: OrderRow) {
     if (!window.confirm("¿Confirmar que recibiste el pago de este pedido?")) {
@@ -261,6 +285,19 @@ export default function OrdersModule({
         </button>
       </form>
 
+      {participantId ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-brand/40 bg-brand/10 px-4 py-2.5">
+          <p className="min-w-0 text-sm font-semibold text-fg">
+            {nombreFiltrado
+              ? `Solo los pedidos de ${nombreFiltrado}`
+              : "Solo los pedidos de un comprador"}
+          </p>
+          <button type="button" onClick={verTodos} className={btnOutline}>
+            Ver todos los pedidos
+          </button>
+        </div>
+      ) : null}
+
       {errorMsg ? (
         <p role="alert" className={alertCls}>
           {errorMsg}
@@ -292,9 +329,20 @@ export default function OrdersModule({
                     <p className="truncate font-display text-lg font-extrabold leading-tight text-fg">
                       {order.participant.name}
                     </p>
-                    <p className="mt-1 font-mono text-sm tabular-nums text-fg-soft">
-                      {order.participant.phone}
-                    </p>
+                    {order.participant.phone ? (
+                      <a
+                        href={`https://wa.me/${order.participant.phone.replace(/\D/g, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="-ml-1 mt-0.5 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-1 font-mono text-sm tabular-nums text-fg-soft transition-colors hover:text-wa-ink"
+                      >
+                        <IconWhatsApp width={14} height={14} className="shrink-0" />
+                        <span className="sr-only">Escribir por WhatsApp al </span>
+                        {order.participant.phone}
+                      </a>
+                    ) : (
+                      <p className="mt-1 text-sm text-fg-faint">Sin celular</p>
+                    )}
                   </div>
                   <div className="flex shrink-0 items-center gap-1.5">
                     <Tag tone={tag.tone}>{tag.text}</Tag>

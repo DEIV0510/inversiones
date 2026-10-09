@@ -33,6 +33,10 @@ type OrderData = {
    * Los números SOLO llegan con el pago confirmado. Con el pedido pendiente
    * (o expirado) esta lista viene vacía a propósito: el servidor no los
    * manda, así que no están ni en el código de la página.
+   *
+   * La excepción es la reserva de una rifa de CUADRÍCULA (`modoReserva`):
+   * ahí llegan siempre, porque el comprador los escogió él mismo en un
+   * tablero público.
    */
   numbers: string[];
   /**
@@ -79,6 +83,21 @@ const dateShortFmt = new Intl.DateTimeFormat("es-CO", {
   month: "short",
   year: "numeric",
 });
+
+/**
+ * El mismo chat de WhatsApp con otro mensaje. La página manda el enlace ya
+ * armado (wa.me/<número>?text=…) y el número del negocio no viaja aparte, así
+ * que se conserva el destino y solo se cambia el texto. Si el enlace no se
+ * pudiera leer, se devuelve tal cual: mejor el mensaje de siempre que ninguno.
+ */
+function whatsAppConTexto(enlace: string, texto: string): string {
+  try {
+    const url = new URL(enlace);
+    return `${url.origin}${url.pathname}?text=${encodeURIComponent(texto)}`;
+  } catch {
+    return enlace;
+  }
+}
 
 /* ==========================================================================
    Descarga de la boleta como imagen (Canvas 2D, sin dependencias externas)
@@ -842,18 +861,19 @@ function BoletaCard({
         inactiva ? "border border-line" : "neon-card"
       }`}
     >
-      {/* Halo difuso de fucsia, igual que el fondo de la plataforma */}
+      {/* Halo difuso de fucsia, igual que el fondo de la plataforma.
+          `halo-brand` le deja al tema claro bajarle la intensidad. */}
       {inactiva ? null : (
         <span
           aria-hidden
-          className="pointer-events-none absolute -right-20 -top-24 h-48 w-48 rounded-full bg-brand/20 blur-3xl"
+          className="halo-brand pointer-events-none absolute -right-20 -top-24 h-48 w-48 rounded-full bg-brand/20 blur-3xl"
         />
       )}
 
       {/* Sello de estado en la esquina superior derecha */}
       <span
         className={`absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full border ${
-          pagada ? "glow-wa border-wa text-wa" : "border-line-strong text-fg-faint"
+          pagada ? "glow-wa border-wa text-wa-ink" : "border-line-strong text-fg-faint"
         }`}
       >
         {pagada ? (
@@ -925,10 +945,10 @@ function BoletaCard({
                     key={n}
                     className="ticket-chip-win flex min-h-14 flex-col items-center justify-center rounded-2xl px-1 py-1.5"
                   >
-                    <span className="font-display text-xl font-black tabular-nums tracking-[0.12em] text-bg sm:text-2xl">
+                    <span className="font-display text-xl font-black tabular-nums tracking-[0.12em] text-ink sm:text-2xl">
                       {n}
                     </span>
-                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-bg">
+                    <span className="text-[9px] font-black uppercase tracking-[0.14em] text-ink">
                       <span aria-hidden>★ </span>Premiado
                     </span>
                     <span className="sr-only">: te ganaste {premio}</span>
@@ -955,16 +975,16 @@ function BoletaCard({
             guarda como captura o descarga como imagen. */}
         {ganadores.length > 0 ? (
           <div className="mt-4 rounded-2xl border border-wa/50 bg-well px-3 py-3 text-center">
-            <p className="font-display text-sm font-black uppercase tracking-wide text-wa">
+            <p className="font-display text-sm font-black uppercase tracking-wide text-wa-ink">
               <span aria-hidden>★ </span>¡Felicitaciones!
             </p>
             <ul className="mt-1.5 flex flex-col gap-1">
               {ganadores.map((p) => (
                 <li key={p.number} className="text-[13px] leading-relaxed text-fg">
                   Te ganaste{" "}
-                  <strong className="font-black text-wa">{p.prize}</strong> con el
+                  <strong className="font-black text-wa-ink">{p.prize}</strong> con el
                   número{" "}
-                  <strong className="font-black tabular-nums tracking-wider text-wa">
+                  <strong className="font-black tabular-nums tracking-wider text-wa-ink">
                     {p.number}
                   </strong>
                 </li>
@@ -980,7 +1000,7 @@ function BoletaCard({
           </span>
           <span
             className={`text-right text-[11px] font-bold uppercase tracking-[0.14em] ${
-              pagada ? "text-wa" : "text-fg-faint"
+              pagada ? "text-wa-ink" : "text-fg-faint"
             }`}
           >
             {estado}
@@ -1065,15 +1085,46 @@ export default function OrderView({
   // Con la pasarela encendida NO se salta a WhatsApp: el comprador se
   // quedaría sin ver el botón de pago que el dueño acaba de activar. Ahí las
   // dos vías conviven en pantalla y elige él.
+  //
+  // En la cuadrícula solo se salta con la reserva VIVA: el mensaje dice
+  // "quiero reservar estos números", y mandarlo desde una reserva vencida o
+  // liberada (un enlace viejo con ?enviar=1) le apartaría al dueño, en su
+  // tabla, números que ya pueden ser de otra persona.
+  const saltoPermitido = !modoReserva || order.status === "PENDING";
   useEffect(() => {
     if (!autoEnviarWhatsApp || !whatsappUrl || hayPasarela) return;
+    if (!saltoPermitido) return;
     if (yaEnviado.current) return;
-    yaEnviado.current = true;
     const id = window.setTimeout(() => {
+      // El candado se pone al SALTAR, no al programar el salto: en modo
+      // estricto React monta, limpia y vuelve a montar el efecto, y con el
+      // candado puesto antes la limpieza cancelaba el único salto y el
+      // segundo montaje ya no programaba otro.
+      yaEnviado.current = true;
+      // Antes de saltar se quita el ?enviar=1 de la dirección. Si se queda,
+      // al volver de WhatsApp con "atrás" o al recargar la página vuelve a
+      // saltar sola, y el comprador no consigue quedarse a leer su pedido.
+      // replaceState no recarga ni añade una entrada al historial. Va con
+      // `null` como estado, que es como lo documenta Next: así el enrutador
+      // también se entera de la dirección nueva (un router.refresh posterior
+      // no vuelve a pedir la página con ?enviar=1).
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has("enviar")) {
+          url.searchParams.delete("enviar");
+          window.history.replaceState(
+            null,
+            "",
+            `${url.pathname}${url.search}${url.hash}`
+          );
+        }
+      } catch {
+        // Si el navegador no deja tocar la dirección, se salta igual.
+      }
       window.location.href = whatsappUrl;
     }, 1200);
     return () => window.clearTimeout(id);
-  }, [autoEnviarWhatsApp, whatsappUrl, hayPasarela]);
+  }, [autoEnviarWhatsApp, whatsappUrl, hayPasarela, saltoPermitido]);
   const [verifying, setVerifying] = useState(false);
   const [verifyMsg, setVerifyMsg] = useState("");
 
@@ -1262,7 +1313,12 @@ export default function OrderView({
     }
   }
 
-  /** Ficha del código: la credencial para consultar las boletas. */
+  /**
+   * Ficha del código: la credencial para consultar las boletas. En la
+   * cuadrícula se llama "de reserva", que es la palabra de toda esa pantalla;
+   * para quien reservó solo con su nombre es además la ÚNICA forma de volver
+   * a encontrar su pedido.
+   */
   const codigoBox = (
     <button
       type="button"
@@ -1270,7 +1326,8 @@ export default function OrderView({
       className="w-full rounded-2xl border border-dashed border-line-strong bg-well px-4 py-4 text-center transition-colors hover:border-brand"
     >
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-fg-faint">
-        Código de participación {copied ? "· copiado ✓" : "· toca para copiar"}
+        {modoReserva ? "Código de reserva" : "Código de participación"}{" "}
+        {copied ? "· copiado ✓" : "· toca para copiar"}
       </p>
       <p className="mt-1.5 font-display text-2xl font-black tracking-[0.24em] text-brand sm:text-3xl">
         {order.code}
@@ -1302,10 +1359,10 @@ export default function OrderView({
             el verde de la casa (el mismo de la ficha ganadora). */}
         {premiados.length > 0 ? (
           <div className="glow-wa rounded-2xl border border-wa/50 bg-card p-5 text-center">
-            <span className="glow-wa mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-wa text-bg">
+            <span className="glow-wa mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-wa text-ink">
               <IconTrophy width={28} height={28} />
             </span>
-            <p className="mt-3 font-display text-2xl font-black uppercase leading-tight text-wa sm:text-3xl">
+            <p className="mt-3 font-display text-2xl font-black uppercase leading-tight text-wa-ink sm:text-3xl">
               ¡Felicitaciones!
             </p>
             <ul className="mt-3 flex flex-col gap-2">
@@ -1315,11 +1372,11 @@ export default function OrderView({
                   className="rounded-xl bg-well px-4 py-3 text-sm leading-relaxed text-fg"
                 >
                   Te ganaste{" "}
-                  <strong className="font-display text-base font-black text-wa">
+                  <strong className="font-display text-base font-black text-wa-ink">
                     {p.prize}
                   </strong>{" "}
                   con el número{" "}
-                  <strong className="font-display text-base font-black tabular-nums tracking-wider text-wa">
+                  <strong className="font-display text-base font-black tabular-nums tracking-wider text-wa-ink">
                     {p.number}
                   </strong>
                 </li>
@@ -1380,7 +1437,9 @@ export default function OrderView({
             {order.companyName}
           </p>
           <div className="mt-1.5">
-            <SectionTitle>Detalle de tu compra</SectionTitle>
+            <SectionTitle>
+              {modoReserva ? "Detalle de tu reserva" : "Detalle de tu compra"}
+            </SectionTitle>
           </div>
           <div className="mt-4 flex flex-col gap-3 text-sm">
             <div className="flex justify-between gap-3">
@@ -1407,7 +1466,7 @@ export default function OrderView({
             </div>
             <div className="flex justify-between gap-3">
               <span className="text-fg-faint">Pagado</span>
-              <span className="text-right font-semibold text-wa">
+              <span className="text-right font-semibold text-wa-ink">
                 {order.paidAt ? dateFmt.format(new Date(order.paidAt)) : "Confirmado"}
               </span>
             </div>
@@ -1434,6 +1493,117 @@ export default function OrderView({
               WhatsApp
             </a>
           ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // ============ PENDIENTE de una CUADRÍCULA: reserva hecha ============
+  // Aquí no se paga nada en pantalla: el comprador escogió sus números en el
+  // tablero, le mandamos la reserva al dueño por WhatsApp y el dueño le pasa
+  // los datos para pagar por Nequi o transferencia. Pantalla corta a
+  // propósito ("lo más simple posible", pidió el dueño): sus números, el
+  // valor, el código y un solo botón. Nada de "Paso 3 de 3" ni de "Realiza el
+  // pago", que en esta rifa no ocurre aquí.
+  if (order.status === "PENDING" && modoReserva) {
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="text-center">
+          <span
+            aria-hidden
+            className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-cell-reserved text-cell-ink"
+          >
+            <IconClock width={26} height={26} />
+          </span>
+          <h1 className="mt-4 font-display text-3xl font-black leading-tight text-fg sm:text-4xl">
+            ¡Tus números están reservados!
+          </h1>
+          <p className="mt-2 text-sm leading-relaxed text-fg-soft">
+            A nombre de{" "}
+            <strong className="font-bold text-fg">{order.participantName}</strong>
+          </p>
+        </div>
+
+        <div className="neon-card rounded-2xl bg-card p-5">
+          <p className="text-center text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+            {order.raffleTitle}
+          </p>
+          {/* Amarillo = reservado, igual que la casilla en el tablero: es lo
+              que va a ver allí hasta que el dueño confirme el pago. */}
+          <ul
+            aria-label="Tus números reservados"
+            className="mt-3 flex flex-wrap justify-center gap-2"
+          >
+            {order.numbers.map((n) => (
+              <li
+                key={n}
+                className="min-w-14 rounded-xl bg-cell-reserved px-3 py-2 text-center font-display text-xl font-black tabular-nums tracking-wider text-cell-ink"
+              >
+                {n}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+              Valor total
+            </span>
+            <span className="font-display text-3xl font-black tabular-nums text-brand">
+              {formatCop(order.total)}
+            </span>
+          </div>
+          {order.reservedUntil ? (
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
+                Tu reserva vence en
+              </span>
+              <Countdown
+                until={order.reservedUntil}
+                onExpired={() => router.refresh()}
+              />
+            </div>
+          ) : null}
+        </div>
+
+        {/* Quien reservó solo con su nombre no tiene otra forma de volver a
+            esta pantalla: el código va a la vista y se copia de un toque. */}
+        {codigoBox}
+
+        <div className="flex flex-col gap-3">
+          {whatsappUrl ? (
+            <a
+              href={whatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="glow-wa inline-flex min-h-14 items-center justify-center gap-2 rounded-xl bg-wa px-6 text-base font-bold uppercase tracking-wide text-white transition-all hover:bg-wa-dark active:scale-[0.98]"
+            >
+              <IconWhatsApp width={20} height={20} />
+              Enviar mi reserva por WhatsApp
+            </a>
+          ) : null}
+          {autoEnviarWhatsApp && whatsappUrl ? (
+            <p className="text-center text-xs text-fg-soft">
+              Te estamos llevando a WhatsApp… si no abre, toca el botón verde.
+            </p>
+          ) : null}
+          {whatsappUrl ? (
+            <p className="text-center text-sm leading-relaxed text-fg-soft">
+              {order.companyName} te responde por WhatsApp con los datos para
+              pagar. Cuando confirme tu pago, tus números se ponen en verde en
+              el tablero.
+            </p>
+          ) : null}
+          {/* La cuadrícula siempre cierra por WhatsApp (lo fuerza el
+              servidor); esto es solo la red por si el canal faltara. */}
+          {sinFormaDePago ? (
+            <RespaldoPago contacto={contacto} codigo={order.code} />
+          ) : null}
+          <Link
+            href={`/sorteo/${order.raffleSlug}`}
+            className="inline-flex min-h-13 items-center justify-center rounded-xl border border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg hover:border-brand hover:text-brand"
+          >
+            Volver al tablero
+          </Link>
         </div>
       </div>
     );
@@ -1614,6 +1784,95 @@ export default function OrderView({
             ahora son obligatorios en el checkout. El respaldo de contacto sí
             se mantiene: es la salida cuando la rifa se quedó sin forma de
             cobrar y el comprador no tiene a dónde ir. */}
+      </div>
+    );
+  }
+
+  // ============ RESERVA DE CUADRÍCULA que ya no está viva ============
+  // Aquí SÍ se habla de reserva: es la palabra que el comprador leyó en el
+  // tablero y en la pantalla anterior. El código va a la vista porque, si ya
+  // pagó y la reserva venció igual, es lo que el dueño necesita para
+  // encontrarlo; y los números se nombran para que pueda intentar
+  // reservarlos otra vez si siguen libres.
+  if (modoReserva) {
+    const vencida = order.status === "EXPIRED";
+    const liberada = order.status === "CANCELLED";
+    const tituloReserva = vencida
+      ? "Tu reserva venció"
+      : liberada
+        ? "Esta reserva fue liberada"
+        : "No pudimos confirmar esta reserva";
+    const detalleReserva =
+      vencida || liberada
+        ? "Los números volvieron a quedar libres para cualquier persona."
+        : "Hubo un problema con esta reserva.";
+    // El enlace de la página lleva el mensaje de la reserva ("quiero
+    // reservar estos números"): desde una reserva muerta confundiría al
+    // dueño, que apunta las reservas en su tabla a partir de ese mensaje.
+    // Aquí se le escribe por la reserva, con su código, para que la busque.
+    const whatsappConsulta = whatsappUrl
+      ? whatsAppConTexto(
+          whatsappUrl,
+          `Hola, soy ${order.participantName}. Te escribo por mi reserva ` +
+            `${order.code} del sorteo ${order.raffleTitle}` +
+            (vencida
+              ? ", que venció."
+              : liberada
+                ? ", que fue liberada."
+                : ".")
+        )
+      : null;
+    return (
+      <div className="flex flex-col gap-5">
+        <div className="text-center">
+          <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-well text-fg-faint">
+            <IconClock width={30} height={30} />
+          </span>
+          <h1 className="mt-4 font-display text-2xl font-black leading-tight text-fg sm:text-3xl">
+            {tituloReserva}
+          </h1>
+          <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">
+            {detalleReserva}
+          </p>
+          {order.numbers.length > 0 ? (
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-fg-soft">
+              {order.numbers.length === 1 ? "Tenías el " : "Tenías los "}
+              <strong className="font-bold tabular-nums tracking-wider text-fg">
+                {order.numbers.join(", ")}
+              </strong>
+              .
+            </p>
+          ) : null}
+        </div>
+
+        {codigoBox}
+
+        {whatsappConsulta ? (
+          <p className="text-center text-sm leading-relaxed text-fg-soft">
+            Si ya pagaste, escríbenos por WhatsApp con tu código y lo
+            resolvemos.
+          </p>
+        ) : null}
+
+        <div className={`grid w-full gap-3 ${whatsappConsulta ? "grid-cols-2" : ""}`}>
+          <Link
+            href={`/sorteo/${order.raffleSlug}`}
+            className="glow-brand-sm inline-flex min-h-13 items-center justify-center rounded-xl bg-brand px-4 text-center text-sm font-bold uppercase tracking-wide text-white hover:bg-brand-dark"
+          >
+            Reservar de nuevo
+          </Link>
+          {whatsappConsulta ? (
+            <a
+              href={whatsappConsulta}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex min-h-13 items-center justify-center gap-2 rounded-xl border border-line-strong px-4 text-sm font-bold uppercase tracking-wide text-fg hover:border-brand"
+            >
+              <IconWhatsApp width={17} height={17} />
+              WhatsApp
+            </a>
+          ) : null}
+        </div>
       </div>
     );
   }

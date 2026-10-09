@@ -1,5 +1,14 @@
 @import "tailwindcss";
 
+/* Variante `light:` para lo poco que no se arregla con tokens. Aplica solo
+   dentro del sitio en tema claro y nunca dentro del panel (que lleva su
+   propio data-theme="dark"). Úsala en componentes públicos, NUNCA en
+   archivos que comparte el panel (raffle-status.ts, icons.tsx, admin/*). */
+@custom-variant light (&:where([data-theme="light"] *):not(:where([data-theme="dark"] *)));
+
+/* OJO: estos son los valores del tema OSCURO. El bloque [data-theme="dark"]
+   de más abajo repite una copia exacta de los que cambian en claro; si tocas
+   uno aquí, toca también esa copia o el panel se desalinea del sitio. */
 @theme {
   /* Fondo violeta muy oscuro, como la plataforma de referencia */
   --color-bg: #0a0714;
@@ -49,6 +58,11 @@
      en claro se oscurece (el #25d366 sobre blanco da 1.98:1, ilegible). */
   --color-wa-ink: #25d366;
 
+  /* Verde de la ficha del número PREMIADO (ticket-chip-win). En oscuro es el
+     mismo wa; en claro pasa a un verde más vivo que el wa oscurecido, para
+     que la tinta negra encima siga dando 8.7:1. */
+  --color-win: #25d366;
+
   /* Tablero de las rifas de CUADRÍCULA (2 y 3 cifras). Son los colores que
      pidió el dueño —verde pagado, amarillo reservado, blanco libre, números
      en negro— y NO cambian con el tema: la casilla se lee igual sobre fondo
@@ -93,6 +107,205 @@ html {
   }
 }
 
+/* ============================================================
+   TEMAS: oscuro (el de siempre) y claro (fondo blanco)
+   ============================================================
+   El dueño elige el tema del sitio PÚBLICO en Configuración y la plantilla
+   raíz lo marca con <html data-theme="light">. En oscuro no hay atributo y
+   todo sale del @theme de arriba, igual que siempre.
+
+   El panel /admin es SIEMPRE oscuro: AdminShell y LoginForm llevan
+   data-theme="dark" y vuelven a declarar aquí los valores oscuros. Como las
+   variables se heredan, la declaración más cercana gana y el panel no se
+   entera del tema claro.
+
+   Reglas para no romperlo:
+   - Cada bloque redefine las variables DIRECTAMENTE con su valor. Una
+     variable escrita como var(otra) se resuelve donde se declara y se hereda
+     ya calculada: redefinir "otra" más abajo no la cambiaría.
+   - Los efectos con color (neón, brillos, sombras, puntos) leen variables
+     --fx-*. Nada de reglas tipo `[data-theme="light"] .neon-card`: también
+     alcanzarían al neón del login del panel, que vive dentro del <html>
+     claro.
+   - El bloque claro va DESPUÉS del de :root: en <html> empatan en
+     especificidad y gana el último. */
+
+/* Efectos del tema oscuro: son exactamente los valores de siempre. */
+:root,
+[data-theme="dark"] {
+  --fx-neon-border: rgb(192 38 211 / 0.45);
+  --fx-neon-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.05),
+    0 0 0 1px rgb(192 38 211 / 0.1),
+    0 0 34px -10px rgb(192 38 211 / 0.55);
+  --fx-title-a: #ffffff;
+  --fx-title-b: #f4f2fb;
+  --fx-chip-glow: 0 0 18px -4px rgb(192 38 211 / 0.75);
+  --fx-win-shadow:
+    0 0 0 2px rgb(10 7 20 / 0.55),
+    0 0 26px -3px rgb(37 211 102 / 0.85),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --fx-progress-glow: 0 0 14px -2px rgb(192 38 211 / 0.8);
+  --fx-dot: rgb(255 255 255 / 0.05);
+  --fx-card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 30px -12px rgb(0 0 0 / 0.6);
+  --fx-drop: rgb(0 0 0 / 0.5);
+  --fx-halo: 1;
+}
+
+/* Copia EXACTA de los tokens del @theme que cambian en claro. Solo la usa el
+   panel (y cualquier zona marcada como oscura dentro de un sitio claro). */
+[data-theme="dark"] {
+  --color-bg: #0a0714;
+  --color-bg2: #0f0a1e;
+  --color-card: #171029;
+  --color-well: #201636;
+  --color-line: #2c2148;
+  --color-line-strong: #40316b;
+  --color-fg: #f4f2fb;
+  --color-fg-soft: #a9a2c6;
+  --color-fg-faint: #948cb6;
+  --color-warn: #f59e0b;
+  --color-error: #ff85a1;
+  --color-brand: #c026d3;
+  --color-brand-dark: #a21caf;
+  --color-brand-light: #e879f9;
+  --color-brand-violet: #a855f7;
+  --color-wa: #25d366;
+  --color-wa-dark: #1da851;
+  --color-wa-ink: #25d366;
+  --color-win: #25d366;
+  --shadow-glow: 0 0 34px -8px rgb(192 38 211 / 0.65);
+  --shadow-glow-sm: 0 0 18px -6px rgb(192 38 211 / 0.6);
+  --shadow-glow-wa: 0 0 22px -6px rgb(37 211 102 / 0.55);
+}
+
+/* Tema CLARO del sitio público. Contrastes medidos contra blanco (bg), bg2,
+   card y well; todo el texto pasa AA (4.5:1) en las cuatro superficies:
+   fg 15.9-18.6 · fg-soft 7.8-9.1 · fg-faint 5.4-6.3 · brand 5.4-6.3 ·
+   brand-light 7.0-8.2 · brand-violet 6.0-7.0 · warn 6.1-7.1 · error 5.4-6.3 ·
+   wa-ink 6.1-7.1. Blanco sobre los botones: brand 6.3, brand-dark 8.2,
+   wa 5.0, wa-dark 7.1, warn 7.1. brand-deep, accent-blue, ink y las casillas
+   cell-* no cambian.
+   OJO al usar warn o wa de FONDO: en claro son tonos oscuros pensados como
+   texto, así que encima va blanco (text-bg o text-white). Con text-ink la
+   tinta negra cae a 2.8:1 sobre warn y 4.0:1 sobre wa.
+
+   `only light`: el dueño eligió fondo blanco a propósito, así que se le pide
+   al navegador que no lo oscurezca por su cuenta (el oscurecido automático
+   de Chrome en Android); de paso no altera el blanco, amarillo y verde de
+   las casillas del tablero, que significan libre, reservado y pagado. Para
+   los controles nativos es lo mismo que `light`. */
+[data-theme="light"] {
+  color-scheme: only light;
+
+  --color-bg: #ffffff;
+  --color-bg2: #f3f1f8; /* secciones alternas y pie */
+  --color-card: #f8f7fc; /* se separa del fondo por el borde */
+  --color-well: #eeecf4; /* campos y fichas */
+  --color-line: #e2dfeb;
+  --color-line-strong: #c4bed6;
+  --color-fg: #14111f;
+  --color-fg-soft: #4a4560;
+  --color-fg-faint: #625c79;
+  --color-warn: #92400e;
+  --color-error: #be123c;
+  /* El fucsia de siempre (#c026d3) da 4.0-4.7 sobre estas superficies y no
+     pasa AA en texto pequeño: en claro la marca es su tono -700. */
+  --color-brand: #a21caf;
+  --color-brand-dark: #86198f;
+  /* brand-light hace de acento de TEXTO (premios, número consultado): en
+     claro tiene que ser oscuro, no el lila neón. */
+  --color-brand-light: #86198f;
+  --color-brand-violet: #7e22ce;
+  --color-wa: #15803d;
+  --color-wa-dark: #166534;
+  --color-wa-ink: #166534;
+  --color-win: #22c55e;
+  --shadow-glow: 0 10px 28px -12px rgb(162 28 175 / 0.45);
+  --shadow-glow-sm: 0 4px 14px -6px rgb(162 28 175 / 0.35);
+  --shadow-glow-wa: 0 6px 18px -8px rgb(21 128 61 / 0.45);
+
+  /* Sobre blanco el neón deja manchas rosas: sombras suaves en su lugar. */
+  --fx-neon-border: rgb(162 28 175 / 0.28);
+  --fx-neon-shadow:
+    0 1px 2px rgb(20 17 31 / 0.05),
+    0 14px 34px -18px rgb(162 28 175 / 0.4);
+  /* El titular arranca en blanco en oscuro: en claro sería invisible. */
+  --fx-title-a: #14111f;
+  --fx-title-b: #14111f;
+  --fx-chip-glow: 0 6px 16px -6px rgb(162 28 175 / 0.55);
+  --fx-win-shadow:
+    0 0 0 1px rgb(21 128 61 / 0.45),
+    0 6px 16px -6px rgb(21 128 61 / 0.5),
+    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  --fx-progress-glow: 0 2px 8px -2px rgb(162 28 175 / 0.45);
+  --fx-dot: rgb(20 17 31 / 0.06);
+  --fx-card-shadow: 0 1px 2px rgb(20 17 31 / 0.06), 0 8px 24px -12px rgb(20 17 31 / 0.16);
+  --fx-drop: rgb(20 17 31 / 0.22);
+  /* Los halos difuminados se vuelven niebla rosa sobre blanco: se atenúan. */
+  --fx-halo: 0.35;
+}
+
+/* Con el sitio en claro, el rebote del scroll en el panel (y en el login) se
+   vería blanco: el lienzo toma el oscuro cuando hay una zona oscura. */
+html[data-theme="light"]:has([data-theme="dark"]) {
+  background-color: #0a0714;
+}
+
+/* Navegadores SIN color-mix (iPhone con iOS 16.1 o anterior, y el navegador
+   interno de WhatsApp en esos equipos). Tailwind compila bg-bg/90 y
+   compañía con un respaldo FIJO del tono oscuro y solo pasa a la variable
+   dentro de @supports (color-mix). Sin esto, en claro la cabecera y la barra
+   inferior saldrían oscuras con letra oscura. Lista de las clases con
+   opacidad sobre superficies que se usan hoy en el sitio: si se añade otra
+   (bg-card/80, por ejemplo), va aquí también, en los dos grupos.
+   El grupo oscuro va DESPUÉS y con la misma especificidad: dentro del panel
+   (zona oscura en un <html> claro) casan los dos y gana el oscuro, que es
+   exactamente el respaldo que Tailwind ya ponía. Así no hace falta un
+   :not() complejo, que los navegadores viejos tampoco entienden. */
+@supports not (color: color-mix(in lab, red, red)) {
+  [data-theme="light"] .bg-bg\/90 {
+    background-color: rgb(255 255 255 / 0.9);
+  }
+  [data-theme="light"] .bg-bg\/95 {
+    background-color: rgb(255 255 255 / 0.95);
+  }
+  [data-theme="light"] .bg-bg2\/95 {
+    background-color: rgb(243 241 248 / 0.95);
+  }
+  [data-theme="light"] .bg-well\/60 {
+    background-color: rgb(238 236 244 / 0.6);
+  }
+  /* Entero, sin el 70 %: los dos campos que lo usan (LookupForm y
+     WinnerLookup) llevan light:placeholder:text-fg-faint, porque al 70 %
+     sobre well daba 2.9:1. */
+  [data-theme="light"] .placeholder\:text-fg-faint\/70::placeholder {
+    color: rgb(98 92 121);
+  }
+  [data-theme="light"] .placeholder\:text-fg-soft\/70::placeholder {
+    color: rgb(74 69 96 / 0.7);
+  }
+
+  [data-theme="dark"] .bg-bg\/90 {
+    background-color: rgb(10 7 20 / 0.9);
+  }
+  [data-theme="dark"] .bg-bg\/95 {
+    background-color: rgb(10 7 20 / 0.95);
+  }
+  [data-theme="dark"] .bg-bg2\/95 {
+    background-color: rgb(15 10 30 / 0.95);
+  }
+  [data-theme="dark"] .bg-well\/60 {
+    background-color: rgb(32 22 54 / 0.6);
+  }
+  [data-theme="dark"] .placeholder\:text-fg-faint\/70::placeholder {
+    color: rgb(148 140 182 / 0.7);
+  }
+  [data-theme="dark"] .placeholder\:text-fg-soft\/70::placeholder {
+    color: rgb(169 162 198 / 0.7);
+  }
+}
+
 body {
   @apply bg-bg text-fg font-body antialiased;
   text-rendering: optimizeLegibility;
@@ -119,13 +332,28 @@ body {
   box-shadow: var(--shadow-glow-wa);
 }
 
-/* Borde neón para cards destacadas */
+/* Borde neón para cards destacadas (en claro, borde fucsia suave y sombra) */
 .neon-card {
-  border: 1px solid rgb(192 38 211 / 0.45);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 0.05),
-    0 0 0 1px rgb(192 38 211 / 0.1),
-    0 0 34px -10px rgb(192 38 211 / 0.55);
+  border: 1px solid var(--fx-neon-border);
+  box-shadow: var(--fx-neon-shadow);
+}
+
+/* Sombra de tarjeta según el tema. Tailwind compila shadow-card con los
+   valores METIDOS dentro de la clase (redefinir --shadow-card no cambia
+   nada), así que se sobrescribe aquí. Va sin capa para ganarle a la
+   utilidad, que vive en @layer utilities.
+   TRAMPA: por ir sin capa también le gana a cualquier variante sobre el
+   mismo elemento (hover:shadow-*, lg:shadow-none, shadow-brand/30...). Hoy
+   ninguno la combina; si alguien lo necesita, esa variante no hará nada. */
+.shadow-card {
+  --tw-shadow: var(--fx-card-shadow);
+}
+
+/* Halos fucsia difuminados de fondo: enteros en oscuro, atenuados en claro.
+   Igual que .shadow-card, va sin capa: no combinarlo con opacity-* en el
+   mismo elemento (la utilidad perdería). */
+.halo-brand {
+  opacity: var(--fx-halo);
 }
 
 /* Título de la plataforma: degradado fucsia → violeta como la referencia */
@@ -141,12 +369,13 @@ body {
   color: transparent;
 }
 
-/* Titular del sorteo: blanco que se funde en violeta */
+/* Titular del sorteo: blanco que se funde en violeta (en claro, tinta oscura
+   que se funde en fucsia) */
 .title-gradient {
   background-image: linear-gradient(
     100deg,
-    #ffffff 0%,
-    #f4f2fb 38%,
+    var(--fx-title-a) 0%,
+    var(--fx-title-b) 38%,
     var(--color-brand-light) 78%,
     var(--color-brand-violet) 100%
   );
@@ -164,25 +393,25 @@ body {
     var(--color-brand-light) 100%
   );
   box-shadow:
-    0 0 18px -4px rgb(192 38 211 / 0.75),
+    var(--fx-chip-glow),
     inset 0 1px 0 rgb(255 255 255 / 0.25);
 }
 
 /* Ficha del número PREMIADO: verde de la casa para que salte a la vista
-   entre las fichas fucsia. El texto va oscuro (9.6:1 sobre el verde) y la
-   ficha lleva además la palabra "PREMIADO", porque el color nunca puede ser
-   la única señal para quien no distingue bien los tonos. */
+   entre las fichas fucsia. El texto va oscuro (text-ink: 9.6:1 sobre el
+   verde en oscuro, 8.7:1 en claro) y la ficha lleva además la palabra
+   "PREMIADO", porque el color nunca puede ser la única señal para quien no
+   distingue bien los tonos. El color-mix se queda en la clase (no en una
+   variable): así Tailwind sigue generando el respaldo para navegadores sin
+   color-mix, que en una variable se perdería. */
 .ticket-chip-win {
   background-image: linear-gradient(
     150deg,
-    var(--color-wa) 0%,
-    color-mix(in srgb, var(--color-wa) 82%, #ffffff) 55%,
-    color-mix(in srgb, var(--color-wa) 62%, #ffffff) 100%
+    var(--color-win) 0%,
+    color-mix(in srgb, var(--color-win) 82%, #ffffff) 55%,
+    color-mix(in srgb, var(--color-win) 62%, #ffffff) 100%
   );
-  box-shadow:
-    0 0 0 2px rgb(10 7 20 / 0.55),
-    0 0 26px -3px rgb(37 211 102 / 0.85),
-    inset 0 1px 0 rgb(255 255 255 / 0.4);
+  box-shadow: var(--fx-win-shadow);
 }
 
 /* ---- Scroll reveal ----
@@ -204,7 +433,7 @@ body {
 /* ---- Barra de progreso ---- */
 .progress-fill {
   transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
-  box-shadow: 0 0 14px -2px rgb(192 38 211 / 0.8);
+  box-shadow: var(--fx-progress-glow);
 }
 
 /* ---- Slider de porcentaje (área táctil ≥44px, pulgar de 28px) ---- */
@@ -255,18 +484,19 @@ input[type="range"].range-brand::-moz-range-thumb {
   animation: modal-in 0.25s ease-out both;
 }
 
-/* ---- WhatsApp flotante: pulso muy sutil ---- */
+/* ---- WhatsApp flotante: pulso muy sutil ----
+   La sombra de caída sigue el tema (--fx-drop); el anillo verde es el mismo. */
 @keyframes wa-pulse {
-  0%, 100% { box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.5), 0 0 0 0 rgb(37 211 102 / 0.4); }
-  50% { box-shadow: 0 6px 20px -4px rgb(0 0 0 / 0.5), 0 0 0 12px rgb(37 211 102 / 0); }
+  0%, 100% { box-shadow: 0 6px 20px -4px var(--fx-drop), 0 0 0 0 rgb(37 211 102 / 0.4); }
+  50% { box-shadow: 0 6px 20px -4px var(--fx-drop), 0 0 0 12px rgb(37 211 102 / 0); }
 }
 .wa-pulse {
   animation: wa-pulse 2.6s ease-in-out infinite;
 }
 
-/* ---- Patrón de puntos para profundidad ---- */
+/* ---- Patrón de puntos para profundidad (claros en oscuro, oscuros en claro) ---- */
 .dot-grid {
-  background-image: radial-gradient(rgb(255 255 255 / 0.05) 1px, transparent 1px);
+  background-image: radial-gradient(var(--fx-dot) 1px, transparent 1px);
   background-size: 24px 24px;
 }
 

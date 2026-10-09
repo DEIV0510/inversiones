@@ -74,11 +74,20 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export const viewport: Viewport = {
-  width: "device-width",
-  initialScale: 1,
-  themeColor: "#07060f",
-};
+/**
+ * Color de la barra del navegador en el móvil, a juego con el tema del sitio
+ * público que eligió el dueño en Configuración. getSettings va en caché, así
+ * que leerlo aquí no vuelve dinámica ninguna página. El panel /admin fija el
+ * suyo (siempre oscuro) en su propio segmento, que gana sobre este.
+ */
+export async function generateViewport(): Promise<Viewport> {
+  const settings = await getSettings();
+  return {
+    width: "device-width",
+    initialScale: 1,
+    themeColor: settings.public_theme === "light" ? "#ffffff" : "#07060f",
+  };
+}
 
 export default async function RootLayout({
   children,
@@ -87,6 +96,10 @@ export default async function RootLayout({
   return (
     <html
       lang="es"
+      // Tema claro: lo pinta el servidor, sin script ni destello. En oscuro
+      // no se pone el atributo y el HTML sale igual que siempre. El panel se
+      // aísla con su propio data-theme="dark" (AdminShell y LoginForm).
+      data-theme={settings.public_theme === "light" ? "light" : undefined}
       data-scroll-behavior="smooth"
       suppressHydrationWarning
       className={`${archivo.variable} ${inter.variable}`}

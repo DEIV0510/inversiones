@@ -112,7 +112,11 @@ export default function BottomBar({
             href={waGeneral(whatsappNumber)}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-[11px] font-bold text-wa transition-colors hover:text-white"
+            /* text-wa-ink: el verde de WhatsApp no se lee sobre blanco. El
+               hover sigue en blanco en el oscuro de siempre; en el claro pasa
+               a tinta (light:hover:text-fg), o la etiqueta se borraría sobre
+               la barra blanca. */
+            className="flex min-h-14 flex-col items-center justify-center gap-1 px-1 text-[11px] font-bold text-wa-ink transition-colors hover:text-white light:hover:text-fg"
           >
             <span className="glow-wa flex h-8 w-8 items-center justify-center rounded-full bg-wa text-white">
               <IconWhatsApp width={17} height={17} />

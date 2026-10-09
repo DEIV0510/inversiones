@@ -87,6 +87,11 @@ export async function PATCH(req: NextRequest) {
   // ciudad, redes y el aviso de demostración. Se regenera con los ajustes ya
   // guardados.
   revalidatePath("/");
+  // La apariencia (fondo claro u oscuro) la pinta la plantilla raíz en el
+  // <html> de TODAS las páginas, también las estáticas (términos,
+  // privacidad). Se regenera la plantilla entera para que ninguna se quede
+  // con el color de antes.
+  revalidatePath("/", "layout");
   // Y la lee la plantilla raíz, así que sale en TODAS las páginas del sitio
   // (cabecera, pie y barra inferior de la página del sorteo incluidas). Al
   // invalidar la etiqueta, la siguiente carga de cualquiera de ellas ya

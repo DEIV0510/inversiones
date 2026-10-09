@@ -52,13 +52,25 @@ export default async function AdminRafflesPage() {
           <p className="mt-1 text-sm text-fg-soft">{raffles.length} en total</p>
         </div>
         {canManage ? (
-          <Link
-            href="/admin/rifas/nueva"
-            className="glow-brand-sm inline-flex min-h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
-          >
-            <IconPlus width={18} height={18} />
-            Nueva
-          </Link>
+          // Dos puertas: la rifa de 2 o 3 cifras (cuadrícula) es la que el
+          // dueño va a crear más seguido, así que tiene su propio botón y el
+          // formulario abre ya con ese tipo elegido.
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+            <Link
+              href="/admin/rifas/nueva?tipo=cuadricula"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-brand/60 px-4 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:bg-brand/10"
+            >
+              <IconPlus width={18} height={18} />
+              2 o 3 cifras
+            </Link>
+            <Link
+              href="/admin/rifas/nueva"
+              className="glow-brand-sm inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-brand px-4 text-sm font-bold uppercase tracking-wide text-white transition-colors hover:bg-brand-dark"
+            >
+              <IconPlus width={18} height={18} />
+              Nueva
+            </Link>
+          </div>
         ) : null}
       </div>
 
@@ -82,6 +94,10 @@ export default async function AdminRafflesPage() {
           progressMode: r.progressMode,
           pricePerNumber: r.pricePerNumber,
           totalNumbers: r.totalNumbers,
+          // Rifa de cuadrícula: el listado le pone su insignia (00-99 /
+          // 000-999) y el botón para abrir su tablero.
+          boardMode: r.boardMode,
+          digits: r.digits,
           paid: r.paidCount,
           reserved: reservedFor(r.id),
           blocked: blockedFor(r.id),

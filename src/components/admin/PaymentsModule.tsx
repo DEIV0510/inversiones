@@ -15,7 +15,8 @@ type PaymentRow = {
   id: string;
   orderCode: string;
   raffleTitle: string;
-  participant: { name: string; phone: string };
+  /* Sin celular cuando la rifa de cuadrícula solo pide el nombre. */
+  participant: { name: string; phone: string | null };
   provider: string;
   providerTxId: string | null;
   reference: string | null;
@@ -64,6 +65,7 @@ function Tag({
 
 const PROVIDER_OPTIONS = [
   { value: "", label: "Todos los medios" },
+  { value: "bold", label: "Bold" },
   { value: "wompi", label: "Wompi" },
   { value: "manual", label: "Manual" },
 ];
@@ -88,6 +90,7 @@ const STATUS_TAG: Record<string, { text: string; tone: keyof typeof TAG_TONES }>
   };
 
 function providerLabel(provider: string): string {
+  if (provider === "bold") return "Bold";
   if (provider === "wompi") return "Wompi";
   if (provider === "manual") return "Manual";
   return provider;
@@ -245,9 +248,13 @@ export default function PaymentsModule() {
 
                 <p className="mt-2 truncate text-sm text-fg">
                   {payment.participant.name}
-                  <span className="text-fg-soft">
+                  <span
+                    className={
+                      payment.participant.phone ? "text-fg-soft" : "text-fg-faint"
+                    }
+                  >
                     {" · "}
-                    {payment.participant.phone}
+                    {payment.participant.phone || "Sin celular"}
                   </span>
                 </p>
                 <p className="mt-0.5 truncate text-xs text-fg-faint">

@@ -113,6 +113,15 @@ export default async function EditarRifaPage({
           terms: raffle.terms,
           displayOrder: raffle.displayOrder,
           hasOrders: orderCount > 0,
+          // Tipo de rifa y datos del comprador, leídos de la rifa. El
+          // formulario los manda en cada guardado: si aquí faltaran, el
+          // primer "Guardar cambios" pondría los de fábrica en una rifa que
+          // ya está vendiendo.
+          boardMode: raffle.boardMode,
+          askPhone: raffle.askPhone,
+          askIdNumber: raffle.askIdNumber,
+          askEmail: raffle.askEmail,
+          askCity: raffle.askCity,
         }}
       />
     </div>

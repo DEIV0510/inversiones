@@ -17,7 +17,8 @@ import {
 type ParticipantRow = {
   id: string;
   name: string;
-  phone: string;
+  /* Sin celular cuando la rifa de cuadrícula solo pide el nombre. */
+  phone: string | null;
   email: string | null;
   /** Ciudad o municipio, si el comprador lo puso (es opcional). */
   city: string | null;
@@ -139,15 +140,23 @@ export default function ParticipantsModule() {
                 <h2 className="min-w-0 truncate font-display text-lg font-extrabold leading-tight text-fg">
                   {p.name}
                 </h2>
-                <a
-                  href={`https://wa.me/${p.phone}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-wa/45 bg-wa/12 px-3.5 font-mono text-sm font-bold tabular-nums text-wa transition-colors hover:bg-wa/20"
-                >
-                  <IconWhatsApp width={16} height={16} />
-                  {p.phone}
-                </a>
+                {/* Sin celular no hay a dónde escribir: nada de un enlace a
+                    wa.me/null que abre un chat vacío. */}
+                {p.phone ? (
+                  <a
+                    href={`https://wa.me/${p.phone.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex min-h-11 shrink-0 items-center gap-2 rounded-full border border-wa/45 bg-wa/12 px-3.5 font-mono text-sm font-bold tabular-nums text-wa transition-colors hover:bg-wa/20"
+                  >
+                    <IconWhatsApp width={16} height={16} />
+                    {p.phone}
+                  </a>
+                ) : (
+                  <span className="shrink-0 text-sm text-fg-faint">
+                    Sin celular
+                  </span>
+                )}
               </div>
               <p className="mt-1 truncate text-xs text-fg-faint">
                 {p.email ? `${p.email} · ` : ""}
@@ -183,9 +192,9 @@ export default function ParticipantsModule() {
                 </div>
               </div>
 
-              {/* Abrir el participante = ver su historial. Pedidos ya sabe
-                  buscar por teléfono, así que se le pasa el del comprador y
-                  la pantalla queda filtrada solo con sus pedidos. */}
+              {/* Abrir el participante = ver su historial. Se filtra por su
+                  id, no por teléfono: hay compradores sin celular, y un
+                  número buscado "contiene" también trae pedidos de otros. */}
               <div className="mt-3 flex items-center justify-end border-t border-line pt-3">
                 {p.ordersCount === 0 ? (
                   <p className="text-xs text-fg-faint">
@@ -193,7 +202,7 @@ export default function ParticipantsModule() {
                   </p>
                 ) : (
                   <Link
-                    href={`/admin/pedidos?q=${encodeURIComponent(p.phone)}`}
+                    href={`/admin/pedidos?participantId=${encodeURIComponent(p.id)}`}
                     className={btnOutline}
                   >
                     <IconTicket width={15} height={15} />

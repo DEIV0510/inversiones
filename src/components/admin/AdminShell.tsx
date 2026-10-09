@@ -139,7 +139,12 @@ export default function AdminShell({
   }
 
   return (
-    <div className="min-h-dvh bg-bg">
+    /* El panel es SIEMPRE oscuro, aunque el sitio público esté en claro:
+       data-theme="dark" vuelve a declarar aquí los tokens oscuros (ver
+       globals.css). text-fg es obligatorio: el <body> calcula su color de
+       texto con el tema del sitio y lo hereda ya calculado, así que sin él
+       el texto sin clase de color saldría casi negro sobre este fondo. */
+    <div data-theme="dark" className="min-h-dvh bg-bg text-fg">
       {/* Barra superior: marca a la izquierda, botones redondeados oscuros a la derecha */}
       <header className="fixed inset-x-0 top-0 z-40 border-b border-line bg-bg2/95 backdrop-blur">
         <div className="flex h-14 items-center justify-between gap-2 px-4 lg:px-6">

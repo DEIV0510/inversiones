@@ -45,6 +45,9 @@ export async function GET(req: NextRequest) {
       id: row.id,
       number: formatNumber(row.number, row.raffle.digits),
       raffleTitle: row.raffle.title,
+      // El id del pedido viaja con la fila para liberar sin tener que buscar
+      // el pedido por su código.
+      orderId: row.orderId,
       orderCode: row.order?.code ?? null,
       participant: row.order?.participant ?? null,
       createdAt: row.createdAt,

@@ -8,9 +8,11 @@ import {
   IconTrophy,
 } from "@/components/icons";
 
-/* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. */
+/* Campo tipo "pozo": fondo well, borde tenue y foco fucsia con halo. En el
+   tema claro el ejemplo va sin transparencia: al 70 % daba 2.9:1 sobre well
+   (entero, 5.4:1). */
 const inputCls =
-  "min-h-13 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg transition-colors placeholder:text-fg-faint/70 focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/35";
+  "min-h-13 w-full rounded-2xl border border-line bg-well px-4 text-base text-fg transition-colors placeholder:text-fg-faint/70 light:placeholder:text-fg-faint focus:border-brand focus:outline-none focus:ring-2 focus:ring-brand/35";
 
 /** Datos mínimos de cada sorteo consultable. Nada de inventario. */
 export type RifaConsultable = {

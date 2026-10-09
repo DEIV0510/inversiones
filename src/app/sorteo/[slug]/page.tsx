@@ -5,8 +5,11 @@ import Footer from "@/components/landing/Footer";
 import BottomBar from "@/components/landing/BottomBar";
 import ProgressBar from "@/components/landing/ProgressBar";
 import NumberPicker from "@/components/public/NumberPicker";
+import BoardPicker from "@/components/public/BoardPicker";
 import PreviewBanner from "@/components/landing/PreviewBanner";
 import { getVerifiedSession } from "@/lib/auth";
+import { MAX_NUMEROS_CUADRICULA } from "@/lib/cuadricula";
+import { getBoardState } from "@/lib/engine/claims";
 import { formatCop } from "@/lib/format";
 import {
   getPrizedGroups,
@@ -79,7 +82,11 @@ export async function generateMetadata({
   }
   return {
     title: raffle.title,
-    description: `Participa por ${raffle.prize}. ${raffle.progressPct}% alcanzado.`,
+    // En la cuadrícula no se publica porcentaje (ver la página): el tablero
+    // ya dice qué números quedan, y un % puesto a mano lo contradiría.
+    description: raffle.boardMode
+      ? `Participa por ${raffle.prize}. Escoge tus números en el tablero.`
+      : `Participa por ${raffle.prize}. ${raffle.progressPct}% alcanzado.`,
     openGraph: raffle.imageUrl
       ? { images: [{ url: raffle.imageUrl }] }
       : undefined,
@@ -113,12 +120,22 @@ export default async function SorteoPage({
   }
 
   const meta = statusMetaV2(raffle.status);
-  // Números premiados y ranking de compradores, en un solo viaje.
-  // El ranking solo se consulta si esta rifa lo tiene encendido: apagado no
-  // cuesta ni una consulta.
-  const [prizedGroups, ranking] = await Promise.all([
+  // Rifa de CUADRÍCULA (2 o 3 cifras): tablero completo en vez del selector
+  // de la rifa grande. El tope de 1.000 lo garantiza el servidor al guardar
+  // la rifa; se repite aquí porque getBoardState se niega por encima de él,
+  // y una página rota es peor que el selector de siempre.
+  const esCuadricula =
+    raffle.boardMode && raffle.totalNumbers <= MAX_NUMEROS_CUADRICULA;
+  // Números premiados, ranking de compradores y tablero, en un solo viaje.
+  // El ranking solo se consulta si esta rifa lo tiene encendido y el tablero
+  // solo en la cuadrícula: lo que está apagado no cuesta ni una consulta. El
+  // tablero va en vivo, sin caché: es lo que el comprador mira para escoger.
+  const [prizedGroups, ranking, tableroInicial] = await Promise.all([
     getPrizedGroups(raffle.id, raffle.digits),
     raffle.showRanking ? getTopCompradores(raffle.id) : Promise.resolve([]),
+    esCuadricula
+      ? getBoardState(raffle.id, raffle.totalNumbers)
+      : Promise.resolve(""),
   ]);
 
   return (
@@ -207,48 +224,72 @@ export default async function SorteoPage({
             </p>
           ) : null}
 
-          {/* Avance: va justo debajo del titular, como en la referencia */}
-          <ProgressBar pct={raffle.progressPct} className="mt-5" />
+          {/* Avance: va justo debajo del titular, como en la referencia.
+              En la cuadrícula NO hay barra: el tablero ya enseña número por
+              número qué está libre, y un porcentaje (que además el dueño
+              puede poner a mano) lo contradiría. En su sitio va el precio,
+              grande, como en la app de rifas que usa el dueño: es lo primero
+              que pregunta quien va a escoger números. */}
+          {esCuadricula ? (
+            <div className="neon-card mt-5 rounded-2xl bg-card px-4 py-4 text-center">
+              <p className="flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                <IconTicket width={16} height={16} className="text-brand" />
+                Valor por número
+              </p>
+              <p className="mt-2 font-display text-5xl font-black leading-none tabular-nums text-brand-light">
+                {formatCop(raffle.pricePerNumber)}
+              </p>
+            </div>
+          ) : (
+            <ProgressBar pct={raffle.progressPct} className="mt-5" />
+          )}
 
           {/* Info: el precio va siempre y la fecha también mientras el dueño no
               la apague (showDrawDate nace encendida); si todavía no hay texto de
               fecha se lee “Por anunciar”. El premio solo si el dueño lo
               enciende, porque normalmente ya lo dice el titular. Las filas que
               no se pintan no dejan hueco: divide-y solo pone la línea entre
-              hermanos, así que con una sola fila la tarjeta queda limpia. */}
-          <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
-            {raffle.showPrize ? (
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
-                  <IconGift width={16} height={16} className="text-brand" />
-                  Premio
-                </span>
-                <span className="text-right font-display text-sm font-extrabold text-fg">
-                  {raffle.prize}
-                </span>
-              </div>
-            ) : null}
-            <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
-                <IconTicket width={16} height={16} className="text-brand" />
-                Precio por número
-              </span>
-              <span className="text-right font-display text-sm font-extrabold tabular-nums text-brand-light">
-                {formatCop(raffle.pricePerNumber)}
-              </span>
+              hermanos, así que con una sola fila la tarjeta queda limpia.
+              En la cuadrícula el precio ya va en grande arriba, así que aquí
+              no se repite; y si tampoco hay premio ni fecha, la tarjeta no se
+              pinta (vacía sería una raya suelta). */}
+          {!esCuadricula || raffle.showPrize || raffle.showDrawDate ? (
+            <div className="mt-4 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
+              {raffle.showPrize ? (
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                    <IconGift width={16} height={16} className="text-brand" />
+                    Premio
+                  </span>
+                  <span className="text-right font-display text-sm font-extrabold text-fg">
+                    {raffle.prize}
+                  </span>
+                </div>
+              ) : null}
+              {esCuadricula ? null : (
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                    <IconTicket width={16} height={16} className="text-brand" />
+                    Precio por número
+                  </span>
+                  <span className="text-right font-display text-sm font-extrabold tabular-nums text-brand-light">
+                    {formatCop(raffle.pricePerNumber)}
+                  </span>
+                </div>
+              )}
+              {raffle.showDrawDate ? (
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
+                    <IconCalendar width={16} height={16} className="text-brand" />
+                    Fecha
+                  </span>
+                  <span className="text-right font-display text-sm font-extrabold text-fg">
+                    {raffle.drawDateText?.trim() || "Por anunciar"}
+                  </span>
+                </div>
+              ) : null}
             </div>
-            {raffle.showDrawDate ? (
-              <div className="flex items-center justify-between gap-3 px-4 py-3">
-                <span className="flex items-center gap-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint">
-                  <IconCalendar width={16} height={16} className="text-brand" />
-                  Fecha
-                </span>
-                <span className="text-right font-display text-sm font-extrabold text-fg">
-                  {raffle.drawDateText?.trim() || "Por anunciar"}
-                </span>
-              </div>
-            ) : null}
-          </div>
+          ) : null}
 
           {/* Lista de premios configurada para este sorteo */}
           {raffle.prizes.length > 0 ? (
@@ -340,9 +381,13 @@ export default async function SorteoPage({
                       </span>
                     ))}
                   </div>
+                  {/* En la cuadrícula no se "compra": se reserva y se paga
+                      después. El premio cuenta con el pago confirmado
+                      (getPrizesWon solo mira pedidos pagados). */}
                   <p className="mt-3 text-xs leading-relaxed text-fg-soft">
-                    Si te sale uno de estos números entre lo que compraste,
-                    ganas ese premio al instante.
+                    {esCuadricula
+                      ? "Si uno de estos números queda entre los tuyos y tu pago se confirma, ganas ese premio al instante."
+                      : "Si te sale uno de estos números entre lo que compraste, ganas ese premio al instante."}
                   </p>
                 </div>
               ))}
@@ -363,7 +408,9 @@ export default async function SorteoPage({
                   aria-hidden
                   className="glow-brand-sm h-[7px] w-[7px] shrink-0 rounded-full bg-brand"
                 />
-                Top compradores
+                {/* En la cuadrícula no se habla de comprar (ver BoardPicker):
+                    ahí la lista es de participantes. */}
+                {esCuadricula ? "Top participantes" : "Top compradores"}
               </h2>
               <ol className="mt-3 divide-y divide-line overflow-hidden rounded-2xl border border-line bg-card">
                 {ranking.map((c) => (
@@ -402,30 +449,56 @@ export default async function SorteoPage({
               lo lleva en el carrito. Es la misma lista que ya está a la
               vista en esta página, así que no se revela nada nuevo. */}
           {raffle.status === "ACTIVE" ? (
-            <NumberPicker raffle={raffle} prizedGroups={prizedGroups} />
+            esCuadricula ? (
+              <BoardPicker
+                raffle={raffle}
+                tableroInicial={tableroInicial}
+                prizedGroups={prizedGroups}
+                companyName={settings.company_name}
+              />
+            ) : (
+              <NumberPicker raffle={raffle} prizedGroups={prizedGroups} />
+            )
           ) : (
-            <div className="mt-6 rounded-2xl border border-line bg-card p-6 text-center">
-              <p className="font-display text-lg font-extrabold uppercase text-fg">
-                {TEXTO_NO_ACTIVA[raffle.status] ?? "Sorteo no disponible"}
-              </p>
-              {vistaPrevia && raffle.status === "DRAFT" ? (
-                <p className="mt-2 text-sm leading-relaxed text-fg-soft">
-                  Cuando lo pongas en “Activa”, aquí aparecerá la selección de
-                  números tal como la verá el comprador.
+            <>
+              <div className="mt-6 rounded-2xl border border-line bg-card p-6 text-center">
+                <p className="font-display text-lg font-extrabold uppercase text-fg">
+                  {TEXTO_NO_ACTIVA[raffle.status] ?? "Sorteo no disponible"}
                 </p>
+                {vistaPrevia && raffle.status === "DRAFT" ? (
+                  <p className="mt-2 text-sm leading-relaxed text-fg-soft">
+                    {esCuadricula
+                      ? "Cuando lo pongas en “Activa”, el comprador podrá escoger sus números en este tablero."
+                      : "Cuando lo pongas en “Activa”, aquí aparecerá la selección de números tal como la verá el comprador."}
+                  </p>
+                ) : null}
+                {raffle.whatsappCheckout ? (
+                  <a
+                    href={waConsult(settings.whatsapp_number, raffle.title)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="glow-wa mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-wa px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-wa-dark"
+                  >
+                    <IconWhatsApp width={18} height={18} />
+                    Consultar por WhatsApp
+                  </a>
+                ) : null}
+              </div>
+              {/* En la cuadrícula el tablero se sigue viendo aunque no se
+                  pueda reservar: agotada, finalizada o todavía por abrir, la
+                  gente quiere ver qué números quedaron libres, reservados o
+                  pagados (solo colores, sin nombres), y el dueño en la vista
+                  previa ve cómo queda. */}
+              {esCuadricula ? (
+                <BoardPicker
+                  raffle={raffle}
+                  tableroInicial={tableroInicial}
+                  prizedGroups={prizedGroups}
+                  companyName={settings.company_name}
+                  soloLectura
+                />
               ) : null}
-              {raffle.whatsappCheckout ? (
-                <a
-                  href={waConsult(settings.whatsapp_number, raffle.title)}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="glow-wa mt-4 inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-wa px-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-wa-dark"
-                >
-                  <IconWhatsApp width={18} height={18} />
-                  Consultar por WhatsApp
-                </a>
-              ) : null}
-            </div>
+            </>
           )}
 
           {raffle.terms ? (

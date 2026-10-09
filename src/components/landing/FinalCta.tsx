@@ -11,7 +11,7 @@ export default function FinalCta({ whatsappNumber }: Props) {
     <section id="contacto" className="relative overflow-hidden py-10 lg:py-16">
       <div className="dot-grid absolute inset-0" aria-hidden="true" />
       <div
-        className="absolute left-1/2 top-1/2 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/25 blur-[130px]"
+        className="halo-brand absolute left-1/2 top-1/2 h-[300px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-brand/25 blur-[130px]"
         aria-hidden="true"
       />
       <Reveal className="relative">

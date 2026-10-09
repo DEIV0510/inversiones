@@ -68,7 +68,7 @@ export default function AboutSection({
             </h3>
             <div className="mt-3.5 grid gap-2.5">
               <div className="flex items-center gap-3.5 rounded-2xl bg-well p-3.5">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-wa/15 text-wa">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-wa/15 text-wa-ink">
                   <IconWhatsApp width={20} height={20} />
                 </span>
                 <div>

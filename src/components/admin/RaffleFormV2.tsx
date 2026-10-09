@@ -9,11 +9,16 @@ import {
   MAX_SUBIDA_BYTES,
 } from "@/lib/comprimir-imagen";
 import { slugify } from "@/lib/slug";
-import { formatCop } from "@/lib/format";
+import {
+  cifrasDeCuadricula,
+  errorCuadricula,
+  MAX_NUMEROS_CUADRICULA,
+} from "@/lib/cuadricula";
+import { formatCop, formatearPlazo } from "@/lib/format";
 import { RAFFLE_STATUSES_V2, STATUS_META_V2, type RaffleStatusV2 } from "@/lib/raffle-status";
 import { digitsForTotal } from "@/lib/numbers";
 import { btnOutline, btnPrimary, helpCls, inputCls, labelCls } from "./ui";
-import { IconImage, IconPlus, IconTrash, IconX } from "@/components/icons";
+import { IconCheck, IconImage, IconPlus, IconTrash, IconX } from "@/components/icons";
 
 export type RafflePrizeInitial = {
   label: string;
@@ -68,6 +73,17 @@ export type RaffleFormInitial = {
   terms: string;
   displayOrder: number;
   hasOrders: boolean;
+  /**
+   * Tipo de rifa y datos que se piden al comprador. Van SIEMPRE con lo
+   * guardado: el formulario los manda en cada PATCH, así que si faltaran aquí
+   * se guardarían los de fábrica y una rifa en venta cambiaría al primer
+   * "Guardar cambios".
+   */
+  boardMode: boolean;
+  askPhone: boolean;
+  askIdNumber: boolean;
+  askEmail: boolean;
+  askCity: boolean;
 };
 
 /* Lenguaje visual del panel: tarjeta violeta oscura de esquina 2xl. */
@@ -535,13 +551,136 @@ function neededDigits(total: number): number {
   return Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, digitsForTotal(total)));
 }
 
+/* ---- Tipo de rifa ----
+   La GRANDE (4 cifras o más) es la de siempre: buscador, paquetes y pago en
+   línea. La de CUADRÍCULA (2 o 3 cifras) enseña el tablero completo, la
+   persona escoge y reserva por WhatsApp, y el dueño marca los pagos. Sus
+   reglas viven en src/lib/cuadricula.ts y el servidor las vuelve a imponer. */
+const TIPOS_DE_RIFA = [
+  {
+    cuadricula: true,
+    nombre: "Rifa de 2 o 3 cifras (cuadrícula)",
+    ayuda:
+      "Se ve el tablero completo, la persona escoge y reserva por WhatsApp; tú marcas los pagos.",
+  },
+  {
+    cuadricula: false,
+    nombre: "Rifa grande (4 cifras o más)",
+    ayuda: "Buscador, paquetes y pago en línea.",
+  },
+] as const;
+
+/* Los dos tamaños de siempre de la cuadrícula, con el tope por pedido que
+   le corresponde a cada uno. */
+const CUADRICULA_PRESETS = [
+  { total: 100, rango: "00 al 99", detalle: "100 números · 2 cifras", maxPorPedido: 10 },
+  { total: 1000, rango: "000 al 999", detalle: "1.000 números · 3 cifras", maxPorPedido: 20 },
+] as const;
+
+/* Mínimo de números que acepta el servidor para cualquier rifa. */
+const MIN_TOTAL = 10;
+
+/* Silueta del tablero para la opción de cuadrícula: los colores reales de las
+   casillas (blanco libre, amarillo reservado, verde pagado). */
+const MINI_TABLERO = [
+  "bg-cell-free",
+  "bg-cell-paid",
+  "bg-cell-free",
+  "bg-cell-reserved",
+  "bg-cell-free",
+  "bg-cell-paid",
+  "bg-cell-free",
+  "bg-cell-free",
+  "bg-cell-reserved",
+];
+
+/**
+ * Lo que cambia con el tipo de rifa. Al pasar de un tipo a otro se guarda lo
+ * que había y se recupera si el dueño vuelve: un toque de más no le borra los
+ * paquetes ni los datos que ya había escrito. La primera vez que se entra a un
+ * tipo, se arranca con sus valores de fábrica.
+ */
+type ValoresDeTipo = {
+  totalNumbers: string;
+  digits: number;
+  selectionMode: SelectionModeValue;
+  packs: PackRow[];
+  whatsappCheckout: boolean;
+  gatewayCheckout: boolean;
+  minPerOrder: string;
+  maxPerOrder: string;
+  reservationMinutes: string;
+  askPhone: boolean;
+  askIdNumber: boolean;
+  askEmail: boolean;
+  askCity: boolean;
+  progressMode: string;
+};
+
+/**
+ * Valores de fábrica de cada tipo.
+ *   · Cuadrícula: 00-99, escoger a mano, sin paquetes, por WhatsApp y sin
+ *     pasarela, reserva de 24 horas (el dueño tiene que ver el mensaje y
+ *     cobrar por Nequi) y solo el nombre del comprador.
+ *   · Grande: la de siempre, IGUAL que una rifa nueva abierta directamente
+ *     como grande: 10.000 números de 4 cifras, las dos formas de escoger, los
+ *     paquetes de siempre, reserva de 10 minutos, celular y cédula
+ *     obligatorios y la pasarela encendida (la decisión se guarda aunque hoy
+ *     la tienda no tenga pasarela, ver gatewayCheckout más abajo). Si aquí
+ *     dependiera de la tienda, la misma rifa nacería distinta según se
+ *     llegara a ella por un camino o por el otro.
+ */
+function valoresDeFabrica(cuadricula: boolean): ValoresDeTipo {
+  if (cuadricula) {
+    return {
+      totalNumbers: "100",
+      digits: 2,
+      selectionMode: "MANUAL",
+      packs: [],
+      whatsappCheckout: true,
+      gatewayCheckout: false,
+      minPerOrder: "1",
+      maxPerOrder: "10",
+      reservationMinutes: String(MAX_RESERVA),
+      askPhone: false,
+      askIdNumber: false,
+      askEmail: false,
+      askCity: false,
+      // En la cuadrícula no se publica porcentaje: el tablero ya lo dice.
+      progressMode: "AUTO",
+    };
+  }
+  return {
+    totalNumbers: "10000",
+    digits: 4,
+    selectionMode: "BOTH",
+    packs: initialPackRows(undefined),
+    whatsappCheckout: true,
+    gatewayCheckout: true,
+    minPerOrder: "1",
+    maxPerOrder: "20",
+    reservationMinutes: "10",
+    askPhone: true,
+    askIdNumber: true,
+    askEmail: true,
+    askCity: true,
+    progressMode: "AUTO",
+  };
+}
+
 export default function RaffleFormV2({
   mode,
   initial,
   pasarelaLista,
+  tipoInicial = "grande",
 }: {
   mode: "create" | "edit";
   initial?: RaffleFormInitial;
+  /**
+   * Solo al CREAR: con qué tipo arranca el formulario (?tipo=cuadricula en
+   * /admin/rifas/nueva). Al editar manda lo guardado en la rifa.
+   */
+  tipoInicial?: "grande" | "cuadricula";
   /**
    * Si la tienda tiene ALGUNA pasarela de pago configurada (Wompi o Bold). Lo
    * decide el SERVIDOR (hayPasarela, de src/lib/pasarela.ts, en la
@@ -553,6 +692,14 @@ export default function RaffleFormV2({
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const galleryRef = useRef<HTMLInputElement>(null);
+  /* Una rifa nueva que arranca como cuadrícula toma de aquí sus valores; la
+     grande y la que se edita siguen con los de siempre, tal cual. */
+  const semillaCuadricula =
+    !initial && tipoInicial === "cuadricula"
+      ? valoresDeFabrica(true)
+      : null;
+  /* Lo que había en cada tipo antes de cambiar al otro (ver ValoresDeTipo). */
+  const valoresGuardados = useRef<{ grande?: ValoresDeTipo; cuadricula?: ValoresDeTipo }>({});
 
   const [title, setTitle] = useState(initial?.title ?? "");
   const [slug, setSlug] = useState(initial?.slug ?? "");
@@ -573,22 +720,44 @@ export default function RaffleFormV2({
   const [price, setPrice] = useState(
     initial ? String(initial.pricePerNumber) : "10000"
   );
+  /* Rifa de cuadrícula (2 o 3 cifras, reservas por WhatsApp). Con pedidos
+     encima no se cambia: lo frena el servidor y aquí se bloquea el botón. */
+  const [boardMode, setBoardMode] = useState(
+    initial?.boardMode ?? semillaCuadricula !== null
+  );
   const [totalNumbers, setTotalNumbers] = useState(
-    initial ? String(initial.totalNumbers) : "10000"
+    initial
+      ? String(initial.totalNumbers)
+      : (semillaCuadricula?.totalNumbers ?? "10000")
   );
   const [digits, setDigits] = useState(() =>
     initial?.digits
       ? Math.min(MAX_DIGITS, Math.max(MIN_DIGITS, initial.digits))
-      : neededDigits(initial?.totalNumbers ?? 10000)
+      : (semillaCuadricula?.digits ?? neededDigits(initial?.totalNumbers ?? 10000))
   );
   const [digitsNote, setDigitsNote] = useState("");
   const [selectionMode, setSelectionMode] = useState<SelectionModeValue>(() =>
     SELECTION_MODES.some((m) => m.value === initial?.selectionMode)
       ? (initial!.selectionMode as SelectionModeValue)
-      : "BOTH"
+      : (semillaCuadricula?.selectionMode ?? "BOTH")
   );
   const [whatsappCheckout, setWhatsappCheckout] = useState(
     initial?.whatsappCheckout ?? true
+  );
+  /* Datos que se le piden al comprador; el nombre va siempre. Lo de fábrica
+     es lo de siempre (celular y cédula obligatorios, correo y ciudad
+     opcionales); la cuadrícula arranca pidiendo solo el nombre. */
+  const [askPhone, setAskPhone] = useState(
+    initial?.askPhone ?? semillaCuadricula?.askPhone ?? true
+  );
+  const [askIdNumber, setAskIdNumber] = useState(
+    initial?.askIdNumber ?? semillaCuadricula?.askIdNumber ?? true
+  );
+  const [askEmail, setAskEmail] = useState(
+    initial?.askEmail ?? semillaCuadricula?.askEmail ?? true
+  );
+  const [askCity, setAskCity] = useState(
+    initial?.askCity ?? semillaCuadricula?.askCity ?? true
   );
   /* Lo que el dueño eligió para el cobro con pasarela. Se guarda tal cual
      aunque hoy el entorno no tenga pasarela: apagarlo por su cuenta le
@@ -596,7 +765,7 @@ export default function RaffleFormV2({
      tendría que volver a encenderla rifa por rifa. Lo que de verdad va a
      pasar es `cobraPorPasarela`, unas líneas más abajo. */
   const [gatewayCheckout, setGatewayCheckout] = useState(
-    initial?.gatewayCheckout ?? true
+    initial?.gatewayCheckout ?? semillaCuadricula?.gatewayCheckout ?? true
   );
   // Filas opcionales de la ficha del sorteo. El premio nace apagado porque el
   // titular ya lo dice y repetirlo abajo recarga la tarjeta; la fecha nace
@@ -609,7 +778,7 @@ export default function RaffleFormV2({
     initial?.showDrawDate ?? true
   );
   const [packs, setPacks] = useState<PackRow[]>(() =>
-    initialPackRows(initial?.ticketPacks)
+    semillaCuadricula ? semillaCuadricula.packs : initialPackRows(initial?.ticketPacks)
   );
   const [prizes, setPrizes] = useState<PrizeRow[]>(() =>
     (initial?.prizes ?? []).map((p, i) => ({
@@ -637,13 +806,19 @@ export default function RaffleFormV2({
   const [progressMode, setProgressMode] = useState(initial?.progressMode ?? "AUTO");
   const [manualPct, setManualPct] = useState(initial?.manualProgressPct ?? 0);
   const [reservationMinutes, setReservationMinutes] = useState(
-    String(initial?.reservationMinutes ?? 10)
+    initial
+      ? String(initial.reservationMinutes)
+      : (semillaCuadricula?.reservationMinutes ?? "10")
   );
   const [minPerOrder, setMinPerOrder] = useState(
-    String(initial?.minNumbersPerOrder ?? 1)
+    initial
+      ? String(initial.minNumbersPerOrder)
+      : (semillaCuadricula?.minPerOrder ?? "1")
   );
   const [maxPerOrder, setMaxPerOrder] = useState(
-    String(initial?.maxNumbersPerOrder ?? 20)
+    initial
+      ? String(initial.maxNumbersPerOrder)
+      : (semillaCuadricula?.maxPerOrder ?? "20")
   );
   const [terms, setTerms] = useState(initial?.terms ?? "");
   const [displayOrder, setDisplayOrder] = useState(
@@ -686,8 +861,15 @@ export default function RaffleFormV2({
   const minPorPedido = parseInt(minPerOrder || "0", 10) || 0;
   const precioNumero = parseInt(price || "0", 10) || 0;
   /* Paquetes revisados en cada render (sin estado duplicado): de aquí salen la
-     vista previa con el precio, los avisos y lo que se guarda. */
-  const packsParsed = reviewPacks(packs, precioNumero, minPorPedido, maxPorPedido);
+     vista previa con el precio, los avisos y lo que se guarda. La cuadrícula
+     no tiene paquetes: ni se revisan ni se guardan, aunque al editar una
+     haya filas de partida en la lista. */
+  const packsParsed = reviewPacks(
+    boardMode ? [] : packs,
+    precioNumero,
+    minPorPedido,
+    maxPorPedido
+  );
   /* Lo primero que esté mal escrito en los paquetes. Como las cantidades, se
      recalcula en cada render para que el aviso se apague solo al corregirlo. */
   const errorPaquetes = packsParsed.find((p) => p.error)?.error ?? "";
@@ -717,13 +899,21 @@ export default function RaffleFormV2({
    * campo; si se guardara en estado, quedaría en pantalla un mensaje con
    * cifras viejas después de corregirlo.
    */
+  /* En la cuadrícula la persona reserva (no compra) y no hay paquetes: los
+     mismos avisos, dichos con sus palabras. */
   const errorCantidades =
     minPorPedido < 1
-      ? "Escribe la compra mínima: es de al menos 1 número. Ponla igual a tu paquete más pequeño."
+      ? boardMode
+        ? "Escribe el mínimo por reserva: es de al menos 1 número."
+        : "Escribe la compra mínima: es de al menos 1 número. Ponla igual a tu paquete más pequeño."
       : maxPorPedido < 1
-        ? "Escribe el máximo de números por pedido: es lo más que se puede llevar un comprador de una sola vez."
+        ? boardMode
+          ? "Escribe el máximo por reserva: es lo más que puede apartar una persona de una sola vez."
+          : "Escribe el máximo de números por pedido: es lo más que se puede llevar un comprador de una sola vez."
         : minPorPedido > maxPorPedido
-          ? `La compra mínima es de ${cantidadNumeros(minPorPedido)} y el máximo por pedido es de ${cantidadNumeros(maxPorPedido)}: nadie podría comprar. Sube el máximo o baja la compra mínima.`
+          ? boardMode
+            ? `El mínimo por reserva es de ${cantidadNumeros(minPorPedido)} y el máximo es de ${cantidadNumeros(maxPorPedido)}: nadie podría reservar. Sube el máximo o baja el mínimo.`
+            : `La compra mínima es de ${cantidadNumeros(minPorPedido)} y el máximo por pedido es de ${cantidadNumeros(maxPorPedido)}: nadie podría comprar. Sube el máximo o baja la compra mínima.`
           : minutosReserva < MIN_RESERVA || minutosReserva > MAX_RESERVA
             ? `Los minutos de reserva van de ${MIN_RESERVA} a ${MAX_RESERVA} (un día entero). Escribe una cantidad dentro de ese rango.`
             : "";
@@ -740,9 +930,10 @@ export default function RaffleFormV2({
    * aparta sus números, llega a la pantalla «Realiza el pago» y ahí no le sale
    * ni un solo botón. Le pasó de verdad al dueño con sus dos rifas activas.
    * Ahora hay dos maneras de caer en ese hueco: que no haya pasarela en la
-   * tienda, o que la haya y el dueño la haya apagado en esta rifa.
+   * tienda, o que la haya y el dueño la haya apagado en esta rifa. La
+   * cuadrícula no puede caer: cobra siempre por WhatsApp (se guarda así).
    */
-  const sinFormaDeCobro = !whatsappCheckout && !cobraPorPasarela;
+  const sinFormaDeCobro = !boardMode && !whatsappCheckout && !cobraPorPasarela;
   /* El estado del desplegable (lo que va a quedar guardado), no el de la base. */
   const estadoCobra = ESTADOS_QUE_COBRAN.has(status);
   /* La salida corta cambia según por qué se quedó sin caja: si la tienda tiene
@@ -767,6 +958,17 @@ export default function RaffleFormV2({
             : "esta tienda no tiene pasarela de pago configurada"
         }. Enciende WhatsApp, ${salidaPasarela} o déjala en borrador.`
       : "";
+
+  /**
+   * Coherencia de la cuadrícula, con la MISMA regla del servidor
+   * (errorCuadricula): hasta 1.000 números y las cifras justas. Se avisa aquí
+   * para no llegar a la red con algo que el servidor va a rechazar.
+   */
+  const errorTipo = boardMode
+    ? totalInt < MIN_TOTAL
+      ? `Escribe cuántos números tiene la rifa: de ${MIN_TOTAL} a ${MAX_NUMEROS_CUADRICULA.toLocaleString("es-CO")}.`
+      : (errorCuadricula({ boardMode, totalNumbers: totalInt, digits }) ?? "")
+    : "";
 
   /* Apartados de números premiados, revisados en cada render (sin estado
      duplicado): de aquí salen la vista previa, los avisos y lo que se guarda. */
@@ -821,6 +1023,93 @@ export default function RaffleFormV2({
     } else {
       setDigitsNote("");
     }
+  }
+
+  /**
+   * Botón de cantidad (100, 1.000, 10.000…): pone el total y las cifras
+   * JUSTAS. applyTotal solo sube cifras, que es lo correcto mientras se
+   * escribe a mano; pero un preset que bajara de 10.000 a 100 dejaba 4 cifras
+   * y la rifa salía del 0000 al 0099.
+   */
+  function applyPreset(preset: number) {
+    const justas = neededDigits(preset);
+    setTotalNumbers(String(preset));
+    setDigitsNote(
+      justas !== digits
+        ? `Pusimos ${justas} cifras: los números van del ${"0".repeat(justas)} al ${String(preset - 1).padStart(justas, "0")}.`
+        : ""
+    );
+    setDigits(justas);
+  }
+
+  /**
+   * Cantidad de una cuadrícula: las cifras salen siempre del total (2 hasta
+   * 100, 3 hasta 1.000), nunca se eligen aparte. Los dos tamaños de siempre
+   * traen además su tope por pedido.
+   */
+  function applyTotalCuadricula(raw: string, maxPorPedidoNuevo?: number) {
+    const clean = raw.replace(/\D/g, "").slice(0, 4);
+    const value = parseInt(clean || "0", 10) || 0;
+    setError("");
+    setTotalNumbers(clean);
+    setDigits(cifrasDeCuadricula(value));
+    setDigitsNote("");
+    if (maxPorPedidoNuevo) setMaxPerOrder(String(maxPorPedidoNuevo));
+  }
+
+  /** Lo que hay ahora en los campos que dependen del tipo de rifa. */
+  function valoresActuales(): ValoresDeTipo {
+    return {
+      totalNumbers,
+      digits,
+      selectionMode,
+      packs,
+      whatsappCheckout,
+      gatewayCheckout,
+      minPerOrder,
+      maxPerOrder,
+      reservationMinutes,
+      askPhone,
+      askIdNumber,
+      askEmail,
+      askCity,
+      progressMode,
+    };
+  }
+
+  function aplicarValores(v: ValoresDeTipo) {
+    setTotalNumbers(v.totalNumbers);
+    setDigits(v.digits);
+    setSelectionMode(v.selectionMode);
+    setPacks(v.packs);
+    setWhatsappCheckout(v.whatsappCheckout);
+    setGatewayCheckout(v.gatewayCheckout);
+    setMinPerOrder(v.minPerOrder);
+    setMaxPerOrder(v.maxPerOrder);
+    setReservationMinutes(v.reservationMinutes);
+    setAskPhone(v.askPhone);
+    setAskIdNumber(v.askIdNumber);
+    setAskEmail(v.askEmail);
+    setAskCity(v.askCity);
+    setProgressMode(v.progressMode);
+  }
+
+  /**
+   * Cambia el tipo de rifa. Guarda lo del tipo que se deja y pone lo del que
+   * se elige: lo que ya tenía si había estado ahí, o sus valores de fábrica.
+   * Así nada de la cuadrícula (100 números, sin paquetes, reserva de 24 h,
+   * solo el nombre) se queda pegado a una rifa grande, ni al revés.
+   */
+  function cambiarTipo(cuadricula: boolean) {
+    if (cuadricula === boardMode || numbersLocked) return;
+    valoresGuardados.current[boardMode ? "cuadricula" : "grande"] = valoresActuales();
+    aplicarValores(
+      valoresGuardados.current[cuadricula ? "cuadricula" : "grande"] ??
+        valoresDeFabrica(cuadricula)
+    );
+    setBoardMode(cuadricula);
+    setDigitsNote("");
+    setError("");
   }
 
   function updatePack(id: string, patch: Partial<PackRow>) {
@@ -932,12 +1221,22 @@ export default function RaffleFormV2({
       pricePerNumber: precioNumero,
       totalNumbers: totalInt,
       digits,
-      selectionMode,
-      whatsappCheckout,
+      /* La cuadrícula va con lo suyo fijo (escoger a mano, por WhatsApp, sin
+         pasarela). El servidor lo impone igual; se manda ya así para que lo
+         enviado y lo guardado sean lo mismo. */
+      boardMode,
+      selectionMode: boardMode ? ("MANUAL" as const) : selectionMode,
+      whatsappCheckout: boardMode ? true : whatsappCheckout,
       /* Se manda la decisión del dueño, no el efecto. Si hoy no hay pasarela
          en la tienda, el servidor ya sabe que este sí no cobra nada; el día
          que la configuren, la rifa queda como el dueño la dejó. */
-      gatewayCheckout,
+      gatewayCheckout: boardMode ? false : gatewayCheckout,
+      /* Qué se le pide al comprador. Viajan siempre, con lo que diga el
+         formulario: por eso la página de edición los carga de la rifa. */
+      askPhone,
+      askIdNumber,
+      askEmail,
+      askCity,
       showPrize,
       showDrawDate,
       showRanking,
@@ -986,10 +1285,10 @@ export default function RaffleFormV2({
 
   async function save() {
     setError("");
-    /* Las cantidades, los paquetes y la falta de cobro ya se avisan solos
-       debajo del botón: aquí solo se corta el envío para no llegar a la red
-       con una rifa que nadie podría comprar ni pagar. */
-    if (errorCantidades || errorPaquetes || errorCobro) return;
+    /* El tipo de rifa, las cantidades, los paquetes y la falta de cobro ya se
+       avisan solos debajo del botón: aquí solo se corta el envío para no
+       llegar a la red con una rifa que nadie podría comprar ni pagar. */
+    if (errorTipo || errorCantidades || errorPaquetes || errorCobro) return;
     /* Los apartados se revisan antes de salir a la red: el mensaje del
        servidor sería mucho más seco que el nuestro. */
     if (prizedError) {
@@ -1040,6 +1339,126 @@ export default function RaffleFormV2({
       }}
       className="flex flex-col gap-5"
     >
+      {/* Tipo de rifa: lo primero, porque decide qué se pregunta después. */}
+      <div className={`${cardCls} flex flex-col gap-4`}>
+        <SectionTitle>Tipo de rifa</SectionTitle>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {TIPOS_DE_RIFA.map((tipo) => {
+            const activo = boardMode === tipo.cuadricula;
+            return (
+              <button
+                key={tipo.nombre}
+                type="button"
+                onClick={() => cambiarTipo(tipo.cuadricula)}
+                disabled={numbersLocked && !activo}
+                aria-pressed={activo}
+                className={`flex min-h-20 w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  activo
+                    ? "glow-brand-sm border-brand bg-brand/12"
+                    : "border-line bg-well hover:border-brand/60"
+                }`}
+              >
+                {tipo.cuadricula ? (
+                  <span
+                    aria-hidden="true"
+                    className="grid h-11 w-11 shrink-0 grid-cols-3 gap-0.5 rounded-lg bg-bg2 p-1.5"
+                  >
+                    {MINI_TABLERO.map((color, i) => (
+                      <span key={i} className={`rounded-[2px] ${color}`} />
+                    ))}
+                  </span>
+                ) : (
+                  <span
+                    aria-hidden="true"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-bg2 font-mono text-[10px] font-bold tracking-wider text-brand-light"
+                  >
+                    0000
+                  </span>
+                )}
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={`block text-sm font-bold ${
+                      activo ? "text-fg" : "text-fg-soft"
+                    }`}
+                  >
+                    {tipo.nombre}
+                  </span>
+                  <span className="mt-1 block text-xs leading-relaxed text-fg-faint">
+                    {tipo.ayuda}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        {numbersLocked ? (
+          <p className={helpCls}>
+            Esta rifa ya tiene pedidos: el tipo no se puede cambiar. Si
+            necesitas el otro, crea una rifa nueva.
+          </p>
+        ) : null}
+
+        {/* Tamaño de la cuadrícula: los dos de siempre a un toque, u otra
+            cantidad de hasta 1.000. Las cifras salen solas del total. */}
+        {boardMode ? (
+          <div>
+            <p className={labelCls}>¿De cuántos números?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {CUADRICULA_PRESETS.map((p) => (
+                <button
+                  key={p.total}
+                  type="button"
+                  onClick={() => applyTotalCuadricula(String(p.total), p.maxPorPedido)}
+                  disabled={numbersLocked}
+                  aria-pressed={totalInt === p.total}
+                  className={`min-h-16 rounded-xl px-2 py-2 text-center ${
+                    totalInt === p.total ? chipBtnActive : chipBtnIdle
+                  }`}
+                >
+                  <span className="block font-mono text-base font-black tabular-nums">
+                    {p.rango}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] font-semibold">
+                    {p.detalle}
+                  </span>
+                </button>
+              ))}
+            </div>
+            <label htmlFor="rf-total-cuadricula" className={`${labelCls} mt-4`}>
+              Otra cantidad (hasta {MAX_NUMEROS_CUADRICULA.toLocaleString("es-CO")})
+            </label>
+            <input
+              id="rf-total-cuadricula"
+              type="text"
+              inputMode="numeric"
+              value={totalNumbers}
+              onChange={(e) => applyTotalCuadricula(e.target.value)}
+              disabled={numbersLocked}
+              aria-invalid={errorTipo ? true : undefined}
+              aria-describedby={
+                errorTipo
+                  ? "rf-total-cuadricula-ayuda rf-total-cuadricula-error"
+                  : "rf-total-cuadricula-ayuda"
+              }
+              className={`${inputCls} tabular-nums`}
+            />
+            <p id="rf-total-cuadricula-ayuda" className={helpCls}>
+              {totalInt > 0
+                ? `Se venden del ${"0".repeat(digits)} al ${String(totalInt - 1).padStart(digits, "0")}: ${digits} cifras.`
+                : "Escribe cuántos números tiene la rifa."}
+              {numbersLocked ? " · Con pedidos existentes no se puede cambiar." : ""}
+            </p>
+            {/* Sin role="alert": el aviso que se anuncia es el de junto al
+                botón de guardar; este solo lo deja a la vista del campo. */}
+            {errorTipo ? (
+              <p id="rf-total-cuadricula-error" className={`mt-2 ${alertCls}`}>
+                {errorTipo}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
       {/* Imagen principal */}
       <div className={`${cardCls} flex flex-col gap-4`}>
         <SectionTitle>Imagen del sorteo</SectionTitle>
@@ -1360,75 +1779,81 @@ export default function RaffleFormV2({
       {/* Números */}
       <div className={`${cardCls} flex flex-col gap-4`}>
         <SectionTitle>Números de la rifa</SectionTitle>
-        <div>
-          <p className={labelCls}>Cifras del número *</p>
-          <div className="grid grid-cols-6 gap-1.5">
-            {DIGIT_PRESETS.map((d) => (
-              <button
-                key={d}
-                type="button"
-                onClick={() => applyDigits(d)}
+        {/* En la cuadrícula el tamaño se elige arriba, en «Tipo de rifa», y
+            las cifras salen solas del total: aquí no se repiten. */}
+        {!boardMode ? (
+          <>
+            <div>
+              <p className={labelCls}>Cifras del número *</p>
+              <div className="grid grid-cols-6 gap-1.5">
+                {DIGIT_PRESETS.map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => applyDigits(d)}
+                    disabled={numbersLocked}
+                    aria-pressed={digits === d}
+                    className={`min-h-11 rounded-xl text-sm font-bold tabular-nums ${
+                      digits === d ? chipBtnActive : chipBtnIdle
+                    }`}
+                  >
+                    {d}
+                  </button>
+                ))}
+              </div>
+              <p className={helpCls}>
+                Con {digits} cifras los números van de {"0".repeat(digits)} a{" "}
+                {"9".repeat(digits)} ({capacity.toLocaleString("es-CO")} posibles).
+                {digitsNote ? <span className="text-fg"> {digitsNote}</span> : null}
+                {numbersLocked ? " · Con pedidos existentes no se puede cambiar." : ""}
+              </p>
+            </div>
+            <div>
+              <label htmlFor="rf-total" className={labelCls}>Cantidad total de números *</label>
+              <div className="mb-2 grid grid-cols-3 gap-1.5 sm:grid-cols-5">
+                {TOTAL_PRESETS.map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => applyPreset(preset)}
+                    disabled={numbersLocked}
+                    aria-pressed={totalInt === preset}
+                    className={`min-h-11 rounded-xl px-1 text-[11px] font-bold tabular-nums ${
+                      totalInt === preset ? chipBtnActive : chipBtnIdle
+                    }`}
+                  >
+                    {preset.toLocaleString("es-CO")}
+                  </button>
+                ))}
+              </div>
+              <input
+                id="rf-total"
+                type="text"
+                inputMode="numeric"
+                required
+                value={totalNumbers}
+                onChange={(e) => applyTotal(e.target.value)}
+                className={`${inputCls} tabular-nums`}
                 disabled={numbersLocked}
-                aria-pressed={digits === d}
-                className={`min-h-11 rounded-xl text-sm font-bold tabular-nums ${
-                  digits === d ? chipBtnActive : chipBtnIdle
-                }`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
-          <p className={helpCls}>
-            Con {digits} cifras los números van de {"0".repeat(digits)} a{" "}
-            {"9".repeat(digits)} ({capacity.toLocaleString("es-CO")} posibles).
-            {digitsNote ? <span className="text-fg"> {digitsNote}</span> : null}
-            {numbersLocked ? " · Con pedidos existentes no se puede cambiar." : ""}
-          </p>
-        </div>
-        <div>
-          <label htmlFor="rf-total" className={labelCls}>Cantidad total de números *</label>
-          <div className="mb-2 grid grid-cols-3 gap-1.5 sm:grid-cols-5">
-            {TOTAL_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => applyTotal(String(preset))}
-                disabled={numbersLocked}
-                aria-pressed={totalInt === preset}
-                className={`min-h-11 rounded-xl px-1 text-[11px] font-bold tabular-nums ${
-                  totalInt === preset ? chipBtnActive : chipBtnIdle
-                }`}
-              >
-                {preset.toLocaleString("es-CO")}
-              </button>
-            ))}
-          </div>
-          <input
-            id="rf-total"
-            type="text"
-            inputMode="numeric"
-            required
-            value={totalNumbers}
-            onChange={(e) => applyTotal(e.target.value)}
-            className={`${inputCls} tabular-nums`}
-            disabled={numbersLocked}
-          />
-          <p className={helpCls}>
-            {totalInt > 0
-              ? `Se venden del ${"0".repeat(digits)} al ${String(totalInt - 1).padStart(digits, "0")}`
-              : "Define la cantidad (10 a 10.000.000)"}
-            {numbersLocked
-              ? " · Con pedidos existentes no se puede cambiar."
-              : ""}
-          </p>
-        </div>
+              />
+              <p className={helpCls}>
+                {totalInt > 0
+                  ? `Se venden del ${"0".repeat(digits)} al ${String(totalInt - 1).padStart(digits, "0")}`
+                  : "Define la cantidad (10 a 10.000.000)"}
+                {numbersLocked
+                  ? " · Con pedidos existentes no se puede cambiar."
+                  : ""}
+              </p>
+            </div>
+          </>
+        ) : null}
         {/* Cuánto puede comprar de una sola vez: el mínimo que exige la rifa y
             el tope por pedido, juntos porque uno depende del otro. */}
         <div>
           <div className="grid grid-cols-2 items-end gap-3">
             <div>
               <label htmlFor="rf-min" className={labelCls}>
-                Compra mínima{" "}
+                {boardMode ? "Mínimo por reserva" : "Compra mínima"}{" "}
                 <span className="text-[10px] text-warn">Obligatorio</span>
               </label>
               <input
@@ -1446,15 +1871,16 @@ export default function RaffleFormV2({
             </div>
             <div>
               <label htmlFor="rf-max" className={labelCls}>
-                Máx. por pedido{" "}
+                {boardMode ? "Máx. por reserva" : "Máx. por pedido"}{" "}
                 <span className="text-[10px] text-warn">Obligatorio</span>
               </label>
               <input id="rf-max" type="text" inputMode="numeric" required value={maxPerOrder} onChange={(e) => setMaxPerOrder(e.target.value.replace(/\D/g, "").slice(0, 4))} className={`${inputCls} tabular-nums`} />
             </div>
           </div>
           <p id="rf-min-ayuda" className={helpCls}>
-            {ayudaCompraMinima} Lo normal es ponerla igual a tu paquete más
-            pequeño.
+            {boardMode
+              ? "El mínimo es cuántos números tiene que escoger como poco cada persona, y el máximo, cuántos puede reservar de una sola vez. Tú, desde el tablero, puedes apartarle más."
+              : `${ayudaCompraMinima} Lo normal es ponerla igual a tu paquete más pequeño.`}
           </p>
           {minDesencajado ? (
             <div role="status" className={`mt-2 ${warnCls}`}>
@@ -1480,12 +1906,51 @@ export default function RaffleFormV2({
           <p className={helpCls}>
             Tiempo para pagar antes de liberar. De {MIN_RESERVA} a{" "}
             {MAX_RESERVA} minutos (un día entero).
+            {/* En la cuadrícula el plazo es largo (24 h de fábrica): se dice en
+                horas, que es como lo piensa el dueño. */}
+            {boardMode && minutosReserva >= 60
+              ? ` Ahora: ${formatearPlazo(minutosReserva)} para que te paguen; si no, los números se liberan solos.`
+              : ""}
           </p>
         </div>
       </div>
 
-      {/* Cómo compra el cliente */}
-      <div className={`${cardCls} flex flex-col gap-4`}>
+      {/* Cómo reserva el cliente en la cuadrícula: aquí no hay nada que
+          elegir, se explica lo que queda fijo. */}
+      {boardMode ? (
+        <div className={`${cardCls} flex flex-col gap-3`}>
+          <SectionTitle>Cómo reserva el cliente</SectionTitle>
+          <ul className="flex flex-col gap-2.5 rounded-xl border border-line bg-well px-4 py-3.5 text-sm leading-relaxed text-fg-soft">
+            <li className="flex gap-2.5">
+              <IconCheck width={16} height={16} className="mt-0.5 shrink-0 text-wa-ink" />
+              <span>
+                Ve el tablero completo, toca sus números y pulsa{" "}
+                <strong className="text-fg">RESERVAR</strong>. Siempre los
+                escoge él: no hay «al azar» ni paquetes.
+              </span>
+            </li>
+            <li className="flex gap-2.5">
+              <IconCheck width={16} height={16} className="mt-0.5 shrink-0 text-wa-ink" />
+              <span>
+                Las reservas te llegan por WhatsApp; la pasarela no se usa en
+                este tipo de rifa.
+              </span>
+            </li>
+            <li className="flex gap-2.5">
+              <IconCheck width={16} height={16} className="mt-0.5 shrink-0 text-wa-ink" />
+              <span>
+                Cuando te pague, lo marcas en el tablero del panel (Números) y
+                su casilla pasa a verde.
+              </span>
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
+      {/* Cómo compra el cliente (rifa grande). En la cuadrícula se oculta:
+          modo de selección, WhatsApp, pasarela y paquetes los fija el tipo de
+          rifa, y enseñarlos haría creer que se pueden cambiar. */}
+      <div className={`${cardCls} ${boardMode ? "hidden" : "flex"} flex-col gap-4`}>
         <SectionTitle>Cómo compra el cliente</SectionTitle>
         <div>
           <p className={labelCls}>¿Cómo elige sus números el comprador?</p>
@@ -1845,6 +2310,94 @@ export default function RaffleFormV2({
         </div>
       </div>
 
+      {/* Qué datos deja el comprador. El servidor exige y descarta según
+          estos interruptores, así que lo que se ve aquí es lo que pasa. */}
+      <div className={`${cardCls} flex flex-col gap-3`}>
+        <SectionTitle>Datos que se piden al comprador</SectionTitle>
+        <SwitchRow
+          label="Nombre"
+          checked
+          disabled
+          onToggle={() => {}}
+          ariaLabel="El nombre se pide siempre"
+          help="Siempre se pide: es lo mínimo para saber de quién es cada número."
+        />
+        <SwitchRow
+          label="Celular / WhatsApp"
+          checked={askPhone}
+          onToggle={() => setAskPhone((v) => !v)}
+          ariaLabel={
+            askPhone
+              ? "Dejar de pedir el celular al comprador"
+              : "Pedir el celular al comprador"
+          }
+          help={
+            askPhone
+              ? "Obligatorio: el comprador tiene que escribir su WhatsApp."
+              : "No se le pide."
+          }
+        />
+        <SwitchRow
+          label="Cédula"
+          checked={askIdNumber}
+          onToggle={() => setAskIdNumber((v) => !v)}
+          ariaLabel={
+            askIdNumber
+              ? "Dejar de pedir la cédula al comprador"
+              : "Pedir la cédula al comprador"
+          }
+          help={
+            askIdNumber
+              ? "Obligatoria: sirve para identificar al ganador con nombre y cédula."
+              : "No se le pide."
+          }
+        />
+        <SwitchRow
+          label="Correo"
+          checked={askEmail}
+          onToggle={() => setAskEmail((v) => !v)}
+          ariaLabel={
+            askEmail
+              ? "Dejar de pedir el correo al comprador"
+              : "Pedir el correo al comprador"
+          }
+          help={
+            askEmail
+              ? "Se le muestra el campo, pero para el comprador es opcional."
+              : "No se le pide."
+          }
+        />
+        <SwitchRow
+          label="Ciudad o municipio"
+          checked={askCity}
+          onToggle={() => setAskCity((v) => !v)}
+          ariaLabel={
+            askCity
+              ? "Dejar de pedir la ciudad al comprador"
+              : "Pedir la ciudad al comprador"
+          }
+          help={
+            askCity
+              ? "Se le muestra el campo, pero para el comprador es opcional."
+              : "No se le pide."
+          }
+        />
+        {/* En la grande el comprador busca sus boletas con su celular o su
+            cédula: sin ninguno de los dos solo le queda el código. */}
+        {!boardMode && !askPhone && !askIdNumber ? (
+          <p role="status" className={warnCls}>
+            Sin celular ni cédula, el comprador solo podrá encontrar sus
+            boletas con su código.
+          </p>
+        ) : null}
+        {boardMode && !askPhone ? (
+          <p className={helpCls}>
+            Con solo el nombre basta: la reserva te llega por WhatsApp desde el
+            celular de la persona, así que ahí mismo tienes su número.
+          </p>
+        ) : null}
+      </div>
+
       {/* Premios adicionales */}
       <div className={`${cardCls} flex flex-col gap-3`}>
         <SectionTitle aside={`${prizes.length}/${MAX_PRIZES}`}>
@@ -2167,7 +2720,18 @@ export default function RaffleFormV2({
             </p>
           ) : null}
         </div>
-        <div>
+        {/* La cuadrícula no publica porcentaje: el tablero ya enseña qué
+            números quedan, así que el modo de avance no se ofrece. */}
+        {boardMode ? (
+          <div>
+            <p className={labelCls}>Porcentaje de avance público</p>
+            <p className="rounded-xl border border-line bg-well px-4 py-3 text-xs leading-relaxed text-fg-soft">
+              En la cuadrícula no se muestra porcentaje: el tablero ya enseña
+              qué números quedan.
+            </p>
+          </div>
+        ) : null}
+        <div className={boardMode ? "hidden" : undefined}>
           <p className={labelCls}>Porcentaje de avance público</p>
           <div className="grid grid-cols-2 gap-1.5 rounded-2xl border border-line bg-well p-1.5">
             {(["AUTO", "MANUAL"] as const).map((m) => (
@@ -2222,11 +2786,11 @@ export default function RaffleFormV2({
       </div>
 
       {/* Un solo aviso rojo junto al botón: primero lo que impide guardar y se
-          arregla solo (las cantidades, los paquetes y la falta de cobro) y
-          después lo que contestó el servidor. */}
-      {errorCantidades || errorPaquetes || errorCobro || error ? (
+          arregla solo (el tipo de rifa, las cantidades, los paquetes y la
+          falta de cobro) y después lo que contestó el servidor. */}
+      {errorTipo || errorCantidades || errorPaquetes || errorCobro || error ? (
         <p role="alert" className={alertCls}>
-          {errorCantidades || errorPaquetes || errorCobro || error}
+          {errorTipo || errorCantidades || errorPaquetes || errorCobro || error}
         </p>
       ) : null}
 

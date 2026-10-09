@@ -17,7 +17,7 @@ export default async function AdminConfigPage() {
           Configuración
         </h1>
         <p className="mt-1 text-sm text-fg-soft">
-          Datos de contacto y redes que ve todo el sitio público.
+          Datos de contacto, redes y apariencia del sitio público.
         </p>
       </div>
       <ConfigFormV2 initial={settings} />

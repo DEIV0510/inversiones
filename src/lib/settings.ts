@@ -17,6 +17,13 @@ export type SiteSettings = {
    * entonces no se carga ni una petición a Meta.
    */
   meta_pixel_id: string;
+  /**
+   * Colores del sitio PÚBLICO: "light" = fondo blanco; cualquier otro valor
+   * = el oscuro de siempre. El panel /admin es siempre oscuro. Se guarda
+   * como texto, igual que los demás ajustes, y quien lo lee compara contra
+   * "light": así un valor raro en la base nunca rompe la página.
+   */
+  public_theme: string;
 };
 
 export const SETTING_KEYS: (keyof SiteSettings)[] = [
@@ -29,6 +36,7 @@ export const SETTING_KEYS: (keyof SiteSettings)[] = [
   "tiktok_url",
   "demo_mode",
   "meta_pixel_id",
+  "public_theme",
 ];
 
 const FALLBACK: SiteSettings = {
@@ -41,6 +49,9 @@ const FALLBACK: SiteSettings = {
   tiktok_url: "",
   demo_mode: "0",
   meta_pixel_id: "",
+  // Oscuro por defecto: el sitio en producción se ve igual que siempre hasta
+  // que el dueño elija el claro en Configuración.
+  public_theme: "dark",
 };
 
 /** Lectura real de la configuración (sin caché). */
@@ -61,7 +72,7 @@ async function leerAjustes(): Promise<SiteSettings> {
  *
  * La lee la plantilla raíz, así que se consultaba en CADA página que se pinta
  * en el servidor —incluida la del sorteo— contra una base remota que se
- * suspende sola. Son ocho textos que el dueño cambia como mucho una vez al
+ * suspende sola. Son diez textos que el dueño cambia como mucho una vez al
  * mes: es la lectura que más se repetía y la que menos cambia.
  *
  * Todo lo que devuelve son cadenas de texto, así que pasar por la caché (que

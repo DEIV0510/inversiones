@@ -9,11 +9,18 @@ export const dynamic = "force-dynamic";
 export default async function AdminNumbersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ raffleId?: string }>;
+  // ?rifa= es el enlace del botón "Tablero" del listado; ?raffleId= es el de
+  // siempre y se sigue aceptando para no romper enlaces guardados.
+  searchParams: Promise<{ rifa?: string; raffleId?: string }>;
 }) {
   const session = await requirePanelAuth("numbers.view");
-  const { raffleId } = await searchParams;
+  const { rifa, raffleId } = await searchParams;
+  // Mismos permisos que Pedidos: el tablero marca pagos, libera reservas y
+  // aparta a mano, y cada botón solo aparece para quien puede usarlo (el API
+  // lo vuelve a comprobar de todos modos).
   const canBlock = can(session.role, "numbers.block");
+  const canConfirm = can(session.role, "orders.confirm");
+  const canCancel = can(session.role, "orders.cancel");
 
   return (
     <div className="flex flex-col gap-5">
@@ -22,11 +29,17 @@ export default async function AdminNumbersPage({
           Números
         </h1>
         <p className="mt-1 text-sm text-fg-soft">
-          Consulta puntual, números tomados y bloqueos por rifa
+          Tablero de las rifas de cuadrícula, consulta puntual, números tomados
+          y bloqueos por rifa
         </p>
       </div>
 
-      <NumbersModule initialRaffleId={raffleId ?? ""} canBlock={canBlock} />
+      <NumbersModule
+        initialRaffleId={rifa ?? raffleId ?? ""}
+        canBlock={canBlock}
+        canConfirm={canConfirm}
+        canCancel={canCancel}
+      />
     </div>
   );
 }

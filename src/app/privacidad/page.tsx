@@ -16,6 +16,11 @@ export const metadata: Metadata = {
  * publica de un ganador (nombre abreviado y celular enmascarado; nunca correo
  * ni cédula).
  *
+ * Los sorteos de CUADRÍCULA (2 y 3 cifras) cambian dos cosas y aquí se dicen:
+ * cada sorteo elige qué datos pide (puede bastar el nombre, y entonces no hay
+ * celular que enmascarar), y su página publica un tablero con el estado de
+ * cada número —libre, reservado o pagado— sin nombres ni datos de nadie.
+ *
  * La política definitiva de la Ley 1581 de 2012 la aporta el propietario: ese
  * bloque sigue marcado como pendiente.
  */
@@ -39,6 +44,15 @@ export default function PrivacidadPage() {
         ahí tus números. Junto a eso guardamos el detalle de tu compra: los
         números, la cantidad, el valor, la fecha, el estado del pedido y tu
         código de participación.
+      </p>
+      <p>
+        Cada sorteo indica en su formulario qué datos pide. En los sorteos de
+        2 y 3 cifras, en los que reservas tus números en un tablero, puede
+        bastar tu <strong>nombre</strong>: ahí guardamos tu nombre y el
+        detalle de tu reserva, y cualquier otro dato solo si el sorteo lo
+        pide. Cuando nos envías tu reserva por WhatsApp, vemos también el
+        número desde el que nos escribes, y lo usamos solo para coordinar
+        tu pago y tu participación.
       </p>
       <p>
         <strong>No guardamos datos de tarjetas ni claves bancarias.</strong> Si
@@ -71,19 +85,29 @@ export default function PrivacidadPage() {
         El día del sorteo cualquier persona puede escribir el número que salió
         y ver a quién le pertenece. Ahí solo se publica el{" "}
         <strong>nombre abreviado</strong> (por ejemplo &ldquo;Wilson A.
-        T.&rdquo;) y el <strong>celular parcialmente oculto</strong> (por
-        ejemplo &ldquo;310 *** 0187&rdquo;): lo justo para que el dueño se
-        reconozca. Nunca se muestra el correo ni la cédula de nadie.
+        T.&rdquo;) y, si lo diste, el{" "}
+        <strong>celular parcialmente oculto</strong> (por ejemplo &ldquo;310
+        *** 0187&rdquo;): lo justo para que el dueño se reconozca. Nunca se
+        muestra el correo ni la cédula de nadie.
       </p>
 
-      <h2>5. Publicación de ganadores</h2>
+      <h2>5. Tablero de números</h2>
+      <p>
+        En los sorteos de 2 y 3 cifras la página del sorteo muestra todos los
+        números con su estado: <strong>libre</strong>,{" "}
+        <strong>reservado</strong> o <strong>pagado</strong>. Ese tablero no
+        lleva nombres, teléfonos, códigos ni ningún otro dato de nadie: solo
+        el color de cada número.
+      </p>
+
+      <h2>6. Publicación de ganadores</h2>
       <p>
         La publicación del nombre completo o de la fotografía de una persona
         ganadora en esta página o en nuestras redes se realiza únicamente con
         su autorización.
       </p>
 
-      <h2>6. Ranking de compradores</h2>
+      <h2>7. Ranking de compradores</h2>
       <p>
         En los sorteos donde el organizador active esta opción, la página
         muestra los diez compradores con más números pagados. De cada uno se
@@ -94,7 +118,7 @@ export default function PrivacidadPage() {
         contacto y te retiramos de él.
       </p>
 
-      <h2>7. Con quién se comparten</h2>
+      <h2>8. Con quién se comparten</h2>
       <p>
         Solo con los proveedores necesarios para que la plataforma funcione:
         alojamiento del sitio, base de datos, pasarela de pagos y proveedor de
@@ -103,7 +127,7 @@ export default function PrivacidadPage() {
         la ley lo exija.
       </p>
 
-      <h2>8. Medición de nuestra publicidad</h2>
+      <h2>9. Medición de nuestra publicidad</h2>
       <p>
         Cuando tenemos campañas activas, esta página usa el píxel de Meta
         (Facebook e Instagram) para saber qué anuncio trajo una compra y no
@@ -116,14 +140,14 @@ export default function PrivacidadPage() {
         tus boletas no depende de ellas.
       </p>
 
-      <h2>9. Conservación</h2>
+      <h2>10. Conservación</h2>
       <p>
         Conservamos los datos de tu participación mientras el sorteo esté
         vigente y después durante el tiempo necesario para atender
         reclamaciones y cumplir las obligaciones legales aplicables.
       </p>
 
-      <h2>10. Tus derechos</h2>
+      <h2>11. Tus derechos</h2>
       <p>
         Conforme a la Ley 1581 de 2012, puedes conocer, actualizar y rectificar
         tus datos, solicitar prueba de la autorización, ser informado sobre su
@@ -132,7 +156,7 @@ export default function PrivacidadPage() {
         por los datos de contacto publicados en esta página.
       </p>
 
-      <h2>11. Política completa</h2>
+      <h2>12. Política completa</h2>
       <p className="rounded-xl border border-dashed border-brand/40 bg-brand/5 p-4 text-fg">
         [PENDIENTE DE CONFIGURAR] — Este espacio está reservado para la
         política de tratamiento de datos personales completa (Ley 1581 de 2012
@@ -141,7 +165,7 @@ export default function PrivacidadPage() {
         procedimiento para atender consultas y reclamos.
       </p>
 
-      <h2>12. Contacto</h2>
+      <h2>13. Contacto</h2>
       <p>
         Para consultas sobre tus datos personales, escríbenos por los datos de
         contacto publicados en esta página.

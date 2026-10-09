@@ -5,6 +5,33 @@ import { useEffect, useState } from "react";
 import type { SiteSettings } from "@/lib/settings";
 import { btnPrimary, helpCls, inputCls, labelCls } from "./ui";
 
+type TemaPublico = "light" | "dark";
+
+/**
+ * Opciones de apariencia del sitio público. La muestra lleva los colores
+ * fijos de cada tema (no los tokens: el panel es siempre oscuro y con tokens
+ * las dos muestras saldrían iguales). Clases escritas ENTERAS para Tailwind.
+ */
+const TEMAS: {
+  valor: TemaPublico;
+  titulo: string;
+  detalle: string;
+  muestra: string;
+}[] = [
+  {
+    valor: "light",
+    titulo: "Claro (fondo blanco)",
+    detalle: "Fondo blanco y letras oscuras.",
+    muestra: "bg-white text-ink",
+  },
+  {
+    valor: "dark",
+    titulo: "Oscuro",
+    detalle: "Fondo violeta oscuro, el diseño de siempre.",
+    muestra: "bg-ink text-white",
+  },
+];
+
 export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
   const router = useRouter();
 
@@ -19,6 +46,10 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
   const [tiktokUrl, setTiktokUrl] = useState(initial.tiktok_url);
   const [metaPixelId, setMetaPixelId] = useState(initial.meta_pixel_id);
   const [demoMode, setDemoMode] = useState(initial.demo_mode === "1");
+  // Cualquier valor que no sea "light" es el oscuro de siempre.
+  const [publicTheme, setPublicTheme] = useState<TemaPublico>(
+    initial.public_theme === "light" ? "light" : "dark"
+  );
 
   // Correo automático. Vive en Configuración pero no viaja en SiteSettings:
   // se pide al endpoint, que además dice si el entorno tiene la clave.
@@ -69,8 +100,9 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
           facebook_url: facebookUrl.trim(),
           instagram_url: instagramUrl.trim(),
           tiktok_url: tiktokUrl.trim(),
-          meta_pixel_id: metaPixelId.replace(/D/g, ""),
+          meta_pixel_id: metaPixelId.replace(/\D/g, ""),
           demo_mode: demoMode ? "1" : "0",
+          public_theme: publicTheme,
           // Las claves que no viajan se quedan como están en la base.
           ...(correoCargado
             ? {
@@ -171,6 +203,59 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
         </div>
       </div>
 
+      {/* Apariencia: dos opciones grandes con muestra. El radio nativo se ve
+          y lleva el foco, así que el elegido no depende solo del color. */}
+      <div className="rounded-2xl border border-line bg-card p-4">
+        <fieldset className="min-w-0" aria-describedby="cf-tema-ayuda">
+          <legend className="block text-sm font-semibold text-fg">
+            Apariencia del sitio
+          </legend>
+          <p id="cf-tema-ayuda" className={helpCls}>
+            Colores de todas las páginas que ve el público: portada, sorteos,
+            pedidos, Mis boletas, ganador y legales. Cambia al guardar. Este
+            panel se queda siempre oscuro.
+          </p>
+          <div className="mt-3 grid gap-2.5 sm:grid-cols-2">
+            {TEMAS.map((tema) => {
+              const elegido = publicTheme === tema.valor;
+              return (
+                <label
+                  key={tema.valor}
+                  className={`flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border p-3 transition-colors ${
+                    elegido
+                      ? "border-brand bg-brand/10"
+                      : "border-line bg-bg2 hover:border-line-strong"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="cf-tema"
+                    value={tema.valor}
+                    checked={elegido}
+                    onChange={() => setPublicTheme(tema.valor)}
+                    className="h-5 w-5 shrink-0 accent-brand"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={`flex h-10 w-12 shrink-0 items-center justify-center rounded-lg border border-line-strong font-display text-sm font-black ${tema.muestra}`}
+                  >
+                    Aa
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-fg">
+                      {tema.titulo}
+                    </span>
+                    <span className="block text-xs leading-relaxed text-fg-faint">
+                      {tema.detalle}
+                    </span>
+                  </span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      </div>
+
       <div className="flex flex-col gap-4 rounded-2xl border border-line bg-card p-4">
         <div>
           <label htmlFor="cf-fb" className={labelCls}>
@@ -226,7 +311,7 @@ export default function ConfigFormV2({ initial }: { initial: SiteSettings }) {
             type="text"
             inputMode="numeric"
             value={metaPixelId}
-            onChange={(e) => setMetaPixelId(e.target.value.replace(/D/g, ""))}
+            onChange={(e) => setMetaPixelId(e.target.value.replace(/\D/g, ""))}
             className={inputCls}
             placeholder="2211697406447993"
             maxLength={20}

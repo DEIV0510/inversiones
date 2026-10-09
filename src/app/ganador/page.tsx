@@ -54,11 +54,12 @@ export default async function GanadorPage() {
         hideWhatsApp={ocultarWhatsApp}
       />
       <main className="relative mx-auto w-full max-w-2xl px-4 pb-28 pt-24 sm:px-6 lg:pt-32">
-        {/* Trama de puntos + halo fucsia: profundidad como en el sorteo. */}
+        {/* Trama de puntos + halo fucsia: profundidad como en el sorteo.
+            halo-brand lo atenúa en el tema claro. */}
         <div className="dot-grid pointer-events-none absolute inset-0" aria-hidden="true" />
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -top-24 left-1/2 h-64 w-[520px] max-w-full -translate-x-1/2 rounded-full bg-brand/20 blur-[120px]"
+          className="halo-brand pointer-events-none absolute -top-24 left-1/2 h-64 w-[520px] max-w-full -translate-x-1/2 rounded-full bg-brand/20 blur-[120px]"
         />
         <div className="relative">
           <div className="text-center">
