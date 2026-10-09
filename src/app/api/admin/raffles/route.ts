@@ -9,6 +9,11 @@ import {
   tagRifaId,
 } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
+import {
+  AJUSTES_FORZADOS_CUADRICULA,
+  cifrasDeCuadricula,
+  errorCuadricula,
+} from "@/lib/cuadricula";
 import { digitsForTotal } from "@/lib/numbers";
 import { statusMetaV2 } from "@/lib/raffle-status";
 import { raffleSchema } from "@/lib/validation";
@@ -111,9 +116,26 @@ export async function POST(req: NextRequest) {
   const { gallery, drawsAt, digits, ticketPacks, prizes, prizedNumbers, ...data } =
     parsed.data;
 
+  // Rifa de cuadrícula: lo que no es negociable se fija aquí, en el servidor
+  // —escoger a mano, cerrar por WhatsApp, sin pasarela—, mande lo que mande
+  // el panel. Ver AJUSTES_FORZADOS_CUADRICULA.
+  if (data.boardMode) Object.assign(data, AJUSTES_FORZADOS_CUADRICULA);
+
   // Las cifras las decide el administrador; si no las envía, se derivan del
   // total. Deben alcanzar para representar el número más alto.
-  const finalDigits = digits ?? digitsForTotal(parsed.data.totalNumbers);
+  const finalDigits =
+    digits ??
+    (data.boardMode
+      ? cifrasDeCuadricula(parsed.data.totalNumbers)
+      : digitsForTotal(parsed.data.totalNumbers));
+  const errorTablero = errorCuadricula({
+    boardMode: data.boardMode,
+    totalNumbers: parsed.data.totalNumbers,
+    digits: finalDigits,
+  });
+  if (errorTablero) {
+    return NextResponse.json({ error: errorTablero }, { status: 422 });
+  }
   if (Math.pow(10, finalDigits) < parsed.data.totalNumbers) {
     return NextResponse.json(
       {
@@ -128,8 +150,8 @@ export async function POST(req: NextRequest) {
   // mezclarlo.
   const sinCobro = errorSinFormaDeCobro(
     parsed.data.status,
-    parsed.data.whatsappCheckout,
-    parsed.data.gatewayCheckout
+    data.whatsappCheckout,
+    data.gatewayCheckout
   );
   if (sinCobro) {
     return NextResponse.json({ error: sinCobro }, { status: 422 });
@@ -162,7 +184,11 @@ export async function POST(req: NextRequest) {
     action: "raffle.create",
     entity: "Raffle",
     entityId: raffle.id,
-    detail: { title: raffle.title, totalNumbers: raffle.totalNumbers },
+    detail: {
+      title: raffle.title,
+      totalNumbers: raffle.totalNumbers,
+      boardMode: raffle.boardMode,
+    },
   });
 
   // La portada está cacheada: se marca para regenerar ahora que la rifa ya

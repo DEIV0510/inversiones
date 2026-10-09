@@ -8,6 +8,14 @@ import { TAG_GANADORES, TAG_RIFAS, tagRifa, tagRifaId } from "./cache-tags";
  * cantidades vendidas/restantes — solo el porcentaje. El tamaño de la rifa
  * (dígitos/rango) sí es público porque es necesario para elegir número.
  *
+ * Dos excepciones DELIBERADAS, las dos encendidas rifa por rifa:
+ *  - el ranking de compradores (showRanking), más abajo;
+ *  - el tablero de las rifas de CUADRÍCULA (boardMode, 2 o 3 cifras): ahí
+ *    el comprador ve cada número en verde, amarillo o blanco, porque escoger
+ *    sobre el tablero ES la forma de jugar. Solo existe con 1.000 números o
+ *    menos (src/lib/cuadricula.ts) y nunca lleva nombres ni teléfonos: solo
+ *    el estado de cada casilla.
+ *
  * CACHÉ DE DATOS: las lecturas públicas de aquí abajo se repetían en CADA
  * visita contra una base remota (Neon) que se suspende sola; despertarla
  * costaba segundos y la página del sorteo es justo donde la gente compra. Por
@@ -175,6 +183,20 @@ export type PublicRaffle = {
   showDrawDate: boolean;
   /** Si la página publica el ranking de compradores de este sorteo. */
   showRanking: boolean;
+  /**
+   * Rifa de cuadrícula (2 o 3 cifras): tablero completo, el comprador
+   * escoge y RESERVA, y el pedido sale por WhatsApp con sus números.
+   */
+  boardMode: boolean;
+  /**
+   * Qué datos pide el formulario. El nombre va siempre. Son solo las
+   * casillas que se pintan: quien de verdad los exige es el servidor
+   * (createOrder), con la misma configuración.
+   */
+  askPhone: boolean;
+  askIdNumber: boolean;
+  askEmail: boolean;
+  askCity: boolean;
   ticketPacks: PublicTicketPack[];
   prizes: RafflePrize[];
 };
@@ -244,6 +266,13 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
     showPrize: raffle.showPrize,
     showDrawDate: raffle.showDrawDate,
     showRanking: raffle.showRanking,
+    boardMode: raffle.boardMode,
+    // `!== false`: una fila sin el dato se pinta con el formulario de siempre
+    // (el estricto), igual que lo decide el servidor.
+    askPhone: raffle.askPhone !== false,
+    askIdNumber: raffle.askIdNumber !== false,
+    askEmail: raffle.askEmail !== false,
+    askCity: raffle.askCity !== false,
     ticketPacks: parseTicketPacks(raffle.ticketPacksJson),
     prizes: parseJsonArray<RafflePrize>(
       raffle.prizesJson,
@@ -609,8 +638,12 @@ export function enmascararTelefono(telefono: string): string {
 export type DuenoDeNumero = {
   /** Nombre abreviado, ej. "Wilson A. T.". */
   nombre: string;
-  /** Teléfono enmascarado, ej. "310 *** 0187". */
-  telefono: string;
+  /**
+   * Teléfono enmascarado, ej. "310 *** 0187". null cuando la persona reservó
+   * solo con su nombre (rifas de cuadrícula): entonces no hay nada que
+   * enmascarar y la pantalla muestra solo el nombre.
+   */
+  telefono: string | null;
 };
 
 /**
@@ -641,9 +674,10 @@ export async function buscarDuenoDeNumero(
   if (!fila || fila.status !== "PAID") return null;
   // Sin orden (se borró) o con la orden ya anulada: no hay dueño que anunciar.
   if (!fila.order || fila.order.status !== "PAID") return null;
+  const telefono = fila.order.participant.phone;
   return {
     nombre: abreviarNombre(fila.order.participant.name),
-    telefono: enmascararTelefono(fila.order.participant.phone),
+    telefono: telefono ? enmascararTelefono(telefono) : null,
   };
 }
 

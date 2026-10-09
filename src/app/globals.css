@@ -41,6 +41,28 @@
   --color-wa: #25d366;
   --color-wa-dark: #1da851;
 
+  /* Tinta oscura FIJA: texto negro sobre verde o amarillo, igual en los dos
+     temas (en claro, text-bg pasaría a blanco). */
+  --color-ink: #0a0714;
+
+  /* Verde de WhatsApp usado como COLOR DE TEXTO. En oscuro es el mismo wa;
+     en claro se oscurece (el #25d366 sobre blanco da 1.98:1, ilegible). */
+  --color-wa-ink: #25d366;
+
+  /* Tablero de las rifas de CUADRÍCULA (2 y 3 cifras). Son los colores que
+     pidió el dueño —verde pagado, amarillo reservado, blanco libre, números
+     en negro— y NO cambian con el tema: la casilla se lee igual sobre fondo
+     claro u oscuro. Contraste del número (cell-ink) sobre cada casilla:
+     blanco 19.8:1, amarillo 13.9:1, verde 9.4:1, gris 13.3:1 (AAA). El
+     borde de la casilla libre (cell-line) da 3.6:1 contra blanco, lo justo
+     para que se vea como botón (WCAG 1.4.11). */
+  --color-cell-free: #ffffff;
+  --color-cell-line: #8b85a3;
+  --color-cell-reserved: #facc15;
+  --color-cell-paid: #22c55e;
+  --color-cell-blocked: #d4d4d8;
+  --color-cell-ink: #0a0a0a;
+
   --font-display: var(--font-archivo), "Archivo", system-ui, sans-serif;
   --font-body: var(--font-inter), "Inter", system-ui, sans-serif;
 

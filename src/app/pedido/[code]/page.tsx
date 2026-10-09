@@ -21,7 +21,10 @@ import {
   isOrderExpired,
 } from "@/lib/engine/orders";
 import { formatNumber, formatNumbers } from "@/lib/numbers";
-import { orderWhatsAppMessage } from "@/lib/notifications";
+import {
+  orderWhatsAppMessage,
+  reservaWhatsAppMessage,
+} from "@/lib/notifications";
 import { pasarelaDeRifa } from "@/lib/pasarela";
 import { getSettings } from "@/lib/settings";
 import {
@@ -150,10 +153,18 @@ export default async function PedidoPage({
   // no esté pagado ni siquiera se calculan: así no viajan al navegador y no
   // se pueden leer abriendo el código de la página. Los números siguen
   // apartados en la base de datos exactamente igual que antes.
+  //
+  // La excepción es la rifa de CUADRÍCULA: ahí el comprador escogió sus
+  // números él mismo sobre un tablero público, así que no hay nada que
+  // esconder, y verlos es justo la confirmación de lo que acaba de reservar.
+  // El servidor no deja pedir números "al azar" en esas rifas (createOrder),
+  // de modo que aquí jamás se enseña un número que él no haya elegido.
   const pagada = order.status === "PAID";
-  const numbers = pagada
-    ? formatNumbers(JSON.parse(order.numbersJson), order.raffle.digits)
-    : [];
+  const esReserva = order.raffle.boardMode;
+  const numbers =
+    pagada || esReserva
+      ? formatNumbers(JSON.parse(order.numbersJson), order.raffle.digits)
+      : [];
   // Premios instantáneos ganados (ticket premiado). Solo cuenta lo que ganó
   // ESTE pedido y ya está pagado; además se cruza con los números de la
   // boleta para poder pintar en verde la ficha exacta que resultó premiada.
@@ -172,16 +183,29 @@ export default async function PedidoPage({
   // tiene delante y son justo lo que va a reclamar. Con el pago confirmado el
   // cierre del mensaje cambia: pedir el pago de algo ya pagado no tenía
   // sentido, y ese mismo botón es el que la página le señala al ganador.
-  const whatsappUrl = orderWhatsAppMessage({
-    businessPhone: settings.whatsapp_number,
-    participantName: order.participant.name,
-    raffleTitle: order.raffle.title,
-    orderCode: order.code,
-    quantity: order.quantity,
-    total: order.total,
-    pagada,
-    premios: prizesWon,
-  });
+  //
+  // En la cuadrícula el mensaje es el de la RESERVA, con nombre y números: es
+  // lo que pidió el dueño para apuntarlos en su tabla sin abrir el panel.
+  const whatsappUrl = esReserva
+    ? reservaWhatsAppMessage({
+        businessPhone: settings.whatsapp_number,
+        participantName: order.participant.name,
+        raffleTitle: order.raffle.title,
+        orderCode: order.code,
+        numbers,
+        total: order.total,
+        pagada,
+      })
+    : orderWhatsAppMessage({
+        businessPhone: settings.whatsapp_number,
+        participantName: order.participant.name,
+        raffleTitle: order.raffle.title,
+        orderCode: order.code,
+        quantity: order.quantity,
+        total: order.total,
+        pagada,
+        premios: prizesWon,
+      });
 
   // Datos del negocio para el respaldo de pago (cuando la rifa se queda sin
   // WhatsApp y sin pasarela). El WhatsApp NO viaja aquí a propósito: si el
@@ -210,8 +234,14 @@ export default async function PedidoPage({
   // encendido en esta rifa (el gemelo del de WhatsApp). Con las dos pasarelas
   // configuradas manda Bold, que es la cuenta que el dueño tiene de verdad;
   // nunca se pintan los dos botones a la vez.
+  // La cuadrícula no cobra por pasarela (el servidor la apaga al guardar la
+  // rifa); se repite aquí por si acaso, porque con un botón de pago en
+  // pantalla la página NO salta a WhatsApp y la reserva no le llegaría al
+  // dueño.
   const pasarela =
-    order.status === "PENDING" ? pasarelaDeRifa(order.raffle) : null;
+    order.status === "PENDING" && !esReserva
+      ? pasarelaDeRifa(order.raffle)
+      : null;
 
   // El monto SIEMPRE sale de la orden guardada, jamás del navegador. La firma
   // de integridad la calcula el servidor en src/lib/bold.ts: al navegador solo
@@ -237,7 +267,8 @@ export default async function PedidoPage({
           totalCop: order.total,
           redirectUrl: urlRetorno,
           customerName: order.participant.name,
-          customerPhone: order.participant.phone,
+          // Sin celular (reserva solo con el nombre) no se manda nada.
+          customerPhone: order.participant.phone ?? undefined,
         })
       : null;
 
@@ -294,6 +325,7 @@ export default async function PedidoPage({
           contacto={contacto}
           autoEnviarWhatsApp={enviar === "1" && order.raffle.whatsappCheckout}
           avisaPorCorreo={avisaPorCorreo}
+          modoReserva={esReserva}
         />
       </main>
       <Footer settings={settings} hideWhatsApp={!order.raffle.whatsappCheckout} />

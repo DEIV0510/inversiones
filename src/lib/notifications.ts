@@ -1,3 +1,4 @@
+import { listaDeNumeros } from "./cuadricula";
 import { formatCop } from "./format";
 import { waLink } from "./whatsapp";
 
@@ -54,5 +55,44 @@ export function orderWhatsAppMessage(params: {
     `${params.raffleTitle}.\n` +
     `Pedido ${params.orderCode} - ${boletas} - ${formatCop(params.total)}\n` +
     cierre;
+  return waLink(params.businessPhone, message);
+}
+
+/**
+ * Mensaje de WhatsApp de una RESERVA en una rifa de cuadrícula.
+ *
+ * A diferencia del de arriba, este SÍ lleva los números, y es a propósito: en
+ * la cuadrícula el comprador los escogió él mismo sobre un tablero público
+ * (nada que revelar) y es justo lo que el dueño necesita ver para apuntarlos
+ * en su tabla. El servidor rechaza los pedidos "al azar" en estas rifas, así
+ * que aquí nunca llega un número que el comprador no haya elegido.
+ *
+ * Lleva también el código: con él el dueño encuentra la reserva en el panel
+ * para marcarla pagada, y es la única forma que tiene de volver a su reserva
+ * quien la hizo solo con el nombre.
+ */
+export function reservaWhatsAppMessage(params: {
+  businessPhone: string;
+  participantName: string;
+  raffleTitle: string;
+  orderCode: string;
+  /** Números ya formateados con sus ceros ("07", "023"). */
+  numbers: string[];
+  total: number;
+  /** El dueño ya confirmó el pago. */
+  pagada?: boolean;
+}): string {
+  const cuantos = params.numbers.length;
+  const numeros = listaDeNumeros(params.numbers);
+  const message = params.pagada
+    ? `Hola, soy ${params.participantName}. Mi pago del sorteo ` +
+      `${params.raffleTitle} ya está confirmado.\n` +
+      `${cuantos === 1 ? "Mi número" : "Mis números"}: ${numeros}\n` +
+      `Código: ${params.orderCode}`
+    : `Hola, soy ${params.participantName}. Quiero reservar en el sorteo ` +
+      `${params.raffleTitle} ${cuantos === 1 ? "el número" : "los números"}: ` +
+      `${numeros}\n` +
+      `Valor total: ${formatCop(params.total)}\n` +
+      `Código de reserva: ${params.orderCode}`;
   return waLink(params.businessPhone, message);
 }

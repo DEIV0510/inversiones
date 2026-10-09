@@ -1006,6 +1006,7 @@ export default function OrderView({
   contacto,
   autoEnviarWhatsApp = false,
   avisaPorCorreo = false,
+  modoReserva = false,
 }: {
   order: OrderData;
   /** null cuando la rifa está configurada sin WhatsApp. */
@@ -1040,6 +1041,13 @@ export default function OrderView({
    * prometer en pantalla un correo que nunca va a salir.
    */
   avisaPorCorreo?: boolean;
+  /**
+   * Pedido de una rifa de CUADRÍCULA: es una RESERVA hecha sobre el tablero.
+   * Los números ya vienen en `order.numbers` aunque el pedido esté pendiente
+   * (el comprador los escogió a la vista de todos) y la pantalla habla de
+   * reservar, no de comprar.
+   */
+  modoReserva?: boolean;
 }) {
   const router = useRouter();
   const yaEnviado = useRef(false);

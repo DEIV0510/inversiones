@@ -74,6 +74,14 @@ export async function POST(
       showPrize: original.showPrize,
       showDrawDate: original.showDrawDate,
       showRanking: original.showRanking,
+      // El tipo de rifa y los datos que se piden también viajan: duplicar
+      // una cuadrícula tiene que dar otra cuadrícula que reserva solo con el
+      // nombre, no una rifa de buscador que de repente pide cédula.
+      boardMode: original.boardMode,
+      askPhone: original.askPhone,
+      askIdNumber: original.askIdNumber,
+      askEmail: original.askEmail,
+      askCity: original.askCity,
       imageAspect: original.imageAspect,
       ticketPacksJson: original.ticketPacksJson,
       prizesJson: original.prizesJson,

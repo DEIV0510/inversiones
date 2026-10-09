@@ -9,6 +9,11 @@ import {
   tagRifaId,
 } from "@/lib/cache-tags";
 import { prisma } from "@/lib/db";
+import {
+  AJUSTES_FORZADOS_CUADRICULA,
+  cifrasDeCuadricula,
+  errorCuadricula,
+} from "@/lib/cuadricula";
 import { digitsForTotal } from "@/lib/numbers";
 import { deleteImage } from "@/lib/media";
 import { statusMetaV2 } from "@/lib/raffle-status";
@@ -148,12 +153,19 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const { gallery, drawsAt, digits, ticketPacks, prizes, prizedNumbers, ...data } =
     parsed.data;
 
+  // Rifa de cuadrícula (estado FINAL: lo que trae la petición o lo guardado).
+  // Lo no negociable se fija aquí, mande lo que mande el panel.
+  const finalBoard = data.boardMode ?? existing.boardMode;
+  if (finalBoard) Object.assign(data, AJUSTES_FORZADOS_CUADRICULA);
+
   // Coherencia entre cifras y cantidad de números.
   const finalTotal = parsed.data.totalNumbers ?? existing.totalNumbers;
   const finalDigits =
     digits ??
     (parsed.data.totalNumbers != null
-      ? digitsForTotal(parsed.data.totalNumbers)
+      ? finalBoard
+        ? cifrasDeCuadricula(parsed.data.totalNumbers)
+        : digitsForTotal(parsed.data.totalNumbers)
       : existing.digits);
   if (Math.pow(10, finalDigits) < finalTotal) {
     return NextResponse.json(
@@ -162,6 +174,33 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
       },
       { status: 422 }
     );
+  }
+  const errorTablero = errorCuadricula({
+    boardMode: finalBoard,
+    totalNumbers: finalTotal,
+    digits: finalDigits,
+  });
+  if (errorTablero) {
+    return NextResponse.json({ error: errorTablero }, { status: 422 });
+  }
+
+  // Con pedidos encima, ni el formato del número ni el tipo de rifa se
+  // cambian. El panel ya bloquea esas casillas, pero esta es la puerta que
+  // manda: un "0042" vendido no puede pasar a leerse "042" en el comprobante
+  // de alguien, ni una rifa con compradores pasar a enseñar su tablero.
+  if (finalDigits !== existing.digits || finalBoard !== existing.boardMode) {
+    const pedidos = await prisma.order.count({ where: { raffleId: id } });
+    if (pedidos > 0) {
+      return NextResponse.json(
+        {
+          error:
+            finalBoard !== existing.boardMode
+              ? "Esta rifa ya tiene pedidos: no se puede cambiar el tipo de rifa. Crea una rifa nueva."
+              : "Esta rifa ya tiene pedidos: no se pueden cambiar las cifras de los números.",
+        },
+        { status: 409 }
+      );
+    }
   }
 
   // Nada de publicar una rifa que no puede cobrar. Lo que se juzga es el
@@ -172,8 +211,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // se toma de la petición si viene y de lo guardado si no.
   const sinCobro = errorSinFormaDeCobro(
     parsed.data.status ?? existing.status,
-    parsed.data.whatsappCheckout ?? existing.whatsappCheckout,
-    parsed.data.gatewayCheckout ?? existing.gatewayCheckout
+    data.whatsappCheckout ?? existing.whatsappCheckout,
+    data.gatewayCheckout ?? existing.gatewayCheckout
   );
   if (sinCobro) {
     return NextResponse.json({ error: sinCobro }, { status: 422 });
@@ -239,6 +278,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   }
   if (parsed.data.manualProgressPct != null && parsed.data.manualProgressPct !== existing.manualProgressPct) {
     sensitive.porcentajeManual = { antes: existing.manualProgressPct, ahora: parsed.data.manualProgressPct };
+  }
+  if (finalBoard !== existing.boardMode) {
+    sensitive.cuadricula = { antes: existing.boardMode, ahora: finalBoard };
+  }
+  // Qué datos se le piden al comprador: apagar la cédula en la rifa grande es
+  // una decisión que tiene que quedar registrada con nombre y fecha.
+  for (const campo of ["askPhone", "askIdNumber", "askEmail", "askCity"] as const) {
+    if (parsed.data[campo] != null && parsed.data[campo] !== existing[campo]) {
+      sensitive[campo] = { antes: existing[campo], ahora: parsed.data[campo] };
+    }
   }
   await logAudit({
     actorEmail: auth.email,

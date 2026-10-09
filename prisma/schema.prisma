@@ -92,6 +92,27 @@ model Raffle {
   // Se enciende rifa por rifa y a conciencia.
   showRanking Boolean @default(false)
 
+  // Rifa de CUADRÍCULA (2 o 3 cifras: 00-99 / 000-999). La página muestra
+  // todos los números en orden con su estado —pagado, reservado, libre—, el
+  // comprador escoge los suyos y los RESERVA: el pedido sale por WhatsApp
+  // hacia el dueño con los números a la vista y el dueño marca el pago a
+  // mano. Es la otra excepción deliberada a la regla de no publicar
+  // cantidades (ver src/lib/public.ts): el tablero ES el producto en este
+  // tipo de rifa. Solo se permite con 1.000 números o menos y nace APAGADO,
+  // así que la rifa grande de 4 cifras no cambia.
+  boardMode Boolean @default(false)
+
+  // Datos que se le piden al comprador. El nombre se pide SIEMPRE. Los
+  // valores por defecto son EXACTAMENTE el comportamiento de antes —celular y
+  // cédula obligatorios, correo y ciudad opcionales—, así que una rifa que no
+  // toque estos campos sigue pidiendo lo mismo que siempre. Pedido = cuando
+  // está encendido; el celular y la cédula, si se piden, son obligatorios; el
+  // correo y la ciudad, si se piden, son opcionales.
+  askPhone    Boolean @default(true)
+  askIdNumber Boolean @default(true)
+  askEmail    Boolean @default(true)
+  askCity     Boolean @default(true)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -156,7 +177,12 @@ model PrizedNumber {
 
 model Participant {
   id        String   @id @default(cuid())
-  phone     String   @unique // normalizado 57XXXXXXXXXX
+  // Normalizado 57XXXXXXXXXX. OPCIONAL desde las rifas de cuadrícula, donde
+  // se reserva solo con el nombre (el celular le llega al dueño con el
+  // mensaje de WhatsApp). Sin celular, cada pedido crea su propio
+  // participante: Postgres admite varios NULL en un índice único, y agruparlos
+  // por nombre fundiría a dos "Juan Pérez" en una sola persona.
+  phone     String?  @unique
   name      String
   email     String?
   // Cédula: opcional al comprar, sirve para que el comprador encuentre sus

@@ -38,7 +38,12 @@ const SENTENCIAS = [
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "minNumbersPerOrder" INTEGER NOT NULL DEFAULT 1`,
   // La fecha vuelve a mostrarse por defecto ("Por anunciar" si está vacía).
   `ALTER TABLE "Raffle" ALTER COLUMN "showDrawDate" SET DEFAULT true`,
-  `UPDATE "Raffle" SET "showDrawDate" = true WHERE "showDrawDate" = false`,
+  // Aquí había un `UPDATE "Raffle" SET "showDrawDate" = true WHERE
+  // "showDrawDate" = false`: fue un arreglo de datos de UNA sola vez. Dentro
+  // de un script que se vuelve a correr en cada migración, le volvía a
+  // encender la fecha a toda rifa en la que el dueño la hubiera apagado
+  // después. Este script solo AGREGA; nunca reescribe lo que el dueño
+  // decidió.
   // Proporcion de la foto del sorteo (4/3, 1/1 o 9/16).
   `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "imageAspect" TEXT NOT NULL DEFAULT '4/3'`,
   // Interruptor de la pasarela por rifa (gemelo del de WhatsApp).
@@ -54,6 +59,20 @@ const SENTENCIAS = [
   `CREATE INDEX IF NOT EXISTS "Order_raffleId_status_participantId_quantity_idx" ON "Order"("raffleId", "status", "participantId", "quantity")`,
   // Ciudad o municipio del comprador. Opcional; nunca sale al publico.
   `ALTER TABLE "Participant" ADD COLUMN IF NOT EXISTS "city" TEXT`,
+  // Rifas de CUADRÍCULA (2 y 3 cifras). Nace apagado: la rifa grande no
+  // cambia.
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "boardMode" BOOLEAN NOT NULL DEFAULT false`,
+  // Datos que se le piden al comprador. Los DEFAULT son el comportamiento de
+  // siempre (celular, cédula, correo y ciudad en el formulario), así que las
+  // rifas que ya existen quedan EXACTAMENTE igual.
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "askPhone" BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "askIdNumber" BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "askEmail" BOOLEAN NOT NULL DEFAULT true`,
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "askCity" BOOLEAN NOT NULL DEFAULT true`,
+  // Reservas solo con el nombre: el celular deja de ser obligatorio. Es
+  // aditivo (no toca ninguna fila) y se puede repetir sin efecto. El índice
+  // único se queda: Postgres admite varios NULL en él.
+  `ALTER TABLE "Participant" ALTER COLUMN "phone" DROP NOT NULL`,
 ];
 
 // Columnas que este script debe dejar existiendo en Raffle. Se comprueban al
@@ -72,6 +91,11 @@ const COLUMNAS_ESPERADAS = [
   "showRanking",
   "minNumbersPerOrder",
   "imageAspect",
+  "boardMode",
+  "askPhone",
+  "askIdNumber",
+  "askEmail",
+  "askCity",
 ];
 
 (async () => {
@@ -122,5 +146,18 @@ const COLUMNAS_ESPERADAS = [
     process.exit(1);
   }
   console.log("Raffle OK en", host, "— estan las", COLUMNAS_ESPERADAS.length, "columnas esperadas");
+
+  // 4. El celular del participante tiene que admitir vacío, o las reservas
+  //    solo con el nombre fallarían en producción con un 500.
+  const [tel] = await p.$queryRawUnsafe(
+    `SELECT is_nullable FROM information_schema.columns
+     WHERE table_schema='public' AND table_name='Participant' AND column_name='phone'`
+  );
+  if (!tel || tel.is_nullable !== "YES") {
+    console.error("Participant.phone sigue siendo NOT NULL");
+    await p.$disconnect();
+    process.exit(1);
+  }
+  console.log("Participant.phone admite vacío (reservas solo con el nombre)");
   await p.$disconnect();
 })();

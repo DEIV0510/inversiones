@@ -69,6 +69,9 @@ const comprador = {
   raffleSlug: "sorteo-prueba",
   name: "Ana Pérez",
   phone: "3105490250",
+  // La rifa grande pide la cédula (askIdNumber nace encendido): el
+  // comprador de estas pruebas la trae, como en la vida real.
+  idNumber: "1012345678",
 };
 
 /** Lista de números consecutivos para elegir "a mano": (3) → [1, 2, 3]. */

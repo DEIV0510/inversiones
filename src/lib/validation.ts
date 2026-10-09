@@ -129,6 +129,19 @@ const raffleFields = z.object({
   // cuántos números lleva cada quien, que es la excepción a la regla de no
   // enseñar cantidades al público (ver src/lib/public.ts).
   showRanking: z.boolean().default(false),
+  // Rifa de cuadrícula (2 o 3 cifras, reservas por WhatsApp). Apagada por
+  // defecto: la rifa grande sigue igual. Sus reglas (máximo 1.000 números,
+  // cifras justas, sin pasarela) viven en src/lib/cuadricula.ts y las aplica
+  // el servidor al guardar.
+  boardMode: z.boolean().default(false),
+  // Datos que se le piden al comprador; el nombre va siempre. Los valores por
+  // defecto son los de siempre: celular y cédula obligatorios, correo y
+  // ciudad opcionales. Una rifa que no los mande pide exactamente lo mismo
+  // que antes de existir estos interruptores.
+  askPhone: z.boolean().default(true),
+  askIdNumber: z.boolean().default(true),
+  askEmail: z.boolean().default(true),
+  askCity: z.boolean().default(true),
   ticketPacks: z
     .array(ticketPack)
     .max(12, "Máximo 12 paquetes")
@@ -301,19 +314,24 @@ export const createOrderSchema = z
       .trim()
       .min(2, "Escribe tu nombre completo")
       .max(120),
+    // Celular y cédula llegan OPCIONALES a este esquema: quién los exige es
+    // el motor (createOrder), que sí conoce la rifa. La rifa grande los sigue
+    // pidiendo obligatorios (askPhone/askIdNumber nacen encendidos) y la de
+    // cuadrícula puede reservar solo con el nombre. Este esquema no puede
+    // decidirlo porque se ejecuta antes de saber de qué rifa es el pedido.
+    // Lo que sí hace aquí: limpiar, y rechazar un dato MAL escrito cuando
+    // viene.
     phone: z
       .string({ error: "Escribe tu WhatsApp" })
-      .trim()
-      .min(10, "Escribe tu WhatsApp")
-      .max(20),
+      .max(20, "El número de WhatsApp es demasiado largo")
+      .optional()
+      .transform((v) => {
+        const limpio = (v ?? "").trim();
+        return limpio === "" ? undefined : limpio;
+      }),
     email: z
       .union([z.literal(""), z.string().trim().email("Correo no válido").max(200)])
       .optional(),
-    // Cédula OBLIGATORIA (lo pidió el dueño): cuando salga un ganador quiere
-    // poder identificarlo con nombre + cédula + celular, y así el comprador
-    // encuentra sus boletas con ese solo dato aunque pierda todo lo demás.
-    // Se aceptan "12.345.678" o "12 345 678" porque así la escribe la gente;
-    // los separadores se limpian aquí y a la base solo llegan dígitos.
     // Ciudad o municipio: dato OPCIONAL, texto libre corto.
     //
     // Se limpia ANTES de juzgarlo. Con la union anterior, un espacio suelto
@@ -329,13 +347,21 @@ export const createOrderSchema = z
         const limpio = (v ?? "").trim();
         return limpio.length >= 2 ? limpio : undefined;
       }),
+    // Cédula: en la rifa grande es OBLIGATORIA (lo pidió el dueño: cuando
+    // salga un ganador quiere identificarlo con nombre + cédula + celular), y
+    // eso lo exige el motor según la rifa. Aquí se limpia —"12.345.678" o
+    // "12 345 678", que es como la escribe la gente— y, si vino, tiene que
+    // ser una cédula de verdad.
     idNumber: z
       .string({ error: "Escribe tu cédula (entre 5 y 15 dígitos)" })
-      .trim()
       .max(30, "La cédula es demasiado larga")
-      .transform((v) => v.replace(/[\s.]/g, ""))
+      .optional()
+      .transform((v) => {
+        const limpio = (v ?? "").replace(/[\s.]/g, "");
+        return limpio === "" ? undefined : limpio;
+      })
       .refine(
-        (v) => /^\d{5,15}$/.test(v),
+        (v) => v === undefined || /^\d{5,15}$/.test(v),
         "Escribe tu cédula (entre 5 y 15 dígitos)"
       ),
     // El tope real lo impone maxNumbersPerOrder de cada rifa; aquí solo

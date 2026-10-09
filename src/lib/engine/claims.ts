@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { codigoDeEstado, MAX_NUMEROS_CUADRICULA } from "@/lib/cuadricula";
 
 /**
  * Motor de disponibilidad y reservas.
@@ -104,6 +105,48 @@ export async function getNumberStatus(
   if (row.status === "PAID") return "VENDIDO";
   if (row.status === "BLOCKED") return "BLOQUEADO";
   return "RESERVADO";
+}
+
+/**
+ * Tablero completo de una rifa de CUADRÍCULA: un carácter por número con su
+ * estado (ver src/lib/cuadricula.ts). Consulta EN VIVO, sin caché: lo que el
+ * comprador ve en amarillo tiene que estar apartado de verdad.
+ *
+ * Una reserva vencida cuenta como libre aunque su fila siga en la base
+ * (isRowAlive): el barrido de expiración corre una vez al día y, sin esto,
+ * un número soltado a las 10 de la mañana seguiría amarillo hasta el día
+ * siguiente.
+ *
+ * Se niega por encima de 1.000 números: la rifa grande jamás publica su
+ * inventario entero, ni por error de quien llame a esta función.
+ */
+export async function getBoardState(
+  raffleId: string,
+  totalNumbers: number
+): Promise<string> {
+  if (totalNumbers > MAX_NUMEROS_CUADRICULA) {
+    throw new Error("El tablero solo existe para rifas de hasta 1.000 números");
+  }
+  const now = new Date();
+  const filas = await prisma.raffleNumber.findMany({
+    where: { raffleId },
+    select: { number: true, status: true, reservedUntil: true },
+  });
+  const casillas: string[] = new Array(totalNumbers).fill(
+    codigoDeEstado("libre")
+  );
+  for (const fila of filas) {
+    if (fila.number < 0 || fila.number >= totalNumbers) continue;
+    if (!isRowAlive(fila, now)) continue;
+    casillas[fila.number] = codigoDeEstado(
+      fila.status === "PAID"
+        ? "pagado"
+        : fila.status === "BLOCKED"
+          ? "bloqueado"
+          : "reservado"
+    );
+  }
+  return casillas.join("");
 }
 
 // Existía un `getNumbersStatus(raffleId, numbers[])` que resolvía el estado de

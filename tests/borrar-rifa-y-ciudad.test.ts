@@ -36,13 +36,16 @@ describe("ciudad o municipio", () => {
   });
 
   it("el resto de campos no cambia de obligatoriedad por añadir ciudad", () => {
-    // La cédula sigue obligatoria y el correo sigue opcional.
-    const sinCedula = { ...BASE, city: "Sincelejo" };
-    delete (sinCedula as Record<string, unknown>).idNumber;
-    expect(createOrderSchema.safeParse(sinCedula).success).toBe(false);
+    // El correo sigue opcional. La cédula ya no la exige el ESQUEMA (lo hace
+    // el motor según la rifa: ver tests/cedula-obligatoria.test.ts); aquí
+    // basta con que una cédula mal escrita siga rechazándose.
     expect(
       createOrderSchema.safeParse({ ...BASE, city: "Sincelejo", email: "" })
         .success
     ).toBe(true);
+    expect(
+      createOrderSchema.safeParse({ ...BASE, city: "Sincelejo", idNumber: "12" })
+        .success
+    ).toBe(false);
   });
 });

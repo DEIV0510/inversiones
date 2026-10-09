@@ -20,7 +20,8 @@ export type RifaConsultable = {
   totalNumbers: number;
 };
 
-type Dueno = { nombre: string; telefono: string };
+/** telefono = null cuando la persona reservó solo con su nombre. */
+type Dueno = { nombre: string; telefono: string | null };
 
 type Resultado = {
   raffle: { slug: string; title: string; drawDateText: string | null };
@@ -217,9 +218,13 @@ export default function WinnerLookup({ rifas }: Props) {
                 <p className="mt-1 break-words font-display text-xl font-black uppercase leading-tight text-fg sm:text-2xl">
                   {resultado.dueno.nombre}
                 </p>
-                <p className="mt-1 font-display text-base font-bold tabular-nums tracking-wider text-fg-soft">
-                  {resultado.dueno.telefono}
-                </p>
+                {/* Quien reservó solo con su nombre (rifas de cuadrícula)
+                    no tiene celular guardado: ahí no se pinta la línea. */}
+                {resultado.dueno.telefono ? (
+                  <p className="mt-1 font-display text-base font-bold tabular-nums tracking-wider text-fg-soft">
+                    {resultado.dueno.telefono}
+                  </p>
+                ) : null}
                 {resultado.premio ? (
                   <p className="mt-4 inline-flex max-w-full items-center gap-2 rounded-full bg-well px-3.5 py-2 text-sm font-bold text-brand-light">
                     <IconGift width={16} height={16} className="shrink-0" />

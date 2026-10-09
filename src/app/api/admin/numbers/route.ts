@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireAdminApi } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { MAX_NUMEROS_CUADRICULA } from "@/lib/cuadricula";
 import { isRowAlive } from "@/lib/engine/claims";
 import { formatNumber, parseNumberInput } from "@/lib/numbers";
 
@@ -23,6 +24,92 @@ export async function GET(req: NextRequest) {
   const raffle = await prisma.raffle.findUnique({ where: { id: raffleId } });
   if (!raffle) {
     return NextResponse.json({ error: "La rifa no existe" }, { status: 404 });
+  }
+
+  // Tablero completo para el panel (rifas de CUADRÍCULA). A diferencia del
+  // tablero público, este sí lleva a quién pertenece cada casilla: es la
+  // tabla del dueño, desde donde marca pagos y libera reservas. Solo existe
+  // para rifas de cuadrícula de 1.000 números o menos: la rifa grande sigue
+  // con su lista paginada y jamás se carga entera.
+  if (sp.get("grid") === "1") {
+    if (!raffle.boardMode || raffle.totalNumbers > MAX_NUMEROS_CUADRICULA) {
+      return NextResponse.json(
+        { error: "El tablero solo existe en las rifas de cuadrícula" },
+        { status: 422 }
+      );
+    }
+    const now = new Date();
+    const filas = await prisma.raffleNumber.findMany({
+      where: { raffleId },
+      select: {
+        number: true,
+        status: true,
+        reservedUntil: true,
+        orderId: true,
+      },
+    });
+    const vivas = filas.filter((f) => isRowAlive(f, now));
+    const idsPedidos = [
+      ...new Set(vivas.map((f) => f.orderId).filter((id): id is string => !!id)),
+    ];
+    const pedidos = idsPedidos.length
+      ? await prisma.order.findMany({
+          where: { id: { in: idsPedidos } },
+          select: {
+            id: true,
+            code: true,
+            status: true,
+            paymentMethod: true,
+            numbersJson: true,
+            quantity: true,
+            total: true,
+            reservedUntil: true,
+            createdAt: true,
+            paidAt: true,
+            participant: {
+              select: { name: true, phone: true, idNumber: true, city: true },
+            },
+          },
+        })
+      : [];
+    return NextResponse.json({
+      grid: {
+        total: raffle.totalNumbers,
+        digits: raffle.digits,
+        status: raffle.status,
+        casillas: vivas.map((f) => ({
+          value: f.number,
+          status: f.status,
+          orderId: f.orderId,
+        })),
+        pedidos: pedidos.map((p) => {
+          let valores: number[] = [];
+          try {
+            const crudo = JSON.parse(p.numbersJson);
+            if (Array.isArray(crudo)) {
+              valores = crudo.filter((v): v is number => Number.isInteger(v));
+            }
+          } catch {
+            // numbersJson dañado: se muestra el pedido sin la lista.
+          }
+          return {
+            id: p.id,
+            code: p.code,
+            status: p.status,
+            paymentMethod: p.paymentMethod,
+            numbers: valores
+              .sort((a, b) => a - b)
+              .map((v) => formatNumber(v, raffle.digits)),
+            quantity: p.quantity,
+            total: p.total,
+            reservedUntil: p.reservedUntil,
+            createdAt: p.createdAt,
+            paidAt: p.paidAt,
+            participant: p.participant,
+          };
+        }),
+      },
+    });
   }
 
   // Consulta puntual de un número (incluye disponibles).
@@ -48,6 +135,7 @@ export async function GET(req: NextRequest) {
         status: !row || !alive ? "AVAILABLE" : row.status,
         reservedUntil: alive ? row?.reservedUntil : null,
         orderCode: alive ? row?.order?.code ?? null : null,
+        orderId: alive ? row?.orderId ?? null : null,
         participant: alive ? row?.order?.participant ?? null : null,
       },
     });
@@ -93,6 +181,7 @@ export async function GET(req: NextRequest) {
       reservedUntil: row.reservedUntil,
       createdAt: row.createdAt,
       orderCode: row.order?.code ?? null,
+      orderId: row.orderId,
       orderStatus: row.order?.status ?? null,
       participant: row.order?.participant ?? null,
     })),
