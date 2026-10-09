@@ -1912,6 +1912,19 @@ export default function RaffleFormV2({
               ? ` Ahora: ${formatearPlazo(minutosReserva)} para que te paguen; si no, los números se liberan solos.`
               : ""}
           </p>
+          {/* Plazo corto en la cuadrícula: pasó de verdad. Con 5 minutos, 13
+              personas reservaron en un día y a todas se les venció antes de
+              que pudieran pagar por Nequi y mandar el comprobante. No se
+              bloquea (el dueño decide), pero se le dice lo que va a pasar. */}
+          {boardMode && minutosReserva > 0 && minutosReserva < 30 ? (
+            <p className="mt-2 rounded-xl border border-warn/40 bg-warn/10 px-3 py-2 text-xs leading-relaxed text-fg">
+              Con {minutosReserva} minutos casi nadie alcanza a pagar y
+              mandarte el comprobante antes de que la reserva se venza, y sus
+              números vuelven a quedar libres para otro. Te recomendamos 60
+              minutos o más. Si alguien te paga tarde, lo encuentras en
+              Números → «Reservas vencidas».
+            </p>
+          ) : null}
         </div>
       </div>
 

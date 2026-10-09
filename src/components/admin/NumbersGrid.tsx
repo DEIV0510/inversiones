@@ -76,12 +76,27 @@ type PedidoTablero = {
   };
 };
 
+/** Reserva que se venció sin que nadie marcara el pago (últimos 3 días). */
+type ReservaVencida = {
+  id: string;
+  code: string;
+  numbers: string[];
+  /** De esos números, los que ya tomó otra persona. */
+  ocupados: string[];
+  total: number;
+  createdAt: string;
+  reservedUntil: string | null;
+  participant: { name: string; phone: string | null };
+};
+
 type TableroApi = {
   total: number;
   digits: number;
   status: string;
   casillas: CasillaApi[];
   pedidos: PedidoTablero[];
+  /** Puede faltar si el panel habla con un servidor anterior. */
+  vencidas?: ReservaVencida[];
 };
 
 type Filtro = "todos" | EstadoCasilla;
@@ -285,6 +300,13 @@ export default function NumbersGrid({
   // Bloquear lo escogido.
   const [bloquearAbierto, setBloquearAbierto] = useState(false);
   const [errorBloqueo, setErrorBloqueo] = useState("");
+
+  // Reservas vencidas: cuál se está confirmando (pide un segundo toque) y el
+  // error de la última, si lo hubo.
+  const [vencidaPorPagar, setVencidaPorPagar] = useState<string | null>(null);
+  const [errorVencida, setErrorVencida] = useState<{ id: string; texto: string } | null>(
+    null
+  );
 
   const recargar = useCallback(() => setVersion((v) => v + 1), []);
 
@@ -531,6 +553,41 @@ export default function NumbersGrid({
       onCambio?.();
     } catch {
       setErrorAccion("Error de conexión. Intenta de nuevo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
+   * Marcar pagada una reserva que ya se había vencido. Es el mismo endpoint
+   * de "Marcar pagado": el motor admite pedidos vencidos y les devuelve sus
+   * números si siguen libres. Si alguno ya lo tomó otra persona, el motor
+   * rechaza el pedido entero; por eso el botón ni se ofrece en ese caso.
+   */
+  async function pagarVencida(v: ReservaVencida) {
+    setOcupado(true);
+    setErrorVencida(null);
+    try {
+      const res = await fetch(`/api/admin/orders/${v.id}/confirm`, {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorVencida({
+          id: v.id,
+          texto: data.error || "No fue posible marcar el pago",
+        });
+        recargar();
+        return;
+      }
+      setVencidaPorPagar(null);
+      setAviso(
+        `Pago de ${v.participant.name} confirmado: ${listaDeNumeros(v.numbers)} ya están en verde.`
+      );
+      recargar();
+      onCambio?.();
+    } catch {
+      setErrorVencida({ id: v.id, texto: "Error de conexión. Intenta de nuevo." });
     } finally {
       setOcupado(false);
     }
@@ -1268,6 +1325,127 @@ export default function NumbersGrid({
           Actualizar ahora
         </button>
       </div>
+
+      {/* Reservas vencidas. En el tablero ya salen blancas: esta lista es la
+          forma de encontrar a quien pagó DESPUÉS de que se le venció la
+          reserva (con plazos cortos es lo normal) y confirmarle el pago. */}
+      {(datos?.vencidas?.length ?? 0) > 0 ? (
+        <section
+          aria-labelledby={`${uid}-vencidas`}
+          className="rounded-2xl border border-line bg-well/60 p-4"
+        >
+          <h3
+            id={`${uid}-vencidas`}
+            className="font-display text-sm font-black uppercase tracking-[0.12em] text-fg"
+          >
+            Reservas vencidas · últimos 3 días
+          </h3>
+          <p className="mt-1 text-xs leading-relaxed text-fg-soft">
+            Se vencieron sin que marcaras el pago y sus números volvieron a
+            quedar libres. Si alguien te pagó tarde, búscalo aquí y márcalo
+            pagado: si sus números siguen libres, vuelven a ser suyos.
+          </p>
+          <ul className="mt-3 flex flex-col gap-2.5">
+            {(datos?.vencidas ?? []).map((v) => {
+              const confirmando = vencidaPorPagar === v.id;
+              const error = errorVencida?.id === v.id ? errorVencida.texto : "";
+              return (
+                <li
+                  key={v.id}
+                  className="rounded-xl border border-line bg-card p-3"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                    <p className="font-bold text-fg">{v.participant.name}</p>
+                    <p className="text-xs text-fg-faint">
+                      {haceCuanto(v.createdAt, ahora)} · {v.code} ·{" "}
+                      {formatCop(v.total)}
+                    </p>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {v.numbers.map((n) => {
+                      const tomado = v.ocupados.includes(n);
+                      return (
+                        <span
+                          key={n}
+                          className={`rounded-md px-2 py-1 font-display text-xs font-bold tabular-nums ${
+                            tomado
+                              ? "bg-well text-fg-faint line-through"
+                              : "bg-cell-free text-cell-ink ring-1 ring-cell-line"
+                          }`}
+                        >
+                          {n}
+                          {tomado ? <span className="sr-only"> (ya lo tomó otra persona)</span> : null}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  {v.ocupados.length > 0 ? (
+                    <p className="mt-2 text-xs leading-relaxed text-fg-soft">
+                      {v.ocupados.length === 1 ? "El " : "Los "}
+                      {listaDeNumeros(v.ocupados)}{" "}
+                      {v.ocupados.length === 1 ? "ya lo tomó" : "ya los tomó"} otra
+                      persona. Si te pagó, apártale a mano los números que
+                      siguen libres o escríbele para que escoja otros.
+                    </p>
+                  ) : canConfirm ? (
+                    <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                      {confirmando ? (
+                        <>
+                          <button
+                            type="button"
+                            disabled={ocupado}
+                            onClick={() => pagarVencida(v)}
+                            className={btnOk}
+                          >
+                            <IconCheck width={16} height={16} />
+                            Sí, pagó {formatCop(v.total)}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={ocupado}
+                            onClick={() => setVencidaPorPagar(null)}
+                            className={btnOutline}
+                          >
+                            Volver
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={ocupado}
+                          onClick={() => {
+                            setErrorVencida(null);
+                            setVencidaPorPagar(v.id);
+                          }}
+                          className={btnOk}
+                        >
+                          Marcar pagado
+                        </button>
+                      )}
+                      {v.participant.phone ? (
+                        <a
+                          href={`https://wa.me/${v.participant.phone}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex min-h-12 items-center gap-1.5 px-2 text-xs font-bold text-wa-ink"
+                        >
+                          <IconWhatsApp width={16} height={16} />
+                          Escribirle
+                        </a>
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {error ? (
+                    <p role="alert" className={`mt-2 ${alertCls}`}>
+                      {error}
+                    </p>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       {/* Hueco para que la barra flotante no tape la última fila. */}
       {hayBarra ? <div aria-hidden="true" className="h-32" /> : null}

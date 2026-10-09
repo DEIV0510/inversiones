@@ -73,6 +73,9 @@ const SENTENCIAS = [
   // aditivo (no toca ninguna fila) y se puede repetir sin efecto. El índice
   // único se queda: Postgres admite varios NULL en él.
   `ALTER TABLE "Participant" ALTER COLUMN "phone" DROP NOT NULL`,
+  // Rifas archivadas: "eliminadas" por el dueño pero con pagos que hay que
+  // conservar. Nace vacía: ninguna rifa existente cambia.
+  `ALTER TABLE "Raffle" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3)`,
 ];
 
 // Columnas que este script debe dejar existiendo en Raffle. Se comprueban al
@@ -96,6 +99,7 @@ const COLUMNAS_ESPERADAS = [
   "askIdNumber",
   "askEmail",
   "askCity",
+  "archivedAt",
 ];
 
 (async () => {

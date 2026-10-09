@@ -78,7 +78,10 @@ export async function GET() {
   const auth = await requireAdminApi("numbers.view");
   if (auth instanceof Response) return auth;
 
+  // Las archivadas ("eliminadas" con dinero de por medio) no salen en ningún
+  // selector del panel: para el dueño ya no existen.
   const raffles = await prisma.raffle.findMany({
+    where: { archivedAt: null },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });
   return NextResponse.json({ raffles });

@@ -91,6 +91,8 @@ export default function RaffleListV2({
   const router = useRouter();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // Confirmación de lo que acaba de pasar (por ejemplo, una rifa archivada).
+  const [aviso, setAviso] = useState("");
 
   async function duplicate(id: string) {
     setBusyId(id);
@@ -114,15 +116,24 @@ export default function RaffleListV2({
   }
 
   async function remove(raffle: AdminRaffleRow) {
+    // Antes decía "solo es posible si no tiene pedidos" y una rifa terminada,
+    // con ventas, no había forma de quitarla. Ahora siempre se puede: si tuvo
+    // dinero de por medio el servidor la archiva (desaparece igual, pero sus
+    // pagos se guardan) y se le dice al dueño con todas las letras.
+    const vendiendo = raffle.status === "ACTIVE" || raffle.status === "COMING_SOON";
     if (
       !window.confirm(
-        `¿Eliminar la rifa "${raffle.title}"? Solo es posible si no tiene pedidos.`
+        `¿Eliminar la rifa "${raffle.title}"?\n\n` +
+          "Desaparece del panel y de la página." +
+          (vendiendo ? " Deja de vender en este momento." : "") +
+          "\nSi tuvo pagos, esos pagos se guardan en Pagos y Reportes por si alguien reclama."
       )
     ) {
       return;
     }
     setBusyId(raffle.id);
     setError("");
+    setAviso("");
     try {
       const res = await fetch(`/api/admin/raffles/${raffle.id}`, {
         method: "DELETE",
@@ -132,6 +143,11 @@ export default function RaffleListV2({
         setError(data.error || "No fue posible eliminar");
         return;
       }
+      setAviso(
+        data.archivada
+          ? `Listo: "${raffle.title}" ya no aparece. Sus pagos quedan guardados en Pagos y Reportes.`
+          : `Listo: "${raffle.title}" se eliminó.`
+      );
       router.refresh();
     } catch {
       setError("Error de conexión");
@@ -156,6 +172,14 @@ export default function RaffleListV2({
           className="rounded-xl border border-brand/30 bg-brand/5 px-4 py-3 text-sm font-medium text-error"
         >
           {error}
+        </p>
+      ) : null}
+      {aviso ? (
+        <p
+          role="status"
+          className="rounded-xl border border-line-strong bg-well px-4 py-3 text-sm font-medium text-fg"
+        >
+          {aviso}
         </p>
       ) : null}
 

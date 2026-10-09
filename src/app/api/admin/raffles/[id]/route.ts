@@ -352,17 +352,44 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
       ],
     },
   });
+  // Con dinero de por medio la rifa se ARCHIVA en vez de borrarse.
+  //
+  // El dueño lo pidió así: "terminé una rifa, la elimino, que no haya
+  // problema; que en el panel solo queden las que yo quiero". Antes este
+  // caso respondía un 409 y la rifa terminada se quedaba para siempre en su
+  // lista. Ahora desaparece del panel y del sitio igual que una borrada, pero
+  // sus pedidos y pagos se conservan: son la única prueba de cobros reales
+  // (Bold, transferencias) si un comprador reclama, y siguen saliendo en
+  // Pagos y Reportes.
   if (pagados > 0) {
-    return NextResponse.json(
-      {
-        error:
-          `Esta rifa tiene ${pagados} ${pagados === 1 ? "pedido con dinero" : "pedidos con dinero"} ` +
-          "de por medio: no puede eliminarse porque son el respaldo de cobros " +
-          "reales. Revísalos en Pagos y usa el estado CANCELADA para que la " +
-          "rifa deje de mostrarse.",
+    // Una rifa que vende no puede seguir vendiendo escondida: si estaba
+    // activa o por abrir, se cancela al archivarla.
+    const seguiaVendiendo =
+      existing.status === "ACTIVE" || existing.status === "COMING_SOON";
+    await prisma.raffle.update({
+      where: { id },
+      data: {
+        archivedAt: new Date(),
+        ...(seguiaVendiendo ? { status: "CANCELLED" as const } : {}),
       },
-      { status: 409 }
-    );
+    });
+    await logAudit({
+      actorEmail: auth.email,
+      actorRole: auth.role,
+      action: "raffle.archive",
+      entity: "Raffle",
+      entityId: id,
+      detail: {
+        title: existing.title,
+        pedidosConDinero: pagados,
+        estadoAnterior: existing.status,
+        cancelada: seguiaVendiendo,
+      },
+    });
+    revalidatePath("/");
+    revalidatePath("/sorteo/[slug]", "page");
+    invalidarEtiquetas(TAG_RIFAS, tagRifa(existing.slug), tagRifaId(id));
+    return NextResponse.json({ ok: true, archivada: true, pedidosConDinero: pagados });
   }
 
   // Borrado en el orden que exigen las claves foráneas: Payment y Order no

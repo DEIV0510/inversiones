@@ -72,11 +72,71 @@ export async function GET(req: NextRequest) {
           },
         })
       : [];
+
+    // Reservas que se VENCIERON en los últimos 3 días sin que nadie marcara
+    // el pago. En el tablero ya salen blancas, así que sin esta lista el
+    // dueño no tenía cómo encontrar a quien pagó tarde: con reservas cortas
+    // (llegó a haber rifas con 5 minutos) casi todo el que paga por Nequi
+    // manda el comprobante cuando su reserva ya venció. Desde aquí se puede
+    // marcar pagado: el motor recupera los números si siguen libres.
+    const tomadas = new Map(vivas.map((f) => [f.number, f.orderId] as const));
+    const vencidasCrudas = await prisma.order.findMany({
+      where: {
+        raffleId,
+        createdAt: { gt: new Date(now.getTime() - 3 * 24 * 3600_000) },
+        OR: [
+          { status: "EXPIRED" },
+          { status: "PENDING", reservedUntil: { lt: now } },
+        ],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+      select: {
+        id: true,
+        code: true,
+        numbersJson: true,
+        total: true,
+        createdAt: true,
+        reservedUntil: true,
+        participant: { select: { name: true, phone: true } },
+      },
+    });
+    const vencidas = vencidasCrudas.map((p) => {
+      let valores: number[] = [];
+      try {
+        const crudo = JSON.parse(p.numbersJson);
+        if (Array.isArray(crudo)) {
+          valores = crudo.filter((v): v is number => Number.isInteger(v));
+        }
+      } catch {
+        // numbersJson dañado: se muestra sin la lista.
+      }
+      valores.sort((a, b) => a - b);
+      return {
+        id: p.id,
+        code: p.code,
+        numbers: valores.map((v) => formatNumber(v, raffle.digits)),
+        // Los que ya tomó OTRA persona: con alguno así, marcar pagado
+        // rechazaría el pedido entero, y el panel lo dice antes.
+        ocupados: valores
+          .filter((v) => {
+            const duenio = tomadas.get(v);
+            return duenio !== undefined && duenio !== p.id;
+          })
+          .map((v) => formatNumber(v, raffle.digits)),
+        total: p.total,
+        createdAt: p.createdAt,
+        reservedUntil: p.reservedUntil,
+        participant: p.participant,
+      };
+    });
+
     return NextResponse.json({
       grid: {
         total: raffle.totalNumbers,
         digits: raffle.digits,
         status: raffle.status,
+        vencidas,
         casillas: vivas.map((f) => ({
           value: f.number,
           status: f.status,

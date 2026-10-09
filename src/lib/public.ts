@@ -284,7 +284,9 @@ export function toPublicRaffle(raffle: Raffle): PublicRaffle {
 /** Lectura real del listado público (sin caché). */
 async function leerRifasPublicas(): Promise<PublicRaffle[]> {
   const raffles = await prisma.raffle.findMany({
-    where: { status: { in: [...PUBLIC_STATUSES] } },
+    // Una rifa archivada ("eliminada" con dinero de por medio) no se publica
+    // aunque haya quedado como finalizada o agotada.
+    where: { status: { in: [...PUBLIC_STATUSES] }, archivedAt: null },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });
   return raffles.map(toPublicRaffle);
@@ -306,6 +308,7 @@ async function leerRifaPublicaPorSlug(
 ): Promise<PublicRaffle | null> {
   const raffle = await prisma.raffle.findUnique({ where: { slug } });
   if (!raffle || !PUBLIC_STATUSES.includes(raffle.status as never)) return null;
+  if (raffle.archivedAt) return null;
   return toPublicRaffle(raffle);
 }
 
@@ -367,6 +370,7 @@ async function leerHayRifasConWhatsApp(): Promise<boolean> {
   const rifa = await prisma.raffle.findFirst({
     where: {
       status: { in: [...PUBLIC_STATUSES] },
+      archivedAt: null,
       whatsappCheckout: true,
     },
     select: { id: true },

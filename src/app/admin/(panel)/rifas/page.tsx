@@ -15,7 +15,10 @@ export default async function AdminRafflesPage() {
   const session = await requirePanelAuth("numbers.view");
   const now = new Date();
 
+  // Sin las archivadas: el dueño las "eliminó" y no quiere volver a verlas.
+  // Sus pagos siguen en Pagos y Reportes.
   const raffles = await prisma.raffle.findMany({
+    where: { archivedAt: null },
     orderBy: [{ displayOrder: "asc" }, { createdAt: "desc" }],
   });
 
@@ -44,7 +47,10 @@ export default async function AdminRafflesPage() {
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex items-center justify-between gap-3">
+      {/* flex-wrap: en el celular los dos botones no caben junto al título y
+          bajan a su propia fila. Con shrink-0 se salían por la derecha y el
+          de "Nueva" quedaba cortado. */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-extrabold uppercase text-fg">
             Sorteos
@@ -55,7 +61,7 @@ export default async function AdminRafflesPage() {
           // Dos puertas: la rifa de 2 o 3 cifras (cuadrícula) es la que el
           // dueño va a crear más seguido, así que tiene su propio botón y el
           // formulario abre ya con ese tipo elegido.
-          <div className="flex shrink-0 flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap gap-2">
             <Link
               href="/admin/rifas/nueva?tipo=cuadricula"
               className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-brand/60 px-4 text-sm font-bold uppercase tracking-wide text-fg transition-colors hover:bg-brand/10"

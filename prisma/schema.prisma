@@ -113,6 +113,13 @@ model Raffle {
   askEmail    Boolean @default(true)
   askCity     Boolean @default(true)
 
+  // Rifa ARCHIVADA: el dueño la "eliminó" desde el panel pero tenía dinero
+  // de por medio (pedidos pagados o pagos registrados). No se borra porque
+  // esos pagos son el respaldo de cobros reales que un comprador puede
+  // reclamar; desaparece del panel y del sitio, y sus pagos siguen en Pagos
+  // y Reportes. null = rifa normal.
+  archivedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
