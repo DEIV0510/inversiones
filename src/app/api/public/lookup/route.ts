@@ -299,39 +299,49 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: sinResultados }, { status: 404 });
   }
 
+  const resultado = orders.map((o) => {
+    const estado = isOrderExpired(o) ? "EXPIRED" : o.status;
+    // Los números solo salen de aquí con el pago confirmado. En un pedido
+    // pendiente se manda la cantidad (para pintar las fichas tapadas) pero
+    // NINGÚN número: si no, bastaba con mirar la respuesta de esta consulta
+    // para verlos sin haber pagado.
+    //
+    // Excepción: la reserva VIVA de una rifa de cuadrícula. Ahí el comprador
+    // escogió sus números sobre el tablero público y la pantalla del pedido
+    // ya se los enseña; ocultarlos aquí solo lo confundiría. Una reserva
+    // vencida o liberada no los enseña: esos números ya no son suyos.
+    const muestraNumeros =
+      estado === "PAID" || (o.raffle.boardMode && estado === "PENDING");
+    return {
+      code: o.code,
+      name: o.participant.name,
+      raffleTitle: o.raffle.title,
+      drawDateText: o.raffle.drawDateText,
+      numbers: muestraNumeros
+        ? formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits)
+        : [],
+      quantity: o.quantity,
+      total: o.total,
+      status: estado,
+      createdAt: o.createdAt,
+      paidAt: o.paidAt,
+    };
+  });
+
+  // Lo vigente primero (pagado o reservado), después lo que está en revisión
+  // y al final lo vencido o anulado; dentro de cada grupo, del más nuevo al
+  // más viejo (sort es estable). Con reservas cortas un nombre puede arrastrar
+  // muchas vencidas, y la reserva viva quedaba enterrada al fondo.
+  const peso = (s: string) =>
+    s === "PAID" || s === "PENDING" ? 0 : s === "REJECTED" ? 1 : 2;
+  resultado.sort((a, b) => peso(a.status) - peso(b.status));
+
   return NextResponse.json({
-    // Solo el nombre, como antes. El saludo usa el del pedido más reciente.
-    participant: { name: orders[0].participant.name },
+    // Solo el nombre, como antes. El saludo usa el del primer pedido.
+    participant: { name: resultado[0].name },
     // Por nombre pueden salir varias personas ("Juan Pérez" y "Juan
     // Gómez" buscando "Juan"): por eso cada pedido lleva también a nombre de
     // quién está, y el formulario decide si saluda a uno o los rotula.
-    orders: orders.map((o) => {
-      const estado = isOrderExpired(o) ? "EXPIRED" : o.status;
-      // Los números solo salen de aquí con el pago confirmado. En un pedido
-      // pendiente se manda la cantidad (para pintar las fichas tapadas) pero
-      // NINGÚN número: si no, bastaba con mirar la respuesta de esta consulta
-      // para verlos sin haber pagado.
-      //
-      // Excepción: la reserva VIVA de una rifa de cuadrícula. Ahí el comprador
-      // escogió sus números sobre el tablero público y la pantalla del pedido
-      // ya se los enseña; ocultarlos aquí solo lo confundiría. Una reserva
-      // vencida o liberada no los enseña: esos números ya no son suyos.
-      const muestraNumeros =
-        estado === "PAID" || (o.raffle.boardMode && estado === "PENDING");
-      return {
-        code: o.code,
-        name: o.participant.name,
-        raffleTitle: o.raffle.title,
-        drawDateText: o.raffle.drawDateText,
-        numbers: muestraNumeros
-          ? formatNumbers(JSON.parse(o.numbersJson), o.raffle.digits)
-          : [],
-        quantity: o.quantity,
-        total: o.total,
-        status: estado,
-        createdAt: o.createdAt,
-        paidAt: o.paidAt,
-      };
-    }),
+    orders: resultado,
   });
 }

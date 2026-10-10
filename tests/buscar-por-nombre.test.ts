@@ -210,6 +210,23 @@ describe("Mis boletas por nombre", () => {
     expect(r.data.orders).toHaveLength(4);
   });
 
+  it("lo vigente sale primero y lo vencido al final, sin números", async () => {
+    base.pedidos.push({
+      id: "o8", code: "AAAA0008", participantId: "p1", raffleId: "r1", status: "PENDING",
+      numbersJson: "[60]", quantity: 1, total: 1500,
+      // Reserva vencida (más nueva que todas): igual va al final.
+      reservedUntil: new Date(Date.now() - 60_000),
+      createdAt: new Date(Date.UTC(2026, 9, 10, 13, 0)), paidAt: null,
+    });
+    const r = await buscar("Juan Pérez");
+    const ultimo = r.data.orders[r.data.orders.length - 1];
+    expect(ultimo.code).toBe("AAAA0008");
+    expect(ultimo.status).toBe("EXPIRED");
+    expect(ultimo.numbers).toEqual([]);
+    expect(r.data.orders[0].status).not.toBe("EXPIRED");
+    base.pedidos.pop();
+  });
+
   it("un nombre que no está responde con su propio aviso", async () => {
     const r = await buscar("Pedro Ramírez");
     expect(r.status).toBe(404);

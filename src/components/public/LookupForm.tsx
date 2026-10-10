@@ -279,6 +279,15 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
                         </p>
                       ) : null}
                     </div>
+                  ) : o.status === "EXPIRED" || o.status === "CANCELLED" ? (
+                    /* Vencida o anulada: esos números ya no son de nadie. Las
+                       fichas tapadas con "los verás al confirmarse el pago"
+                       prometían algo que ya no va a pasar. */
+                    <p className="mt-2 text-xs leading-relaxed text-fg-faint">
+                      {o.status === "EXPIRED"
+                        ? "Venció sin pago confirmado: esos números quedaron libres."
+                        : "Fue anulada: esos números quedaron libres."}
+                    </p>
                   ) : (
                     /* Sin pago confirmado los números van tapados: aquí ni
                        siquiera llegan desde el servidor. Se muestran fichas del
