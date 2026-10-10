@@ -376,18 +376,19 @@ export const createOrderSchema = z
 
 /**
  * "Mis boletas" con UN SOLO dato: el comprador escribe lo que tenga a mano
- * (celular, correo, cédula o código de compra) y el servidor deduce qué es.
- * Aquí solo se comprueba el largo; interpretar el texto es tarea del endpoint,
- * que además responde igual cuando no encuentra nada.
+ * (celular, correo, cédula, código de compra o, en las rifas de 2 y 3 cifras,
+ * su nombre) y el servidor deduce qué es. Aquí solo se comprueba el largo;
+ * interpretar el texto es tarea del endpoint, que además responde igual
+ * cuando no encuentra nada.
  *
- * El mínimo de 5 es el dato más corto que puede existir (una cédula de 5
- * dígitos); el máximo de 120 cubre el correo más largo que aceptamos.
+ * El mínimo de 3 es el dato más corto que puede existir (un nombre como
+ * "Ana"); el máximo de 120 cubre el correo más largo que aceptamos.
  */
 export const lookupSchema = z.object({
   query: z
     .string()
     .trim()
-    .min(5, "Escribe al menos 5 caracteres")
+    .min(3, "Escribe al menos 3 letras o números")
     .max(120, "El dato es demasiado largo"),
 });
 

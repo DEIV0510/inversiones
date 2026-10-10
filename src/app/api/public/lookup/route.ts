@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { isOrderExpired } from "@/lib/engine/orders";
 import { formatNumbers } from "@/lib/numbers";
+import { coincideNombre, pareceNombre } from "@/lib/nombres";
 import { clientIp, isRateLimited, peekRateLimited } from "@/lib/rate-limit";
 import { lookupSchema } from "@/lib/validation";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
@@ -20,14 +21,31 @@ export const runtime = "nodejs";
  *     cuenta las búsquedas de verdad (ver RAFAGA/GOTEO más abajo);
  *   - la respuesta de "no hay nada" es SIEMPRE idéntica, así que nunca revela
  *     si el dato existe, si estaba mal escrito o si simplemente no se pudo
- *     interpretar;
+ *     interpretar (un nombre lleva su propio texto, ver
+ *     MSG_SIN_RESULTADOS_NOMBRE, que tampoco revela nada);
  *   - se devuelve lo mismo de antes (nombre y pedidos) y nunca el teléfono,
  *     el correo ni la cédula del comprador.
+ *
+ * EL NOMBRE también sirve, pero SOLO para las rifas de 2 y 3 cifras: ahí se
+ * puede reservar sin celular y el nombre es lo único que tiene el comprador.
+ * Esos números ya se ven en el tablero público (de colores, sin nombres), así
+ * que lo único nuevo que enseña es a nombre de quién están. La rifa grande no
+ * sale nunca por nombre: sus números siguen ocultos hasta el pago y ahí se
+ * busca con celular, cédula, correo o código.
  */
 
 /** Un solo mensaje para todos los casos sin resultado: no filtra nada. */
 const MSG_SIN_RESULTADOS =
   "No encontramos boletas con ese dato. Revisa que esté bien escrito e inténtalo de nuevo.";
+
+/**
+ * Lo mismo cuando lo escrito es un nombre. Tampoco revela nada (que el texto
+ * es un nombre se ve a simple vista), pero le explica al comprador de la rifa
+ * grande por qué su nombre no basta allí.
+ */
+const MSG_SIN_RESULTADOS_NOMBRE =
+  "No encontramos reservas con ese nombre. Escríbelo como lo pusiste al reservar. " +
+  "El nombre sirve en las rifas de 2 y 3 cifras; en las demás busca con tu celular, tu cédula o tu código.";
 
 const MSG_DEMASIADOS = "Demasiados intentos. Espera unos minutos.";
 
@@ -65,15 +83,24 @@ type Vias = {
   email: string | null;
   phone: string | null;
   idNumber: string | null;
+  /** El texto tal cual: se compara con coincideNombre (src/lib/nombres.ts). */
+  nombre: string | null;
 };
 
 /**
  * Deduce qué escribió el comprador. Cuando el dato es ambiguo (por ejemplo
- * 8 dígitos, que tanto puede ser un código como una cédula corta) se activan
- * las dos vías y después los resultados se unen sin repetir.
+ * 8 dígitos, que tanto puede ser un código como una cédula corta, u 8 letras,
+ * que tanto puede ser un código como "Leonardo") se activan las dos vías y
+ * después los resultados se unen sin repetir.
  */
 function interpretar(texto: string): Vias {
-  const vias: Vias = { code: null, email: null, phone: null, idNumber: null };
+  const vias: Vias = {
+    code: null,
+    email: null,
+    phone: null,
+    idNumber: null,
+    nombre: null,
+  };
 
   // Con arroba solo puede ser un correo. Se quitan los espacios que suelen
   // colarse al pegarlo ("juan @gmail.com") y se compara sin distinguir
@@ -83,6 +110,9 @@ function interpretar(texto: string): Vias {
     if (/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(correo)) vias.email = correo;
     return vias;
   }
+
+  // Letras sin cifras: un nombre (solo para las rifas de cuadrícula).
+  if (pareceNombre(texto)) vias.nombre = texto;
 
   // Sin arroba: se quitan los separadores con que la gente escribe teléfonos
   // y cédulas ("300 123 4567", "12.345.678", "+57 300 123 4567") y se mira la
@@ -149,7 +179,13 @@ export async function POST(req: NextRequest) {
   // Si no se pudo interpretar nada, la respuesta es la MISMA que la de "no
   // existe": el atacante no aprende qué formas de dato reconocemos. Tampoco
   // gasta cupo, porque no se consulta la base de datos.
-  if (!vias.code && !vias.email && !vias.phone && !vias.idNumber) {
+  if (
+    !vias.code &&
+    !vias.email &&
+    !vias.phone &&
+    !vias.idNumber &&
+    !vias.nombre
+  ) {
     if (marcarRuido()) {
       return NextResponse.json({ error: MSG_DEMASIADOS }, { status: 429 });
     }
@@ -167,7 +203,7 @@ export async function POST(req: NextRequest) {
 
   // Cada vía activa solo devuelve identificadores internos, nunca datos
   // personales. El tope de 20 evita que un correo repetido dispare la consulta.
-  const [porCodigo, porTelefono, porCorreo, porCedula] = await Promise.all([
+  const [porCodigo, porTelefono, porCorreo, porCedula, candidatosNombre] = await Promise.all([
     vias.code
       ? prisma.order.findUnique({
           where: { code: vias.code },
@@ -194,6 +230,20 @@ export async function POST(req: NextRequest) {
           take: 20,
         })
       : [],
+    // Por nombre: quienes tienen algún pedido en una rifa de cuadrícula que
+    // el dueño no haya eliminado. La comparación (sin tildes, palabra por
+    // palabra) se hace aquí y no en la base, que no sabe quitar tildes. Son
+    // pocos: una cuadrícula tiene como mucho 1.000 números.
+    vias.nombre
+      ? prisma.participant.findMany({
+          where: {
+            orders: { some: { raffle: { boardMode: true, archivedAt: null } } },
+          },
+          select: { id: true, name: true },
+          orderBy: { createdAt: "desc" },
+          take: 5000,
+        })
+      : [],
   ]);
 
   // Unión sin repetidos: un mismo comprador puede aparecer por varias vías.
@@ -203,14 +253,37 @@ export async function POST(req: NextRequest) {
   for (const p of porCorreo) participantIds.add(p.id);
   for (const p of porCedula) participantIds.add(p.id);
 
-  if (participantIds.size === 0) {
-    return NextResponse.json({ error: MSG_SIN_RESULTADOS }, { status: 404 });
+  const nombre = vias.nombre;
+  const idsPorNombre = nombre
+    ? candidatosNombre.filter((p) => coincideNombre(nombre, p.name)).map((p) => p.id)
+    : [];
+
+  const sinResultados = nombre ? MSG_SIN_RESULTADOS_NOMBRE : MSG_SIN_RESULTADOS;
+
+  if (participantIds.size === 0 && idsPorNombre.length === 0) {
+    return NextResponse.json({ error: sinResultados }, { status: 404 });
   }
 
   // Todos sus pedidos, del más nuevo al más viejo. El tope de 50 es solo para
-  // no devolver una página infinita a quien compra muchísimo.
+  // no devolver una página infinita a quien compra muchísimo. Lo hallado por
+  // nombre trae SOLO pedidos de rifas de cuadrícula: si esa persona también
+  // compró en la rifa grande (con su celular), eso no sale por nombre.
   const orders = await prisma.order.findMany({
-    where: { participantId: { in: [...participantIds] } },
+    where: {
+      OR: [
+        ...(participantIds.size > 0
+          ? [{ participantId: { in: [...participantIds] } }]
+          : []),
+        ...(idsPorNombre.length > 0
+          ? [
+              {
+                participantId: { in: idsPorNombre },
+                raffle: { boardMode: true, archivedAt: null },
+              },
+            ]
+          : []),
+      ],
+    },
     include: {
       raffle: {
         select: { title: true, digits: true, drawDateText: true, boardMode: true },
@@ -223,12 +296,15 @@ export async function POST(req: NextRequest) {
 
   // Participante sin pedidos: se responde igual que si no existiera.
   if (orders.length === 0) {
-    return NextResponse.json({ error: MSG_SIN_RESULTADOS }, { status: 404 });
+    return NextResponse.json({ error: sinResultados }, { status: 404 });
   }
 
   return NextResponse.json({
     // Solo el nombre, como antes. El saludo usa el del pedido más reciente.
     participant: { name: orders[0].participant.name },
+    // Por nombre pueden salir varias personas ("Juan Pérez" y "Juan
+    // Gómez" buscando "Juan"): por eso cada pedido lleva también a nombre de
+    // quién está, y el formulario decide si saluda a uno o los rotula.
     orders: orders.map((o) => {
       const estado = isOrderExpired(o) ? "EXPIRED" : o.status;
       // Los números solo salen de aquí con el pago confirmado. En un pedido
@@ -244,6 +320,7 @@ export async function POST(req: NextRequest) {
         estado === "PAID" || (o.raffle.boardMode && estado === "PENDING");
       return {
         code: o.code,
+        name: o.participant.name,
         raffleTitle: o.raffle.title,
         drawDateText: o.raffle.drawDateText,
         numbers: muestraNumeros

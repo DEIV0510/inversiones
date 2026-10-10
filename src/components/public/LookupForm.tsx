@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { formatCop } from "@/lib/format";
+import { mismoNombre } from "@/lib/nombres";
 import { waLink } from "@/lib/whatsapp";
 import { IconCandado, IconTicket, IconWhatsApp } from "@/components/icons";
 
@@ -14,6 +15,8 @@ const inputCls =
 
 type LookupOrder = {
   code: string;
+  /** A nombre de quién está: buscando por nombre pueden salir varias personas. */
+  name: string;
   raffleTitle: string;
   drawDateText: string | null;
   numbers: string[];
@@ -63,8 +66,9 @@ type Props = {
 
 export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
   // Un solo campo: el comprador escribe lo que tenga a mano (celular, correo,
-  // cédula o código) y el servidor deduce qué es. "Código", sin "de compra":
-  // en las rifas de 2 y 3 cifras la gente reserva, no compra.
+  // cédula, código o, en las rifas de 2 y 3 cifras, su nombre) y el servidor
+  // deduce qué es. "Código", sin "de compra": en las rifas de 2 y 3 cifras la
+  // gente reserva, no compra.
   const [dato, setDato] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -76,6 +80,14 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
   // Solo se ofrece WhatsApp si la pantalla lo permite y hay número válido.
   const numeroWa = (whatsappNumber ?? "").trim();
   const puedeWhatsApp = !hideWhatsApp && numeroWa !== "";
+
+  // Buscando por nombre pueden salir dos personas distintas ("Juan Pérez" y
+  // "Juan Gómez" con "Juan"). Entonces no se saluda a nadie: cada tarjeta dice
+  // a nombre de quién está. El mismo nombre escrito distinto ("JUAN PÉREZ" y
+  // "juan perez") cuenta como una sola persona.
+  const variasPersonas =
+    result !== null &&
+    result.orders.some((o) => !mismoNombre(o.name, result.orders[0].name));
 
   const resultadosRef = useRef<HTMLDivElement | null>(null);
 
@@ -134,18 +146,19 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
             htmlFor="lk-dato"
             className="mb-1.5 block text-[11px] font-bold uppercase tracking-[0.14em] text-fg-faint"
           >
-            Tu celular, tu correo, tu cédula o tu código
+            Tu nombre, celular, cédula, correo o código
           </label>
           <input
             id="lk-dato"
             type="text"
-            /* Texto libre: puede llegar un correo, una cédula o un código, así
-               que ni teclado numérico ni autocorrección ni mayúscula inicial. */
+            /* Texto libre: puede llegar un nombre, un correo, una cédula o un
+               código, así que ni teclado numérico ni autocorrección ni
+               mayúscula inicial. */
             required
             value={dato}
             onChange={(e) => setDato(e.target.value)}
             className={inputCls}
-            placeholder="Ej: 3001234567"
+            placeholder="Ej: Juan Pérez o 3001234567"
             maxLength={120}
             autoComplete="off"
             autoCapitalize="off"
@@ -162,7 +175,9 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
             <span className="break-all text-fg-soft">correo@ejemplo.com</span>,{" "}
             <span className="text-fg-soft">1098765432</span> (cédula) o{" "}
             <span className="text-fg-soft">ABC12345</span> (código de
-            participación o de reserva).
+            participación o de reserva). En las rifas de 2 y 3 cifras también
+            sirve tu nombre, como lo escribiste al reservar:{" "}
+            <span className="text-fg-soft">Juan Pérez</span>.
           </p>
         </div>
         {error ? (
@@ -191,12 +206,21 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
       >
         {result ? (
           <div className="flex flex-col gap-3">
-            <TituloSeccion>Tus participaciones</TituloSeccion>
-            <p className="text-sm text-fg-soft">
-              Hola{" "}
-              <strong className="text-fg">{result.participant.name}</strong>,
-              toca una participación para ver el detalle.
-            </p>
+            <TituloSeccion>
+              {variasPersonas ? "Participaciones encontradas" : "Tus participaciones"}
+            </TituloSeccion>
+            {variasPersonas ? (
+              <p className="text-sm text-fg-soft">
+                Hay varias personas con ese nombre: busca la tuya y tócala para
+                ver el detalle.
+              </p>
+            ) : (
+              <p className="text-sm text-fg-soft">
+                Hola{" "}
+                <strong className="text-fg">{result.participant.name}</strong>,
+                toca una participación para ver el detalle.
+              </p>
+            )}
             {result.orders.map((o) => {
               const meta = STATUS_LABELS[o.status] ?? STATUS_LABELS.PENDING;
               return (
@@ -215,6 +239,12 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
                       {meta.text}
                     </span>
                   </div>
+                  {variasPersonas ? (
+                    <p className="mt-1 text-xs text-fg-soft">
+                      A nombre de{" "}
+                      <strong className="font-semibold text-fg">{o.name}</strong>
+                    </p>
+                  ) : null}
                   {/* Los números llegan del servidor solo cuando se pueden
                       ver: pagados, o la reserva viva de una rifa de
                       cuadrícula (ahí los escogió él sobre el tablero). Por
@@ -243,8 +273,9 @@ export default function LookupForm({ whatsappNumber, hideWhatsApp }: Props) {
                       </div>
                       {o.status !== "PAID" ? (
                         <p className="mt-1.5 text-xs leading-relaxed text-fg-faint">
-                          Reservados a tu nombre. Quedan tuyos cuando se
-                          confirme el pago.
+                          {variasPersonas
+                            ? "Reservados. Quedan en firme cuando se confirme el pago."
+                            : "Reservados a tu nombre. Quedan tuyos cuando se confirme el pago."}
                         </p>
                       ) : null}
                     </div>

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { PrizedGroup, PublicRaffle } from "@/lib/public";
 import { formatCop, formatearPlazo } from "@/lib/format";
@@ -944,6 +945,19 @@ export default function BoardPicker({
             : `Máximo ${raffle.maxNumbersPerOrder} números por reserva.`}
         </p>
       ) : null}
+
+      {/* Quien ya reservó vuelve a ver sus números en «Mis boletas» con el
+          mismo nombre: aquí se reserva sin celular, así que el nombre es el
+          dato que tiene a mano. */}
+      <p className="text-center text-sm text-fg-soft">
+        ¿Ya reservaste?{" "}
+        <Link
+          href="/boletas"
+          className="font-semibold text-brand underline underline-offset-2 hover:text-brand-dark"
+        >
+          Mira tus números con tu nombre
+        </Link>
+      </p>
 
       {/* Pie fijo: el aviso breve y la barra de RESERVAR. Se apoya encima de
           la navegación inferior y del aviso de demostración, igual que la

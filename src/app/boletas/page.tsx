@@ -11,7 +11,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Mis boletas",
   description:
-    "Consulta tus boletas con tu celular, tu correo, tu cédula o tu código de participación o de reserva.",
+    "Consulta tus boletas con tu nombre, tu celular, tu correo, tu cédula o tu código de participación o de reserva.",
 };
 
 export default async function BoletasPage() {
@@ -54,8 +54,8 @@ export default async function BoletasPage() {
               Mis boletas
             </h1>
             <p className="mx-auto mt-2.5 max-w-md text-sm leading-relaxed text-fg-soft">
-              Con un solo dato basta: escribe tu celular, tu correo, tu cédula o
-              tu código y te mostramos todas tus boletas.
+              Con un solo dato basta: escribe tu nombre, tu celular, tu cédula,
+              tu correo o tu código y te mostramos tus boletas.
             </p>
           </div>
           <LookupForm
