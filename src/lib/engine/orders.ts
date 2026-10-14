@@ -1,6 +1,6 @@
 import { randomInt } from "node:crypto";
 import { after } from "next/server";
-import type { Order, Raffle } from "@prisma/client";
+import type { Order, Prisma, Raffle } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { normalizeWhatsApp } from "@/lib/whatsapp";
 import { formatNumbers, validateSelection } from "@/lib/numbers";
@@ -754,18 +754,7 @@ export async function createManualOrder(input: {
     throw new OrderError("Este sorteo ya no está en venta");
   }
 
-  const name = input.name.trim();
-  if (name.length < 2) throw new OrderError("Escribe el nombre de la persona");
-
-  // El celular es opcional aquí (el dueño ya habla con la persona). Si lo
-  // escribe, tiene que ser válido: un número mal tecleado guardaría a la
-  // persona con el WhatsApp de otra.
-  let phone: string | null = null;
-  const crudo = (input.phone ?? "").trim();
-  if (crudo) {
-    phone = normalizeWhatsApp(crudo);
-    if (!phone) throw new OrderError("El número de celular no es válido");
-  }
+  const { name, phone } = personaManual(input.name, input.phone);
 
   const numbers = [...new Set(input.numbers)].sort((a, b) => a - b);
   // Sin tope por pedido: el dueño puede apartarle 30 números a una misma
@@ -777,41 +766,11 @@ export async function createManualOrder(input: {
   );
   if (validation) throw new OrderError(validation);
 
-  const reservedUntil = new Date(
-    Date.now() + raffle.reservationMinutes * 60_000
-  );
-  const { total } = calcularTotalPedido({
-    cantidad: numbers.length,
-    pricePerNumber: raffle.pricePerNumber,
-    ticketPacksJson: raffle.ticketPacksJson,
-  });
-
   let order: Order;
   try {
-    order = await prisma.$transaction(async (tx) => {
-      const participant = phone
-        ? await tx.participant.upsert({
-            where: { phone },
-            update: { name },
-            create: { phone, name },
-          })
-        : await tx.participant.create({ data: { phone: null, name } });
-      const created = await tx.order.create({
-        data: {
-          code: generateOrderCode(),
-          raffleId: raffle.id,
-          participantId: participant.id,
-          numbersJson: JSON.stringify(numbers),
-          quantity: numbers.length,
-          unitPrice: raffle.pricePerNumber,
-          total,
-          status: "PENDING",
-          reservedUntil,
-        },
-      });
-      await claimNumbers(tx, raffle.id, numbers, created.id, reservedUntil);
-      return created;
-    });
+    order = await prisma.$transaction((tx) =>
+      crearPedidoManualEnTx(tx, raffle, numbers, name, phone)
+    );
   } catch (err) {
     if (err instanceof ClaimConflictError) {
       throw new OrderError(
@@ -824,15 +783,295 @@ export async function createManualOrder(input: {
   }
 
   if (!input.markPaid) return { order, numbers, confirmado: false };
+  return { ...(await confirmarManual(order)), numbers };
+}
 
-  // Segundo paso, ya con los números en su poder: la confirmación es el mismo
-  // camino idempotente que usa el botón "Confirmar pago" (contador, agotado,
-  // números premiados, correo). Si fallara, el pedido queda apartado y el
-  // dueño lo ve en amarillo: nada se pierde.
+/**
+ * Nombre y celular de una persona que el dueño escribe a mano. El celular es
+ * opcional (el dueño ya habla con ella), pero si lo escribe tiene que ser
+ * válido: un número mal tecleado guardaría a la persona con el WhatsApp de
+ * otra.
+ */
+function personaManual(
+  nombre: string,
+  celular?: string
+): { name: string; phone: string | null } {
+  const name = nombre.trim();
+  if (name.length < 2) throw new OrderError("Escribe el nombre de la persona");
+  let phone: string | null = null;
+  const crudo = (celular ?? "").trim();
+  if (crudo) {
+    phone = normalizeWhatsApp(crudo);
+    if (!phone) throw new OrderError("El número de celular no es válido");
+  }
+  return { name, phone };
+}
+
+/**
+ * Crea, dentro de una transacción, un pedido apartado (amarillo) a nombre de
+ * alguien, con el mismo plazo que una reserva de la página. Los números los
+ * reclama claimNumbers: si alguno ya está tomado lanza ClaimConflictError y la
+ * transacción entera se deshace.
+ */
+async function crearPedidoManualEnTx(
+  tx: Prisma.TransactionClient,
+  raffle: Raffle,
+  numbers: number[],
+  name: string,
+  phone: string | null
+): Promise<Order> {
+  const reservedUntil = new Date(
+    Date.now() + raffle.reservationMinutes * 60_000
+  );
+  const { total } = calcularTotalPedido({
+    cantidad: numbers.length,
+    pricePerNumber: raffle.pricePerNumber,
+    ticketPacksJson: raffle.ticketPacksJson,
+  });
+  const participant = phone
+    ? await tx.participant.upsert({
+        where: { phone },
+        update: { name },
+        create: { phone, name },
+      })
+    : await tx.participant.create({ data: { phone: null, name } });
+  const created = await tx.order.create({
+    data: {
+      code: generateOrderCode(),
+      raffleId: raffle.id,
+      participantId: participant.id,
+      numbersJson: JSON.stringify(numbers),
+      quantity: numbers.length,
+      unitPrice: raffle.pricePerNumber,
+      total,
+      status: "PENDING",
+      reservedUntil,
+    },
+  });
+  await claimNumbers(tx, raffle.id, numbers, created.id, reservedUntil);
+  return created;
+}
+
+/**
+ * Segundo paso de un pedido hecho a mano que ya está pagado, con los números
+ * ya en su poder: la confirmación es el mismo camino idempotente que usa el
+ * botón "Confirmar pago" (contador, agotado, números premiados, correo). Si
+ * fallara, el pedido queda apartado y el dueño lo ve en amarillo: nada se
+ * pierde.
+ */
+async function confirmarManual(
+  order: Order
+): Promise<{ order: Order; confirmado: boolean }> {
   const res = await confirmOrderPayment({
     orderId: order.id,
     provider: "manual",
   });
-  if (!res.ok) return { order, numbers, confirmado: false };
-  return { order: res.order, numbers, confirmado: true };
+  if (!res.ok) return { order, confirmado: false };
+  return { order: res.order, confirmado: true };
+}
+
+/**
+ * QUITAR NÚMEROS SUELTOS de un pedido, dentro de una transacción. Es lo que
+ * pidió el dueño (2026-10-14): "alguien coge 10 números y dice déjame 8", y
+ * antes solo podía liberar el pedido entero y volver a apartarle los 8.
+ *
+ *   · Solo en rifas de cuadrícula, y solo con el pedido VIVO: una reserva
+ *     vigente o un pedido pagado. Uno vencido ya no tiene números que soltar.
+ *   · Un pedido pagado EN LÍNEA no se toca: esa plata está en la pasarela y
+ *     soltarle números no devolvería nada (misma regla que "Anular venta").
+ *   · El resto del pedido se recalcula con calcularTotalPedido y el precio
+ *     de lista con que se hizo (unitPrice), así que un cambio de precio en la
+ *     rifa no le cambia la cuenta a quien ya reservó. Si estaba pagado a
+ *     mano, la constancia del pago baja al total nuevo: es la anotación del
+ *     dueño, y los reportes suman lo pagado por pedido.
+ *   · Si se suelta el ÚLTIMO número, el pedido queda anulado, igual que con
+ *     cancelOrder (con su lista de números intacta, como historial).
+ *
+ * Bloquea la fila del pedido como confirmar y cancelar: ninguna de las tres
+ * se puede pisar con otra sobre el mismo pedido.
+ */
+async function soltarNumerosEnTx(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+  numeros: number[]
+): Promise<{
+  order: Order;
+  raffle: Raffle;
+  sueltos: number[];
+  quedan: number[];
+  eraPagado: boolean;
+}> {
+  await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+
+  const order = await tx.order.findUnique({
+    where: { id: orderId },
+    include: {
+      raffle: true,
+      payments: { select: { provider: true, status: true } },
+    },
+  });
+  if (!order) throw new OrderError("Pedido no encontrado", 404);
+  if (!order.raffle.boardMode) {
+    throw new OrderError(
+      "Los números sueltos solo se cambian en las rifas de cuadrícula"
+    );
+  }
+  if (order.status === "PENDING" && isOrderExpired(order)) {
+    throw new OrderError(
+      "Esta reserva ya se venció: sus números ya están libres.",
+      409
+    );
+  }
+  if (order.status !== "PENDING" && order.status !== "PAID") {
+    throw new OrderError("Este pedido ya no tiene números a su nombre.", 409);
+  }
+  const pagoEnLinea = order.payments.some(
+    (p) => p.status === "APPROVED" && p.provider !== "manual"
+  );
+  if (order.status === "PAID" && pagoEnLinea) {
+    throw new OrderError(
+      "Este pedido se pagó en línea: sus números no se cambian desde el tablero.",
+      409
+    );
+  }
+
+  const actuales: number[] = JSON.parse(order.numbersJson);
+  const sueltos = [...new Set(numeros)].sort((a, b) => a - b);
+  if (sueltos.length === 0 || sueltos.some((n) => !actuales.includes(n))) {
+    throw new OrderError(
+      "Ese número ya no es de este pedido. Actualiza el tablero.",
+      409
+    );
+  }
+  const quedan = actuales.filter((n) => !sueltos.includes(n));
+  const eraPagado = order.status === "PAID";
+
+  await tx.raffleNumber.deleteMany({
+    where: { orderId, number: { in: sueltos } },
+  });
+  // Un premio instantáneo que ganó con ese número vuelve a quedar sin dueño.
+  await tx.prizedNumber.updateMany({
+    where: { orderId, number: { in: sueltos } },
+    data: { claimedAt: null, orderId: null },
+  });
+
+  let actualizado: Order;
+  if (quedan.length === 0) {
+    actualizado = await tx.order.update({
+      where: { id: orderId },
+      data: { status: "CANCELLED", reservedUntil: null },
+    });
+    await tx.payment.updateMany({
+      where: { orderId, provider: "manual", status: "APPROVED" },
+      data: { status: "VOIDED" },
+    });
+  } else {
+    const { total } = calcularTotalPedido({
+      cantidad: quedan.length,
+      pricePerNumber: order.unitPrice,
+      ticketPacksJson: order.raffle.ticketPacksJson,
+    });
+    actualizado = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        numbersJson: JSON.stringify(quedan),
+        quantity: quedan.length,
+        total,
+      },
+    });
+    if (eraPagado) {
+      await tx.payment.updateMany({
+        where: { orderId, provider: "manual", status: "APPROVED" },
+        data: { amount: total },
+      });
+    }
+  }
+
+  if (eraPagado) {
+    const rifa = await tx.raffle.update({
+      where: { id: order.raffleId },
+      data: { paidCount: { decrement: sueltos.length } },
+    });
+    // Igual que al anular: una cuadrícula agotada vuelve a venderse.
+    if (rifa.status === "SOLD_OUT" && rifa.paidCount < rifa.totalNumbers) {
+      await tx.raffle.update({
+        where: { id: rifa.id },
+        data: { status: "ACTIVE" },
+      });
+    }
+  }
+
+  return { order: actualizado, raffle: order.raffle, sueltos, quedan, eraPagado };
+}
+
+/** Libera solo algunos números de un pedido (ver soltarNumerosEnTx). */
+export async function releaseOrderNumbers(
+  orderId: string,
+  numbers: number[]
+): Promise<{ order: Order; sueltos: number[]; quedan: number[]; eraPagado: boolean }> {
+  const r = await prisma.$transaction((tx) =>
+    soltarNumerosEnTx(tx, orderId, numbers)
+  );
+  return { order: r.order, sueltos: r.sueltos, quedan: r.quedan, eraPagado: r.eraPagado };
+}
+
+/**
+ * PASAR NÚMEROS A OTRA PERSONA: como en la app de talonario del dueño, toca
+ * un número y se lo pone a nombre de otro. Por dentro son dos pasos en UNA
+ * sola transacción —soltarlos del pedido de origen y apartarlos en un pedido
+ * nuevo a nombre de la otra persona—, así ningún comprador de la página puede
+ * colarse en el número entre uno y otro.
+ *
+ * El pedido nuevo nace apartado (amarillo) con el plazo normal de reserva; si
+ * el dueño dice que ya está pagado, se confirma después por el camino de
+ * siempre (confirmarManual).
+ */
+export async function moveOrderNumbers(input: {
+  orderId: string;
+  numbers: number[];
+  name: string;
+  phone?: string;
+  markPaid: boolean;
+}): Promise<{
+  origen: Order;
+  destino: Order;
+  numeros: number[];
+  confirmado: boolean;
+}> {
+  const { name, phone } = personaManual(input.name, input.phone);
+
+  let resultado: { origen: Order; destino: Order; numeros: number[] };
+  try {
+    resultado = await prisma.$transaction(async (tx) => {
+      const soltado = await soltarNumerosEnTx(tx, input.orderId, input.numbers);
+      if (
+        soltado.raffle.status === "FINISHED" ||
+        soltado.raffle.status === "CANCELLED"
+      ) {
+        throw new OrderError("Este sorteo ya no está en venta");
+      }
+      const destino = await crearPedidoManualEnTx(
+        tx,
+        soltado.raffle,
+        soltado.sueltos,
+        name,
+        phone
+      );
+      return { origen: soltado.order, destino, numeros: soltado.sueltos };
+    });
+  } catch (err) {
+    if (err instanceof ClaimConflictError) {
+      // No debería pasar (los números se acaban de soltar en la misma
+      // transacción), pero si pasa no se pierde nada: todo se deshizo.
+      throw new OrderError(
+        "No se pudo pasar el número. Actualiza el tablero e inténtalo de nuevo.",
+        409
+      );
+    }
+    throw err;
+  }
+
+  if (!input.markPaid) return { ...resultado, confirmado: false };
+  const { order, confirmado } = await confirmarManual(resultado.destino);
+  return { ...resultado, destino: order, confirmado };
 }

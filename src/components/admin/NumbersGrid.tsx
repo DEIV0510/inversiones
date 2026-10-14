@@ -26,10 +26,14 @@ import {
  *
  * Es el mismo tablero que ve el comprador —blanco libre, amarillo reservado,
  * verde pagado, gris bloqueado, número en negro— pero con lo que el público
- * jamás ve: de quién es cada casilla. Desde aquí el dueño lleva la rifa
- * entera sin buscar códigos:
+ * jamás ve: de quién es cada casilla, con el nombre escrito debajo del número
+ * (como en la app de talonario del dueño). Desde aquí lleva la rifa entera
+ * sin buscar códigos:
  *   · toca una AMARILLA → ve quién la reservó y la marca pagada o la libera;
- *   · toca una VERDE    → ve el pago y, si lo marcó a mano, puede anularlo;
+ *     puede soltar solo ese número (o varios del pedido) o pasarlo a nombre
+ *     de otra persona;
+ *   · toca una VERDE    → ve el pago y, si lo marcó a mano, puede anularlo,
+ *     soltar números sueltos o pasarlos a otra persona;
  *   · toca una GRIS     → la desbloquea;
  *   · toca BLANCAS      → las aparta (o las vende ya pagadas) a nombre de
  *                          quien le escribió por WhatsApp sin pasar por la
@@ -104,9 +108,17 @@ type Filtro = "todos" | EstadoCasilla;
 /**
  * Pasos de la hoja de detalle. Lo que cambia dinero o libera números pasa
  * SIEMPRE por un paso de confirmación que nombra los números; anular una
- * venta, por dos.
+ * venta, por dos. "soltar" y "pasar" trabajan con números SUELTOS del pedido
+ * (el tocado y los que el dueño añada), no con el pedido entero.
  */
-type Paso = "ver" | "pagar" | "liberar" | "anular" | "anular2";
+type Paso =
+  | "ver"
+  | "pagar"
+  | "liberar"
+  | "anular"
+  | "anular2"
+  | "soltar"
+  | "pasar";
 
 /** Cada cuánto se vuelve a pedir el tablero mientras la pestaña está a la vista. */
 const REFRESCO_MS = 20_000;
@@ -289,6 +301,13 @@ export default function NumbersGrid({
     pedidoId: null,
   });
   const [errorAccion, setErrorAccion] = useState("");
+
+  // Soltar o pasar números sueltos: cuáles del pedido (empieza con el tocado)
+  // y, al pasarlos, a nombre de quién.
+  const [elegidosPedido, setElegidosPedido] = useState<number[]>([]);
+  const [pasarNombre, setPasarNombre] = useState("");
+  const [pasarCelular, setPasarCelular] = useState("");
+  const [pasarPagado, setPasarPagado] = useState(false);
 
   // Apartar a mano.
   const [apartarAbierto, setApartarAbierto] = useState(false);
@@ -559,6 +578,77 @@ export default function NumbersGrid({
   }
 
   /**
+   * Soltar o pasar a otra persona números SUELTOS de un pedido. El servidor
+   * hace las dos cosas de "pasar" en una sola transacción: nadie se cuela en
+   * el número entre soltarlo y apartarlo a nombre del otro.
+   */
+  async function cambiarNumeros(p: PedidoTablero, accion: "liberar" | "pasar") {
+    // Solo los que siguen siendo del pedido (el tablero pudo cambiar).
+    const nums = elegidosPedido
+      .filter((x) => p.numbers.includes(fmt(x)))
+      .sort((a, b) => a - b);
+    if (nums.length === 0) {
+      setErrorAccion("Escoge al menos un número del pedido.");
+      return;
+    }
+    const nombreNuevo = pasarNombre.trim();
+    if (accion === "pasar" && nombreNuevo.length < 2) {
+      setErrorAccion("Escribe el nombre de la persona.");
+      return;
+    }
+    const lista = listaDeNumeros(nums.map(fmt));
+    const uno = nums.length === 1;
+    setOcupado(true);
+    setErrorAccion("");
+    try {
+      const res = await fetch(`/api/admin/orders/${p.id}/numbers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          accion === "liberar"
+            ? { accion, numbers: nums }
+            : {
+                accion,
+                numbers: nums,
+                name: nombreNuevo,
+                ...(pasarCelular.trim() ? { phone: pasarCelular.trim() } : {}),
+                markPaid: pasarPagado,
+              }
+        ),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setErrorAccion(data.error || "No fue posible hacer el cambio.");
+        recargar();
+        return;
+      }
+      cerrarHoja();
+      if (accion === "liberar") {
+        const quedan: number = Array.isArray(data.quedan) ? data.quedan.length : 0;
+        setAviso(
+          data.anulado
+            ? `Listo: ${lista} ${uno ? "quedó libre" : "quedaron libres"}. A ${p.participant.name} no le quedaron números y su pedido se anuló.`
+            : `Listo: ${lista} ${uno ? "quedó libre" : "quedaron libres"}. ${p.participant.name} se queda con ${cantidad(quedan)} (${formatCop(Number(data.total) || 0)}).`
+        );
+      } else {
+        setAviso(
+          data.confirmado
+            ? `Listo: ${lista} ${uno ? "quedó" : "quedaron"} a nombre de ${nombreNuevo}, ${uno ? "pagado" : "pagados"}.`
+            : pasarPagado
+              ? `${lista} ${uno ? "quedó" : "quedaron"} a nombre de ${nombreNuevo}, pero no se pudo marcar el pago: ${uno ? "tócalo" : "tócalos"} para marcar${uno ? "lo" : "los"} pagado${uno ? "" : "s"}.`
+              : `Listo: ${lista} ${uno ? "quedó reservado" : "quedaron reservados"} a nombre de ${nombreNuevo}.`
+        );
+      }
+      recargar();
+      onCambio?.();
+    } catch {
+      setErrorAccion("Error de conexión. Intenta de nuevo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  /**
    * Marcar pagada una reserva que ya se había vencido. Es el mismo endpoint
    * de "Marcar pagado": el motor admite pedidos vencidos y les devuelve sus
    * números si siguen libres. Si alguno ya lo tomó otra persona, el motor
@@ -745,9 +835,11 @@ export default function NumbersGrid({
     paso.tipo === "ver" ||
     (paso.pedidoId !== null &&
       paso.pedidoId === pedidoAbierto?.id &&
-      ((paso.tipo === "pagar" || paso.tipo === "liberar")
+      (paso.tipo === "pagar" || paso.tipo === "liberar"
         ? estadoAbierta === "reservado"
-        : estadoAbierta === "pagado"));
+        : paso.tipo === "soltar" || paso.tipo === "pasar"
+          ? estadoAbierta === "reservado" || estadoAbierta === "pagado"
+          : estadoAbierta === "pagado"));
   const pasoActual: Paso = pasoValido ? paso.tipo : "ver";
 
   // Si el refresco cambia lo que hay en la hoja (la reserva venció, el pago
@@ -766,6 +858,24 @@ export default function NumbersGrid({
     setPaso({ tipo, pedidoId: pedidoAbierto?.id ?? null });
   }
 
+  /** Soltar o pasar: empieza con el número tocado ya escogido. */
+  function empezarCambio(tipo: "soltar" | "pasar", n: number) {
+    setElegidosPedido([n]);
+    setPasarNombre("");
+    setPasarCelular("");
+    // Un número pagado que se pasa a otra persona suele seguir pagado (era
+    // un error de nombre, o se lo regaló a alguien); el dueño lo puede
+    // desmarcar.
+    setPasarPagado(estadoAbierta === "pagado");
+    irAPaso(tipo);
+  }
+
+  function alternarElegido(x: number) {
+    setElegidosPedido((lista) =>
+      lista.includes(x) ? lista.filter((y) => y !== x) : [...lista, x]
+    );
+  }
+
   function hojaDePedido(n: number, p: PedidoTablero) {
     const numerosTexto = listaDeNumeros(p.numbers);
     const varios = p.numbers.length > 1;
@@ -773,6 +883,19 @@ export default function NumbersGrid({
     const telefono = persona.phone ? cifrasDe(persona.phone) : "";
     const reservado = estadoAbierta === "reservado";
     const enLinea = esPagoEnLinea(p.paymentMethod);
+    // Números sueltos: en una reserva, o en una venta que marcó él a mano (la
+    // pagada en línea no se toca, como al anular). Pasarlos a otra persona es
+    // además apartar, así que pide también ese permiso y la rifa en venta.
+    const puedeSoltar =
+      canCancel && (reservado || (!enLinea && esPagoManual(p.paymentMethod)));
+    const puedePasar = puedeSoltar && canConfirm && enVenta;
+    const tocado = fmt(n);
+    const cambiando = pasoActual === "soltar" || pasoActual === "pasar";
+    const elegidos = elegidosPedido
+      .filter((x) => p.numbers.includes(fmt(x)))
+      .sort((a, b) => a - b);
+    const listaElegidos = listaDeNumeros(elegidos.map(fmt));
+    const quedanTras = p.numbers.length - elegidos.length;
     return (
       <>
         {/* Quién es: nombre, cómo escribirle y lo que haya dejado. */}
@@ -870,21 +993,27 @@ export default function NumbersGrid({
           ) : null}
         </dl>
 
-        <p className={`${labelCls} mt-4`}>
-          {varios ? `Los ${p.numbers.length} números del pedido` : "Número del pedido"}
-        </p>
-        <ul className="flex flex-wrap gap-1.5">
-          {p.numbers.map((x) => (
-            <li
-              key={x}
-              className={`inline-flex min-h-9 items-center rounded-lg border-2 px-2.5 font-display text-sm font-extrabold tabular-nums text-cell-ink ${CASILLA_CLS[estadoAbierta]} ${
-                x === fmt(n) ? "ring-2 ring-brand ring-offset-2 ring-offset-card" : ""
-              }`}
-            >
-              {x}
-            </li>
-          ))}
-        </ul>
+        {/* Mientras escoge cuáles soltar o pasar, la lista de abajo (la que
+            se toca) hace de lista del pedido: no se repite aquí. */}
+        {cambiando && varios ? null : (
+          <>
+            <p className={`${labelCls} mt-4`}>
+              {varios ? `Los ${p.numbers.length} números del pedido` : "Número del pedido"}
+            </p>
+            <ul className="flex flex-wrap gap-1.5">
+              {p.numbers.map((x) => (
+                <li
+                  key={x}
+                  className={`inline-flex min-h-9 items-center rounded-lg border-2 px-2.5 font-display text-sm font-extrabold tabular-nums text-cell-ink ${CASILLA_CLS[estadoAbierta]} ${
+                    x === tocado ? "ring-2 ring-brand ring-offset-2 ring-offset-card" : ""
+                  }`}
+                >
+                  {x}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
         <p className="mt-3 flex items-baseline justify-between gap-3 border-t border-line pt-3">
           <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-fg-faint">
             Total
@@ -917,18 +1046,40 @@ export default function NumbersGrid({
                     Marcar pagado
                   </button>
                 ) : null}
-                {canCancel ? (
+                {puedeSoltar && varios ? (
                   // Sin "Marcar pagado" encima, el foco cae aquí al volver de
                   // la confirmación; si no, se perdería en el fondo de la página.
                   <button
                     type="button"
-                    onClick={() => irAPaso("liberar")}
+                    onClick={() => empezarCambio("soltar", n)}
                     disabled={ocupado}
                     autoFocus={!canConfirm}
                     className={btnDanger}
                   >
                     <IconX width={16} height={16} />
-                    Liberar
+                    Liberar solo el {tocado}
+                  </button>
+                ) : null}
+                {puedePasar ? (
+                  <button
+                    type="button"
+                    onClick={() => empezarCambio("pasar", n)}
+                    disabled={ocupado}
+                    className={btnOutline}
+                  >
+                    Pasar el {tocado} a otra persona
+                  </button>
+                ) : null}
+                {canCancel ? (
+                  <button
+                    type="button"
+                    onClick={() => irAPaso("liberar")}
+                    disabled={ocupado}
+                    autoFocus={!canConfirm && !varios}
+                    className={btnDanger}
+                  >
+                    <IconX width={16} height={16} />
+                    {varios ? `Liberar los ${p.numbers.length}` : "Liberar"}
                   </button>
                 ) : null}
                 {!canConfirm && !canCancel ? (
@@ -943,16 +1094,41 @@ export default function NumbersGrid({
                 Pagado en línea: no se anula desde aquí.
               </p>
             ) : canCancel && esPagoManual(p.paymentMethod) ? (
-              <button
-                type="button"
-                onClick={() => irAPaso("anular")}
-                disabled={ocupado}
-                autoFocus
-                className={btnDanger}
-              >
-                <IconX width={16} height={16} />
-                Anular venta
-              </button>
+              <>
+                {puedeSoltar && varios ? (
+                  <button
+                    type="button"
+                    onClick={() => empezarCambio("soltar", n)}
+                    disabled={ocupado}
+                    autoFocus
+                    className={btnDanger}
+                  >
+                    <IconX width={16} height={16} />
+                    Liberar solo el {tocado}
+                  </button>
+                ) : null}
+                {puedePasar ? (
+                  <button
+                    type="button"
+                    onClick={() => empezarCambio("pasar", n)}
+                    disabled={ocupado}
+                    autoFocus={!varios}
+                    className={btnOutline}
+                  >
+                    Pasar el {tocado} a otra persona
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => irAPaso("anular")}
+                  disabled={ocupado}
+                  autoFocus={!varios && !puedePasar}
+                  className={btnDanger}
+                >
+                  <IconX width={16} height={16} />
+                  {varios ? `Anular la venta (los ${p.numbers.length})` : "Anular venta"}
+                </button>
+              </>
             ) : canCancel ? (
               <p className={helpCls}>
                 Este pago no se anula desde el tablero; revísalo en Pedidos.
@@ -1097,6 +1273,160 @@ export default function NumbersGrid({
               </button>
             </div>
           </div>
+        ) : null}
+
+        {cambiando ? (
+          <form
+            noValidate
+            onSubmit={(e) => {
+              e.preventDefault();
+              cambiarNumeros(p, pasoActual === "soltar" ? "liberar" : "pasar");
+            }}
+            className={`mt-4 rounded-xl p-3.5 ${
+              pasoActual === "soltar"
+                ? "border-2 border-error/60 bg-error/10"
+                : "border border-line-strong bg-well"
+            }`}
+          >
+            {/* Con varios números, el dueño escoge cuáles: el tocado ya va
+                marcado y puede sumar los demás ("déjame 8 de los 10" son dos
+                toques, no liberar todo y volver a apartar). */}
+            {varios ? (
+              <>
+                <p className="text-sm font-semibold text-fg">
+                  {pasoActual === "soltar"
+                    ? "¿Cuáles se liberan?"
+                    : "¿Cuáles pasan a la otra persona?"}
+                </p>
+                <p className={helpCls}>Toca un número para escogerlo o quitarlo.</p>
+                <div
+                  role="group"
+                  aria-label="Números del pedido"
+                  className="mt-2 flex flex-wrap gap-1.5"
+                >
+                  {p.numbers.map((x) => {
+                    const valor = parseInt(x, 10);
+                    const marcado = elegidosPedido.includes(valor);
+                    return (
+                      <button
+                        key={x}
+                        type="button"
+                        aria-pressed={marcado}
+                        onClick={() => alternarElegido(valor)}
+                        className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-lg border-2 px-2.5 font-display text-sm font-extrabold tabular-nums ${
+                          marcado
+                            ? "border-brand bg-brand text-white"
+                            : `text-cell-ink ${CASILLA_CLS[estadoAbierta]}`
+                        }`}
+                      >
+                        {x}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
+
+            {pasoActual === "soltar" ? (
+              <p className={`text-sm font-semibold leading-relaxed text-error ${varios ? "mt-3" : ""}`}>
+                {elegidos.length === 0
+                  ? "Escoge al menos un número."
+                  : quedanTras === 0
+                    ? `Se liberan todos sus números: el pedido de ${persona.name} queda anulado.`
+                    : `Se ${elegidos.length === 1 ? "libera el" : "liberan los"} ${listaElegidos}. ${persona.name} se queda con ${cantidad(quedanTras)} y su total se ajusta.`}{" "}
+                {reservado
+                  ? "Vuelven a quedar en blanco y cualquiera los puede reservar."
+                  : `Si ya te los había pagado, la devolución la arreglas tú con ${persona.name}.`}
+              </p>
+            ) : (
+              <div className={`flex flex-col gap-3 ${varios ? "mt-4" : ""}`}>
+                <p className="text-sm leading-relaxed text-fg-soft">
+                  {elegidos.length === 0
+                    ? "Escoge al menos un número."
+                    : `${elegidos.length === 1 ? "El" : "Los"} ${listaElegidos} ${elegidos.length === 1 ? "deja" : "dejan"} de ser de ${persona.name} y ${elegidos.length === 1 ? "queda" : "quedan"} a nombre de:`}
+                </p>
+                <div>
+                  <label htmlFor={`${uid}-pasar-nombre`} className={labelCls}>
+                    Nombre *
+                  </label>
+                  <input
+                    id={`${uid}-pasar-nombre`}
+                    type="text"
+                    required
+                    autoFocus
+                    value={pasarNombre}
+                    onChange={(e) => setPasarNombre(e.target.value)}
+                    maxLength={120}
+                    autoComplete="off"
+                    placeholder="Ej: Ana Pérez"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label htmlFor={`${uid}-pasar-celular`} className={labelCls}>
+                    Celular (opcional)
+                  </label>
+                  <input
+                    id={`${uid}-pasar-celular`}
+                    type="tel"
+                    inputMode="tel"
+                    value={pasarCelular}
+                    onChange={(e) => setPasarCelular(e.target.value)}
+                    maxLength={20}
+                    autoComplete="off"
+                    placeholder="Ej: 300 123 4567"
+                    className={`${inputCls} font-mono tabular-nums`}
+                  />
+                </div>
+                <label className="flex min-h-11 cursor-pointer items-start gap-3 rounded-xl border border-line bg-card px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={pasarPagado}
+                    onChange={(e) => setPasarPagado(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-cell-paid"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-fg">
+                      Ya pagó: marcar en verde
+                    </span>
+                    <span className={helpCls}>
+                      {pasarPagado
+                        ? "Quedan pagados a nombre de la otra persona."
+                        : `Si no, quedan en amarillo (reservados) por ${plazoReserva}.`}
+                    </span>
+                  </span>
+                </label>
+              </div>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => irAPaso("ver")}
+                disabled={ocupado}
+                className={btnOutline}
+              >
+                Volver
+              </button>
+              <button
+                type="submit"
+                disabled={ocupado || elegidos.length === 0}
+                className={pasoActual === "soltar" ? btnDanger : btnPrimary}
+              >
+                {ocupado
+                  ? pasoActual === "soltar"
+                    ? "Liberando…"
+                    : "Pasando…"
+                  : pasoActual === "soltar"
+                    ? elegidos.length > 1
+                      ? `Liberar ${elegidos.length}`
+                      : "Liberar"
+                    : elegidos.length > 1
+                      ? `Pasar ${elegidos.length}`
+                      : "Pasar"}
+              </button>
+            </div>
+          </form>
         ) : null}
       </>
     );
@@ -1279,7 +1609,9 @@ export default function NumbersGrid({
                   {fmt(k * 100)} – {fmt(Math.min(total, k * 100 + 100) - 1)}
                 </h3>
               ) : null}
-              <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-10">
+              {/* Cinco por fila en el celular: con el nombre debajo del
+                  número, a seis no cabía ni "Andrea". */}
+              <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-8 lg:grid-cols-10">
                 {nums.map((n) => {
                   const estado = estadoDe(n);
                   const pedido = estado === "libre" ? null : pedidoDe(n);
@@ -1299,11 +1631,22 @@ export default function NumbersGrid({
                         elegida ? ", escogido" : ""
                       }`}
                       title={pedido ? pedido.participant.name : undefined}
-                      className={`relative flex min-h-11 items-center justify-center rounded-lg border-2 font-display text-sm font-extrabold tabular-nums text-cell-ink transition-shadow disabled:cursor-default ${
+                      className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg border-2 px-1 py-1.5 text-cell-ink transition-shadow disabled:cursor-default ${
                         CASILLA_CLS[estado]
                       } ${elegida ? "ring-[3px] ring-brand ring-offset-2 ring-offset-card" : ""}`}
                     >
-                      {fmt(n)}
+                      <span className="font-display text-sm font-extrabold leading-none tabular-nums">
+                        {fmt(n)}
+                      </span>
+                      {/* De quién es, como en la app de talonario del dueño.
+                          Solo aquí: el tablero público nunca lleva nombres.
+                          Dos líneas como mucho; el nombre entero está en el
+                          title y al tocar la casilla. */}
+                      {pedido ? (
+                        <span className="line-clamp-2 w-full text-center text-[10px] font-semibold leading-tight [overflow-wrap:anywhere]">
+                          {pedido.participant.name}
+                        </span>
+                      ) : null}
                       <MarcaEstado
                         estado={estado}
                         className="absolute right-0.5 top-0.5 h-2.5 w-2.5"
